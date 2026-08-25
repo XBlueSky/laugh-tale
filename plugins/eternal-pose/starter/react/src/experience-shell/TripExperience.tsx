@@ -30,6 +30,7 @@ import {
   type MapAdapter,
   type MapFocusTarget,
   type MapPadding,
+  type MapPresentation,
 } from "./provider-contracts";
 import {
   resolveSheetGeometry,
@@ -49,6 +50,17 @@ interface ViewportMetrics {
   height: number;
   safeTop: number;
   safeBottom: number;
+}
+
+interface PendingMapFocus {
+  dayId: string;
+  target: MapFocusTarget;
+}
+
+interface RenderedMapState {
+  adapter: MapAdapter;
+  dayId: string;
+  presentation: MapPresentation;
 }
 
 const DEFAULT_VIEWPORT: ViewportMetrics = {
@@ -206,6 +218,27 @@ function ignoreMapRouteSelection(): void {
   // Route geometry and route focus enter in the Task 8/11 integration seam.
 }
 
+function locatablePresentationIds(presentation: MapPresentation): string[] {
+  const ids = new Set(presentation.places.map(({ ownerId }) => ownerId));
+  for (const route of presentation.routes) {
+    if (route.path.length > 0) {
+      ids.add(route.edgeId);
+    }
+  }
+  return [...ids];
+}
+
+function presentationHasTarget(
+  presentation: MapPresentation,
+  target: MapFocusTarget,
+): boolean {
+  return target.kind === "place"
+    ? presentation.places.some(({ ownerId }) => ownerId === target.id)
+    : presentation.routes.some(
+        ({ edgeId, path }) => edgeId === target.id && path.length > 0,
+      );
+}
+
 export function TripExperience({
   trip,
   adapterFactory,
@@ -294,31 +327,41 @@ export function TripExperience({
       }),
     [selectedEffectiveDay, selection.selection.nodeId],
   );
-  const dayFitIds = useMemo(() => {
-    const ids = new Set(presentation.places.map(({ ownerId }) => ownerId));
-    for (const route of presentation.routes) {
-      if (route.path.length > 0) {
-        ids.add(route.edgeId);
+  const lastFittedDayIntentRef = useRef(-1);
+  const pendingMapFocusRef = useRef<PendingMapFocus | null>(null);
+  const renderedMapRef = useRef<RenderedMapState | null>(null);
+
+  const handlePresentationRendered = (
+    renderedAdapter: MapAdapter,
+    renderedPresentation: MapPresentation,
+  ): void => {
+    const renderedDayId = selectedEffectiveDay.day.id;
+    renderedMapRef.current = {
+      adapter: renderedAdapter,
+      dayId: renderedDayId,
+      presentation: renderedPresentation,
+    };
+
+    if (lastFittedDayIntentRef.current !== dayCameraIntent) {
+      lastFittedDayIntentRef.current = dayCameraIntent;
+      const fitIds = locatablePresentationIds(renderedPresentation);
+      if (fitIds.length > 0) {
+        renderedAdapter.fit(fitIds);
       }
     }
-    return [...ids];
-  }, [presentation]);
 
-  const lastFittedDayIntentRef = useRef(-1);
-  useEffect(() => {
-    if (
-      mountedAdapter === null ||
-      lastFittedDayIntentRef.current === dayCameraIntent
-    ) {
+    const pendingFocus = pendingMapFocusRef.current;
+    if (pendingFocus?.dayId !== renderedDayId) {
       return;
     }
-    lastFittedDayIntentRef.current = dayCameraIntent;
-    if (dayFitIds.length > 0) {
-      mountedAdapter.fit(dayFitIds);
+    pendingMapFocusRef.current = null;
+    if (presentationHasTarget(renderedPresentation, pendingFocus.target)) {
+      renderedAdapter.focus(pendingFocus.target);
     }
-  }, [dayCameraIntent, dayFitIds, mountedAdapter]);
+  };
 
   const markDisplayedDayIntent = (dayId: string): void => {
+    pendingMapFocusRef.current = null;
     setDisplayedDayId(dayId);
     setDayCameraIntent((intent) => intent + 1);
   };
@@ -348,21 +391,18 @@ export function TripExperience({
     }),
     [headerClearance, sheetHeight, viewport.safeBottom],
   );
-  const pendingMapFocusRef = useRef<MapFocusTarget | null>(null);
 
-  useEffect(() => {
-    if (mountedAdapter !== null && pendingMapFocusRef.current !== null) {
-      mountedAdapter.focus(pendingMapFocusRef.current);
+  const focusMap = (target: MapFocusTarget, targetDayId: string): void => {
+    const renderedMap = renderedMapRef.current;
+    if (
+      renderedMap?.dayId === targetDayId &&
+      presentationHasTarget(renderedMap.presentation, target)
+    ) {
       pendingMapFocusRef.current = null;
+      renderedMap.adapter.focus(target);
+      return;
     }
-  }, [mountedAdapter]);
-
-  const focusMap = (target: MapFocusTarget): void => {
-    if (mountedAdapter === null) {
-      pendingMapFocusRef.current = target;
-    } else {
-      mountedAdapter.focus(target);
-    }
+    pendingMapFocusRef.current = { dayId: targetDayId, target };
   };
 
   const selectNode = (
@@ -373,13 +413,16 @@ export function TripExperience({
       return;
     }
     selection.selectManual(nodeId);
+    const ownerDay = dayForNode(trip, nodeId);
     if (options.synchronizeDay === true) {
-      const ownerDay = dayForNode(trip, nodeId);
       if (ownerDay !== undefined) {
         synchronizeDisplayedDay(ownerDay);
       }
     }
-    focusMap({ kind: "place", id: nodeMapOwnerId(nodeId) });
+    focusMap(
+      { kind: "place", id: nodeMapOwnerId(nodeId) },
+      ownerDay ?? selectedEffectiveDay.day.id,
+    );
   };
 
   const handleMapPlaceSelect = (ownerId: string): void => {
@@ -406,7 +449,10 @@ export function TripExperience({
       synchronizeDisplayedDay(liveDayId);
     }
     if (automaticNodeId !== null) {
-      focusMap({ kind: "place", id: nodeMapOwnerId(automaticNodeId) });
+      focusMap(
+        { kind: "place", id: nodeMapOwnerId(automaticNodeId) },
+        liveDayId ?? selectedEffectiveDay.day.id,
+      );
     }
   };
 
@@ -464,6 +510,7 @@ export function TripExperience({
         onPlaceSelect={handleMapPlaceSelect}
         onRouteSelect={ignoreMapRouteSelection}
         onReady={setMountedAdapter}
+        onPresentationRendered={handlePresentationRendered}
       />
 
       <DayHeader

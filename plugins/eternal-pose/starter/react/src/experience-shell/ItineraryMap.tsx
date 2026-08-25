@@ -13,6 +13,10 @@ export interface ItineraryMapProps {
   onPlaceSelect: (ownerId: string) => void;
   onRouteSelect: (routeId: string) => void;
   onReady?: (adapter: MapAdapter) => void;
+  onPresentationRendered?: (
+    adapter: MapAdapter,
+    presentation: MapPresentation,
+  ) => void;
 }
 
 type MapMountStatus = "mounting" | "ready" | "error";
@@ -24,6 +28,7 @@ export function ItineraryMap({
   onPlaceSelect,
   onRouteSelect,
   onReady,
+  onPresentationRendered,
 }: ItineraryMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const readyRef = useRef(false);
@@ -32,6 +37,7 @@ export function ItineraryMap({
   const onPlaceSelectRef = useRef(onPlaceSelect);
   const onRouteSelectRef = useRef(onRouteSelect);
   const onReadyRef = useRef(onReady);
+  const onPresentationRenderedRef = useRef(onPresentationRendered);
   const [status, setStatus] = useState<MapMountStatus>("mounting");
   const [mountAttempt, setMountAttempt] = useState(0);
 
@@ -41,7 +47,15 @@ export function ItineraryMap({
     onPlaceSelectRef.current = onPlaceSelect;
     onRouteSelectRef.current = onRouteSelect;
     onReadyRef.current = onReady;
-  }, [onPlaceSelect, onReady, onRouteSelect, padding, presentation]);
+    onPresentationRenderedRef.current = onPresentationRendered;
+  }, [
+    onPlaceSelect,
+    onPresentationRendered,
+    onReady,
+    onRouteSelect,
+    padding,
+    presentation,
+  ]);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -70,7 +84,9 @@ export function ItineraryMap({
         }
         readyRef.current = true;
         adapter.setPadding(paddingRef.current);
-        adapter.render(presentationRef.current);
+        const renderedPresentation = presentationRef.current;
+        adapter.render(renderedPresentation);
+        onPresentationRenderedRef.current?.(adapter, renderedPresentation);
         setStatus("ready");
         onReadyRef.current?.(adapter);
       })
@@ -92,6 +108,7 @@ export function ItineraryMap({
   useEffect(() => {
     if (readyRef.current) {
       adapter.render(presentation);
+      onPresentationRenderedRef.current?.(adapter, presentation);
     }
   }, [adapter, presentation]);
 

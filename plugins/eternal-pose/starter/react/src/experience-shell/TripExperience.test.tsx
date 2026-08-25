@@ -10,6 +10,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FakeMapAdapter } from "../providers/fake/FakeMapAdapter";
@@ -18,6 +19,8 @@ import {
   candidateMapOwnerId,
   nodeMapOwnerId,
   type MapEvents,
+  type MapFocusTarget,
+  type MapPresentation,
   USER_LOCATION_OWNER_ID,
 } from "./provider-contracts";
 import { TripExperience } from "./TripExperience";
@@ -52,6 +55,64 @@ class RejectingFakeMapAdapter extends FakeMapAdapter {
   override mount(element: HTMLElement, events: MapEvents): Promise<void> {
     void super.mount(element, events);
     return Promise.reject(new Error("Synthetic unavailable map"));
+  }
+}
+
+type CameraEvent =
+  | { kind: "render"; ownerIds: string[] }
+  | { kind: "fit"; ids: string[] }
+  | { kind: "focus"; target: MapFocusTarget };
+
+class OwnerAwareFakeMapAdapter extends FakeMapAdapter {
+  readonly cameraEvents: CameraEvent[] = [];
+
+  private renderedOwnerIds = new Set<string>();
+
+  override render(presentation: MapPresentation): void {
+    super.render(presentation);
+    this.renderedOwnerIds = new Set([
+      ...presentation.places.map(({ ownerId }) => ownerId),
+      ...presentation.routes.flatMap(({ edgeId, path }) =>
+        path.length > 0 ? [edgeId] : [],
+      ),
+    ]);
+    this.cameraEvents.push({
+      kind: "render",
+      ownerIds: [...this.renderedOwnerIds],
+    });
+  }
+
+  override focus(target: MapFocusTarget): void {
+    if (!this.renderedOwnerIds.has(target.id)) {
+      return;
+    }
+    super.focus(target);
+    this.cameraEvents.push({ kind: "focus", target: { ...target } });
+  }
+
+  override fit(ids: string[]): void {
+    super.fit(ids);
+    this.cameraEvents.push({ kind: "fit", ids: [...ids] });
+  }
+
+  override destroy(): void {
+    super.destroy();
+    this.renderedOwnerIds.clear();
+  }
+}
+
+class DelayedOwnerAwareMapAdapter extends OwnerAwareFakeMapAdapter {
+  private resolvePendingMount: (() => void) | undefined;
+
+  override mount(element: HTMLElement, events: MapEvents): Promise<void> {
+    void super.mount(element, events);
+    return new Promise<void>((resolveMount) => {
+      this.resolvePendingMount = resolveMount;
+    });
+  }
+
+  resolveMount(): void {
+    this.resolvePendingMount?.();
   }
 }
 
@@ -341,6 +402,176 @@ describe("TripExperience", () => {
       "automatic",
     );
     await waitFor(() => expect(adapter.fitCalls).toHaveLength(3));
+  });
+
+  it("replays cross-day return-to-now after render and fit with exact focus last", async () => {
+    const adapter = new OwnerAwareFakeMapAdapter();
+    const trip = createTrip();
+    let now = "2040-06-12T00:30:00Z";
+    const clock = () => now;
+    const experience = () => (
+      <StrictMode>
+        <TripExperience trip={trip} adapterFactory={() => adapter} clock={clock} />
+      </StrictMode>
+    );
+    const { rerender } = render(experience());
+
+    await waitFor(() => expect(adapter.fitCalls).toHaveLength(1));
+    fireEvent.click(screen.getByRole("button", { name: /Park day/ }));
+    await waitFor(() =>
+      expect(adapter.renderCalls.at(-1)?.places.map(({ ownerId }) => ownerId)).toEqual([
+        nodeMapOwnerId("park"),
+      ]),
+    );
+    adapter.cameraEvents.splice(0);
+
+    fireEvent.click(
+      screen.getAllByRole("button", {
+        name: "Return to the current itinerary item",
+      })[0],
+    );
+
+    const museumTarget = {
+      kind: "place" as const,
+      id: nodeMapOwnerId("museum"),
+    };
+    await waitFor(() => expect(adapter.focusCalls).toEqual([museumTarget]));
+    const targetDayRender = adapter.cameraEvents.findIndex(
+      (event) =>
+        event.kind === "render" && event.ownerIds.includes(nodeMapOwnerId("museum")),
+    );
+    const targetDayFit = adapter.cameraEvents.findIndex(
+      (event) =>
+        event.kind === "fit" && event.ids.includes(nodeMapOwnerId("museum")),
+    );
+    const exactFocus = adapter.cameraEvents.findIndex(
+      (event) => event.kind === "focus" && event.target.id === museumTarget.id,
+    );
+    expect(targetDayRender).toBeGreaterThanOrEqual(0);
+    expect(targetDayFit).toBeGreaterThan(targetDayRender);
+    expect(exactFocus).toBeGreaterThan(targetDayFit);
+    expect(adapter.cameraEvents.at(-1)).toEqual({
+      kind: "focus",
+      target: museumTarget,
+    });
+
+    now = "2040-06-12T00:31:00Z";
+    rerender(experience());
+    await waitFor(() =>
+      expect(screen.getByLabelText("Asia/Tokyo time")).toHaveTextContent("09:31"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Collapse date choices" }));
+    expect(adapter.focusCalls).toEqual([museumTarget]);
+  });
+
+  it("replays cross-day lodging focus only after its owning day is rendered", async () => {
+    const adapter = new OwnerAwareFakeMapAdapter();
+    render(
+      <TripExperience
+        trip={createTrip()}
+        adapterFactory={() => adapter}
+        clock={() => "2040-06-12T00:30:00Z"}
+      />,
+    );
+
+    await waitFor(() => expect(adapter.fitCalls).toHaveLength(1));
+    fireEvent.click(screen.getByRole("button", { name: /Park day/ }));
+    await waitFor(() =>
+      expect(adapter.renderCalls.at(-1)?.places.map(({ ownerId }) => ownerId)).toEqual([
+        nodeMapOwnerId("park"),
+      ]),
+    );
+    adapter.cameraEvents.splice(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Return to lodging" }));
+
+    const hotelTarget = {
+      kind: "place" as const,
+      id: nodeMapOwnerId("hotel"),
+    };
+    await waitFor(() => expect(adapter.focusCalls).toEqual([hotelTarget]));
+    const targetDayRender = adapter.cameraEvents.findIndex(
+      (event) =>
+        event.kind === "render" && event.ownerIds.includes(nodeMapOwnerId("hotel")),
+    );
+    const targetDayFit = adapter.cameraEvents.findIndex(
+      (event) => event.kind === "fit" && event.ids.includes(nodeMapOwnerId("hotel")),
+    );
+    const exactFocus = adapter.cameraEvents.findIndex(
+      (event) => event.kind === "focus" && event.target.id === hotelTarget.id,
+    );
+    expect(targetDayRender).toBeGreaterThanOrEqual(0);
+    expect(targetDayFit).toBeGreaterThan(targetDayRender);
+    expect(exactFocus).toBeGreaterThan(targetDayFit);
+    expect(adapter.cameraEvents.at(-1)).toEqual({
+      kind: "focus",
+      target: hotelTarget,
+    });
+  });
+
+  it("keeps same-day selection focus immediate without replaying it after render", async () => {
+    const adapter = new OwnerAwareFakeMapAdapter();
+    render(
+      <TripExperience
+        trip={createTrip()}
+        adapterFactory={() => adapter}
+        clock={() => "2040-06-12T00:30:00Z"}
+      />,
+    );
+
+    await waitFor(() => expect(adapter.fitCalls).toHaveLength(1));
+    const renderCount = adapter.renderCalls.length;
+    fireEvent.click(screen.getByRole("button", { name: /^約 12:00 Dinner A$/ }));
+
+    const dinnerTarget = {
+      kind: "place" as const,
+      id: nodeMapOwnerId("dinner"),
+    };
+    expect(adapter.focusCalls).toEqual([dinnerTarget]);
+    await waitFor(() => expect(adapter.renderCalls.length).toBeGreaterThan(renderCount));
+    expect(adapter.focusCalls).toEqual([dinnerTarget]);
+  });
+
+  it("honors only the latest exact focus when the adapter becomes ready late", async () => {
+    const adapter = new DelayedOwnerAwareMapAdapter();
+    render(
+      <TripExperience
+        trip={createTrip()}
+        adapterFactory={() => adapter}
+        clock={() => "2040-06-12T00:30:00Z"}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Park day/ }));
+    fireEvent.click(
+      screen.getAllByRole("button", {
+        name: "Return to the current itinerary item",
+      })[0],
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Return to lodging" }));
+    expect(adapter.focusCalls).toHaveLength(0);
+
+    await act(async () => {
+      adapter.resolveMount();
+      await Promise.resolve();
+    });
+
+    const hotelTarget = {
+      kind: "place" as const,
+      id: nodeMapOwnerId("hotel"),
+    };
+    await waitFor(() => expect(adapter.focusCalls).toEqual([hotelTarget]));
+    expect(adapter.fitCalls).toEqual([
+      [
+        nodeMapOwnerId("hotel"),
+        nodeMapOwnerId("museum"),
+        nodeMapOwnerId("dinner"),
+      ],
+    ]);
+    expect(adapter.cameraEvents.at(-1)).toEqual({
+      kind: "focus",
+      target: hotelTarget,
+    });
   });
 
   it("preserves manual provenance until return-to-now restores automatic advancement", async () => {
