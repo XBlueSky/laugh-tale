@@ -64,6 +64,32 @@ function combinedError(errors) {
   return new AggregateError(normalized, normalized.map((error) => error.message).join("; "));
 }
 
+async function captureTemporaryParent(operations) {
+  const path = await operations.realpath(tmpdir());
+  const stats = await operations.lstat(path);
+  if (!stats.isDirectory() || stats.isSymbolicLink()) {
+    throw new Error("temporary Git metadata parent ownership changed");
+  }
+  return { path, stats };
+}
+
+async function assertTemporaryParentIdentity(parent, operations) {
+  try {
+    const canonicalPath = await operations.realpath(parent.path);
+    const stats = await operations.lstat(parent.path);
+    if (
+      canonicalPath !== parent.path ||
+      !stats.isDirectory() ||
+      stats.isSymbolicLink() ||
+      !sameIdentity(stats, parent.stats)
+    ) {
+      throw new Error("temporary Git metadata parent ownership changed");
+    }
+  } catch {
+    throw new Error("temporary Git metadata parent ownership changed");
+  }
+}
+
 async function assertTemporaryRootIdentity(ownership, operations) {
   try {
     const parentPath = await operations.realpath(dirname(ownership.path));
@@ -169,26 +195,45 @@ async function createTemporaryEntry(ownership, relativePath, type, contents, ope
   ownership.tainted = null;
 }
 
-async function acquireTemporaryMetadata(operations) {
-  const createdPath = await operations.mkdtemp(join(tmpdir(), "laugh-tale-publication-git-"));
-  const path = await operations.realpath(createdPath);
-  const parentPath = await operations.realpath(dirname(path));
+async function acquireTemporaryMetadata(acquisition, operations) {
+  const parent = await captureTemporaryParent(operations);
+  await assertTemporaryParentIdentity(parent, operations);
+  const createdPath = resolve(await operations.mkdtemp(join(parent.path, "laugh-tale-publication-git-")));
+  const path = join(parent.path, basename(createdPath));
   const ownership = {
     path,
-    parent: { path: parentPath, stats: await operations.lstat(parentPath) },
-    stats: await operations.lstat(path),
+    parent,
+    stats: null,
     marker: {
       path: join(path, `.laugh-tale-incomplete-${randomUUID()}`),
       token: randomUUID(),
     },
     entries: [],
-    tainted: null,
+    tainted: { path, type: "root" },
   };
-  if (!ownership.stats.isDirectory() || ownership.stats.isSymbolicLink()) {
+  acquisition.ownership = ownership;
+  if (createdPath !== path) throw new Error("temporary Git metadata ownership changed");
+
+  await assertTemporaryParentIdentity(parent, operations);
+  const beforeStats = await operations.lstat(path);
+  if (!beforeStats.isDirectory() || beforeStats.isSymbolicLink()) {
     throw new Error("temporary Git metadata ownership changed");
   }
+  const canonicalPath = await operations.realpath(path);
+  const afterStats = await operations.lstat(path);
+  if (
+    canonicalPath !== path ||
+    !afterStats.isDirectory() ||
+    afterStats.isSymbolicLink() ||
+    !sameIdentity(beforeStats, afterStats)
+  ) {
+    throw new Error("temporary Git metadata ownership changed");
+  }
+  ownership.stats = afterStats;
+  ownership.tainted = null;
 
   await assertTemporaryRootIdentity(ownership, operations);
+  ownership.tainted = { path: ownership.marker.path, type: "marker" };
   const handle = await operations.open(ownership.marker.path, "wx", 0o600);
   try {
     const handleStats = await handle.stat();
@@ -203,11 +248,11 @@ async function acquireTemporaryMetadata(operations) {
     }
     ownership.marker.stats = pathStats;
     await handle.writeFile(ownership.marker.token);
+    ownership.tainted = null;
   } finally {
     await handle.close();
   }
   await assertTemporaryOwnership(ownership, operations);
-  return ownership;
 }
 
 async function verifyTemporaryInventory(ownership, operations) {
@@ -264,11 +309,13 @@ async function cleanupTemporaryMetadata(ownership, operations) {
 }
 
 async function listStandaloneFilesWithGit(rootDir, operations) {
+  const acquisition = { ownership: null };
   let ownership;
   let inventory;
   let primaryError;
   try {
-    ownership = await acquireTemporaryMetadata(operations);
+    await acquireTemporaryMetadata(acquisition, operations);
+    ownership = acquisition.ownership;
     await createTemporaryEntry(ownership, "objects", "directory", "", operations);
     await createTemporaryEntry(ownership, "refs", "directory", "", operations);
     await createTemporaryEntry(ownership, "HEAD", "file", "ref: refs/heads/main\n", operations);
@@ -298,6 +345,7 @@ async function listStandaloneFilesWithGit(rootDir, operations) {
       .filter(isContainedRelativePath)
       .sort();
   } catch (error) {
+    ownership = acquisition.ownership;
     primaryError = normalizeError(error);
   }
 

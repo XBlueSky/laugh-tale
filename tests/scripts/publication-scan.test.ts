@@ -1,7 +1,8 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { realpath as realpathPath } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, describe, expect, test } from "vitest";
 
@@ -19,6 +20,7 @@ interface TempMutationEvent {
 }
 interface ScanTestOperations {
   beforeTempMutation?: (event: TempMutationEvent) => Promise<void> | void;
+  realpath?: (path: string) => Promise<string>;
   unlink?: (path: string) => Promise<void>;
 }
 type ScanPublication = (rootDir: string, testOperations?: ScanTestOperations) => Promise<PublicationFinding[]>;
@@ -404,6 +406,35 @@ describe("publication inventory", () => {
     expect(displacedDir).toBeDefined();
     expect(readFileSync(join(replacementDir!, "foreign.txt"), "utf8")).toBe("preserve\n");
     expect(readdirSync(displacedDir!).some((name) => name.startsWith(".laugh-tale-incomplete-"))).toBe(true);
+  });
+
+  test("rejects standalone metadata replacement before its first canonical path proof", async () => {
+    const root = createTemporaryRoot();
+    writeFixture(root, "README.md", "safe\n");
+    let replacementDir: string | undefined;
+    let displacedDir: string | undefined;
+
+    await expect(
+      scanPublication(root, {
+        realpath: async (path) => {
+          if (replacementDir === undefined && basename(path).startsWith("laugh-tale-publication-git-")) {
+            replacementDir = path;
+            displacedDir = `${path}-displaced`;
+            temporaryRoots.push(replacementDir, displacedDir);
+            renameSync(path, displacedDir);
+            mkdirSync(path);
+            writeFileSync(join(path, "foreign.txt"), "preserve\n");
+          }
+          return realpathPath(path);
+        },
+      }),
+    ).rejects.toThrow();
+
+    expect(replacementDir).toBeDefined();
+    expect(displacedDir).toBeDefined();
+    expect(readdirSync(replacementDir!)).toEqual(["foreign.txt"]);
+    expect(readFileSync(join(replacementDir!, "foreign.txt"), "utf8")).toBe("preserve\n");
+    expect(readdirSync(displacedDir!)).toEqual([]);
   });
 
   test("leaves owned standalone Git metadata marked when per-entry cleanup fails", async () => {

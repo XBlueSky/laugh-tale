@@ -176,7 +176,10 @@ async function acquireOwnershipMarker(ownership, removeRootOnFailure, operations
         if ((await operations.readdir(ownership.path)).length !== 0) {
           throw new Error(`${ownership.label} inventory changed`);
         }
-        if (removeRootOnFailure) await operations.rmdir(ownership.path);
+        if (removeRootOnFailure) {
+          await operations.rmdir(ownership.path);
+          ownership.removed = true;
+        }
       } catch (cleanupError) {
         errors.push(normalizeError(cleanupError));
       }
@@ -186,21 +189,27 @@ async function acquireOwnershipMarker(ownership, removeRootOnFailure, operations
   return ownership;
 }
 
-async function createOwnedDirectory(path, label, operations) {
+async function prepareOwnedDirectory(path, label, operations) {
   const parent = await captureParent(path, operations);
   const canonicalPath = join(parent.path, basename(path));
-  await operations.mkdir(canonicalPath);
-  const stats = await operations.lstat(canonicalPath);
-  if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error(`${label} ownership changed`);
-  const ownership = {
+  return {
     label,
     path: canonicalPath,
     parent,
-    stats,
+    stats: null,
     marker: { path: join(canonicalPath, `.laugh-tale-incomplete-${randomUUID()}`), token: randomUUID() },
     entries: [],
-    tainted: null,
+    tainted: { path: canonicalPath, type: "root" },
+    removed: false,
   };
+}
+
+async function createOwnedDirectory(ownership, operations) {
+  await operations.mkdir(ownership.path);
+  const stats = await operations.lstat(ownership.path);
+  if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error(`${ownership.label} ownership changed`);
+  ownership.stats = stats;
+  ownership.tainted = null;
   return acquireOwnershipMarker(ownership, true, operations);
 }
 
@@ -406,6 +415,7 @@ async function verifyOwnedInventory(ownership, operations) {
 }
 
 async function cleanupOwnedDirectory(ownership, removeRoot, context, operations) {
+  if (ownership.removed) return [];
   const errors = [];
   try {
     await verifyOwnedInventory(ownership, operations);
@@ -487,7 +497,8 @@ export async function createTripProject({ pluginRoot, targetDir, recipe, starter
   let primaryError;
 
   try {
-    stageOwnership = await createOwnedDirectory(stageDir, "stage", operations);
+    stageOwnership = await prepareOwnedDirectory(stageDir, "stage", operations);
+    await createOwnedDirectory(stageOwnership, operations);
     const stageContext = { phase: "stage-copy", stageDir, targetDir: canonicalTarget };
     await copyTreeIntoOwnedDirectory(canonicalStarter, stageOwnership, stageContext, operations);
     const recipeTarget = join(stageOwnership.path, "src/ui/styles/recipe.css");
@@ -503,10 +514,12 @@ export async function createTripProject({ pluginRoot, targetDir, recipe, starter
     );
     await verifyOwnedInventory(stageOwnership, operations);
 
-    targetOwnership =
-      targetState === "missing"
-        ? await createOwnedDirectory(canonicalTarget, "target", operations)
-        : await adoptEmptyDirectory(canonicalTarget, "target", existingTarget, operations);
+    if (targetState === "missing") {
+      targetOwnership = await prepareOwnedDirectory(canonicalTarget, "target", operations);
+      await createOwnedDirectory(targetOwnership, operations);
+    } else {
+      targetOwnership = await adoptEmptyDirectory(canonicalTarget, "target", existingTarget, operations);
+    }
     if (targetState === "empty") await assertAdoptedDirectoryStillEmpty(targetOwnership, operations);
     const targetContext = { phase: "target-copy", stageDir, targetDir: canonicalTarget };
     await copyTreeIntoOwnedDirectory(stageOwnership.path, targetOwnership, targetContext, operations);

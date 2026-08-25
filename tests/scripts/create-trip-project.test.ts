@@ -475,6 +475,71 @@ describe("atomic trip project creation", () => {
     expect(stagingDirectories(root)).toEqual([]);
   });
 
+  test("diagnoses a provisional stage when its first post-mkdir identity read fails", async () => {
+    const root = createTemporaryRoot();
+    const pluginRoot = createPluginRoot(root);
+    const targetDir = join(root, "my-trip");
+    let failedStage: string | undefined;
+    let thrown: unknown;
+
+    try {
+      await createTripProject(
+        { pluginRoot, targetDir, recipe: "quiet-wood", starterDir: fixtureStarter },
+        {
+          lstat: async (path) => {
+            if (failedStage === undefined && path.includes(".laugh-tale-stage-") && existsSync(path)) {
+              failedStage = path;
+              throw new Error("injected stage root identity failure");
+            }
+            return lstatPath(path);
+          },
+        },
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(AggregateError);
+    const messages = thrown instanceof AggregateError ? thrown.errors.map((error: Error) => error.message) : [];
+    expect(messages).toContain("injected stage root identity failure");
+    expect(messages).toContain("stage ownership is uncertain");
+    expect(failedStage).toBeDefined();
+    expect(readdirSync(failedStage!)).toEqual([]);
+    expect(existsSync(targetDir)).toBe(false);
+  });
+
+  test("diagnoses a provisional missing target when its first post-mkdir identity read fails", async () => {
+    const root = createTemporaryRoot();
+    const pluginRoot = createPluginRoot(root);
+    const targetDir = join(root, "my-trip");
+    let failed = false;
+    let thrown: unknown;
+
+    try {
+      await createTripProject(
+        { pluginRoot, targetDir, recipe: "quiet-wood", starterDir: fixtureStarter },
+        {
+          lstat: async (path) => {
+            if (!failed && path === targetDir && existsSync(path)) {
+              failed = true;
+              throw new Error("injected target root identity failure");
+            }
+            return lstatPath(path);
+          },
+        },
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(AggregateError);
+    const messages = thrown instanceof AggregateError ? thrown.errors.map((error: Error) => error.message) : [];
+    expect(messages).toContain("injected target root identity failure");
+    expect(messages).toContain("target ownership is uncertain");
+    expect(readdirSync(targetDir)).toEqual([]);
+    expect(stagingDirectories(root)).toEqual([]);
+  });
+
   test("leaves an incomplete marker when a created file cannot be identity-recorded", async () => {
     const root = createTemporaryRoot();
     const pluginRoot = createPluginRoot(root);
