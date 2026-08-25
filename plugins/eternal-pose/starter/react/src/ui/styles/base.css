@@ -1,0 +1,484 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  color: inherit;
+}
+
+.trip-experience {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  min-width: 0;
+  height: 100dvh;
+  max-width: 100vw;
+  overflow: hidden;
+  color: var(--color-text);
+  background: var(--color-map-fallback);
+  font-family: var(--font-body);
+  isolation: isolate;
+}
+
+.safe-area-probe {
+  position: absolute;
+  width: 0;
+  height: 0;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.itinerary-map {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--color-map-fallback);
+}
+
+.day-header {
+  position: absolute;
+  z-index: 30;
+  top: calc(var(--safe-area-top) + var(--space-2));
+  right: var(--space-2);
+  left: var(--space-2);
+  min-width: 0;
+  max-width: calc(100% - (var(--space-2) * 2));
+  overflow: hidden;
+  border: var(--border-thin) solid var(--color-border);
+  border-radius: var(--radius-shell);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-overlay);
+  transition:
+    max-height var(--shell-motion-duration) ease-out,
+    border-radius var(--shell-motion-duration) ease-out;
+}
+
+.day-header__primary {
+  display: flex;
+  min-width: 0;
+  min-height: 52px;
+  align-items: center;
+  gap: var(--space-2);
+  padding-inline: var(--space-2);
+}
+
+.day-header__identity {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  align-content: center;
+  gap: 2px;
+}
+
+.day-header__identity > strong {
+  overflow: hidden;
+  font-size: var(--font-size-title);
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.day-header__clock,
+.day-header__controls,
+.map-controls,
+.route-status,
+.route-connector {
+  display: inline-flex;
+  align-items: center;
+}
+
+.day-header__clock {
+  gap: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-meta);
+  line-height: 1;
+}
+
+.day-header__controls {
+  flex: none;
+  gap: 2px;
+}
+
+.icon-control,
+[data-touch-target="44"] {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.icon-control {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+}
+
+.day-header__date-rail {
+  display: flex;
+  min-width: 0;
+  max-height: 64px;
+  gap: var(--space-1);
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0 var(--space-2) var(--space-2);
+  opacity: 1;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: none;
+  transform: translateY(0);
+  transition:
+    max-height var(--shell-motion-duration) ease-out,
+    opacity var(--shell-motion-duration) ease-out,
+    padding var(--shell-motion-duration) ease-out,
+    transform var(--shell-motion-duration) ease-out;
+}
+
+.day-header__date-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.day-header[data-expanded="false"] .day-header__date-rail {
+  max-height: 0;
+  padding-block: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-8px);
+}
+
+.day-header__date {
+  display: grid;
+  min-width: 72px;
+  flex: none;
+  place-content: center;
+  padding: var(--space-1) var(--space-2);
+  border: var(--border-thin) solid var(--color-border);
+  border-radius: var(--radius-control);
+  color: var(--color-text-muted);
+  background: var(--color-surface-subtle);
+  line-height: 1.05;
+  text-align: left;
+}
+
+.day-header__date[aria-pressed="true"] {
+  border-color: var(--color-accent);
+  color: var(--color-accent-strong);
+  background: var(--color-accent-soft);
+}
+
+.day-header__date small {
+  margin-top: 3px;
+  font-size: var(--font-size-meta);
+}
+
+.map-controls {
+  position: absolute;
+  z-index: 20;
+  top: calc(var(--header-clearance) + var(--space-2));
+  right: var(--space-2);
+  min-width: 0;
+  max-width: calc(100% - (var(--space-2) * 2));
+  gap: var(--space-1);
+  padding: 2px;
+  border: var(--border-thin) solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-overlay);
+  transition: top var(--shell-motion-duration) ease-out;
+}
+
+.map-controls__status {
+  max-width: 11rem;
+  overflow: hidden;
+  padding-inline: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itinerary-sheet {
+  position: absolute;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  min-width: 0;
+  max-width: 100%;
+  padding-bottom: var(--safe-area-bottom);
+  overflow: hidden;
+  border: var(--border-thin) solid var(--color-border);
+  border-bottom: 0;
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+  color: var(--color-text);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sheet);
+  touch-action: pan-y;
+  transition: height var(--shell-motion-duration) ease-out;
+  will-change: height;
+}
+
+.trip-experience .itinerary-sheet[data-dragging="true"] {
+  transition: none !important;
+}
+
+.itinerary-sheet__drag-handle {
+  display: grid;
+  width: 100%;
+  height: 44px;
+  flex: none;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  color: var(--color-text-muted);
+  background: transparent;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.itinerary-sheet__toolbar {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  height: 52px;
+  max-height: 52px;
+  flex: none;
+  grid-template-columns: minmax(0, 1fr) 44px 44px;
+  align-items: center;
+  gap: 2px;
+  padding-inline: var(--space-2);
+  border-bottom: var(--border-thin) solid var(--color-border-subtle);
+}
+
+.itinerary-sheet__heading {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  gap: 1px;
+}
+
+.itinerary-sheet__heading > strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--font-size-title);
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itinerary-sheet__heading > [data-secondary="true"] {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-meta);
+  line-height: 1.1;
+}
+
+.route-status {
+  min-height: 44px;
+  flex: none;
+  justify-content: center;
+  gap: var(--space-2);
+  padding-inline: var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-meta);
+  line-height: 1;
+}
+
+.route-status > button {
+  border: 0;
+  color: var(--color-accent-strong);
+  background: transparent;
+}
+
+.route-status[data-state="loading"] svg {
+  animation: route-status-spin 900ms linear infinite;
+}
+
+@keyframes route-status-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+.itinerary-sheet__scroll {
+  min-height: 0;
+  flex: 1;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-2) var(--space-5);
+  overscroll-behavior: contain;
+  scroll-padding-block: var(--space-2);
+}
+
+.itinerary-timeline {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.itinerary-timeline__entry {
+  display: grid;
+  min-width: 0;
+  gap: 0;
+}
+
+.itinerary-row {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(58px, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: var(--border-thin) solid var(--color-border-subtle);
+  border-radius: var(--radius-row);
+  color: var(--color-text);
+  background: var(--color-surface-subtle);
+  text-align: left;
+}
+
+.itinerary-row[aria-pressed="true"] {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+.itinerary-row__time {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-meta);
+  white-space: nowrap;
+}
+
+.itinerary-row__title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 620;
+}
+
+.route-connector {
+  width: fit-content;
+  max-width: calc(100% - var(--space-4));
+  gap: var(--space-2);
+  margin-left: var(--space-4);
+  padding: 0 var(--space-2);
+  overflow: hidden;
+  border: 0;
+  color: var(--color-text-muted);
+  background: transparent;
+  font-size: var(--font-size-meta);
+  text-align: left;
+}
+
+.route-connector > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-connector[aria-pressed="true"] {
+  color: var(--color-accent-strong);
+}
+
+.map-marker {
+  display: inline-grid;
+  min-width: 28px;
+  min-height: 28px;
+  place-items: center;
+  overflow: hidden;
+  border: var(--border-thin) solid var(--color-marker-border);
+  border-radius: 999px;
+  color: var(--color-marker-text);
+  background: var(--color-marker);
+  box-shadow: var(--shadow-marker);
+  font-size: 0;
+}
+
+.map-marker[data-tone="selected"],
+.map-marker--user {
+  background: var(--color-marker-selected);
+}
+
+button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+@media (max-width: 340px) {
+  .day-header {
+    right: var(--space-1);
+    left: var(--space-1);
+    max-width: calc(100% - (var(--space-1) * 2));
+  }
+
+  .day-header__identity > strong {
+    max-width: 9rem;
+  }
+
+  .map-controls__status {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .itinerary-sheet__toolbar {
+    padding-inline: var(--space-1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trip-experience {
+    --shell-motion-duration: 0ms !important;
+  }
+
+  .route-status[data-state="loading"] svg {
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .day-header,
+  .map-controls,
+  .itinerary-sheet,
+  .itinerary-row,
+  .day-header__date {
+    border-color: CanvasText;
+  }
+
+  button:focus-visible {
+    outline: 2px solid CanvasText;
+  }
+}

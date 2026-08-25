@@ -1,0 +1,32 @@
+:root {
+  --font-body: Inter, ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+  --font-size-title: 0.95rem;
+  --font-size-meta: 0.75rem;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --border-thin: 1px;
+  --radius-control: 0.8rem;
+  --radius-row: 1rem;
+  --radius-shell: 1.15rem;
+  --radius-sheet: 1.45rem;
+  --color-text: #352f29;
+  --color-text-muted: #6d6258;
+  --color-surface: #faf6ef;
+  --color-surface-subtle: #f4ede3;
+  --color-border: #d8ccbc;
+  --color-border-subtle: #e8ded1;
+  --color-accent: #9b7653;
+  --color-accent-strong: #6f5035;
+  --color-accent-soft: #eee0cf;
+  --color-map-fallback: #e9e3d8;
+  --color-marker: #f8f1e7;
+  --color-marker-selected: #a97950;
+  --color-marker-border: #6f5035;
+  --color-marker-text: #352f29;
+  --shadow-overlay: 0 6px 24px rgb(69 52 38 / 12%);
+  --shadow-sheet: 0 -10px 36px rgb(69 52 38 / 16%);
+  --shadow-marker: 0 3px 10px rgb(69 52 38 / 18%);
+}
