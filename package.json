@@ -1,0 +1,26 @@
+{
+  "name": "laugh-tale",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint .",
+    "validate:plugins": "node scripts/validate-plugin-contracts.mjs",
+    "check": "npm run validate:plugins && npm test && npm run type-check && npm run lint"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.19",
+    "eslint": "^9.39.4",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.59.3",
+    "vitest": "^4.1.10",
+    "yaml": "^2.8.1"
+  }
+}

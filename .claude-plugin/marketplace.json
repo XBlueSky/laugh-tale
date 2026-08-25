@@ -1,0 +1,18 @@
+{
+  "name": "laugh-tale",
+  "description": "Map-first, mobile-first travel-site skills for coding agents.",
+  "owner": {
+    "name": "Laugh Tale contributors"
+  },
+  "plugins": [
+    {
+      "name": "eternal-pose",
+      "description": "Build and evolve map-first, mobile-first travel sites from real itinerary material.",
+      "version": "0.1.0",
+      "source": "./plugins/eternal-pose",
+      "author": {
+        "name": "Laugh Tale contributors"
+      }
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "name": "eternal-pose",
+  "version": "0.1.0",
+  "description": "Build and evolve map-first, mobile-first travel sites from real itinerary material.",
+  "author": {
+    "name": "Laugh Tale contributors"
+  },
+  "license": "MIT",
+  "keywords": ["travel", "maps", "itinerary", "mobile", "agent-skill"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Eternal Pose",
+    "shortDescription": "Turn trip notes into a map-first mobile site",
+    "longDescription": "Create, update, restyle, or audit an independent travel website from prose, CSV, Markdown, documents, links, and conversation.",
+    "developerName": "Laugh Tale contributors",
+    "category": "Developer Tools",
+    "capabilities": ["Interactive", "Read", "Write"],
+    "defaultPrompt": [
+      "Turn my itinerary into a map-first mobile travel site.",
+      "Audit my trip site without changing it."
+    ],
+    "brandColor": "#8F5036"
+  }
+}

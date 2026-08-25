@@ -1,0 +1,10 @@
+{
+  "name": "eternal-pose",
+  "version": "0.1.0",
+  "description": "Build and evolve map-first, mobile-first travel sites from real itinerary material.",
+  "author": {
+    "name": "Laugh Tale contributors"
+  },
+  "license": "MIT",
+  "keywords": ["travel", "maps", "itinerary", "mobile", "agent-skill"]
+}

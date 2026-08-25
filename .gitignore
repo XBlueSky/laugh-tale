@@ -1,0 +1,9 @@
+node_modules/
+coverage/
+.cc-marketspec/dist/
+.DS_Store
+.env.local
+test-results/
+playwright-report/
+tmp/
+*.tmp
