@@ -5,7 +5,17 @@ const PLUGIN_NAME = "eternal-pose";
 const VERSION = "0.1.0";
 const STRICT_SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 const FORBIDDEN_MARKERS = /\[todo:|placeholder|example\.com/i;
-const UNSUPPORTED_COMPONENTS = ["apps", "mcpServers", "hooks"];
+const PROHIBITED_MANIFEST_COMPONENTS = ["commands", "agents", "hooks", "apps", "mcpServers", "mcp"];
+const PROHIBITED_PLUGIN_PATHS = [
+  "commands",
+  "agents",
+  "hooks",
+  "apps",
+  "mcp",
+  ".mcp.json",
+  ".app.json",
+  "hooks.json",
+];
 
 function errorFor(errors, condition, message) {
   if (!condition) errors.push(message);
@@ -41,8 +51,8 @@ function validateManifest(errors, manifest, label, requiresSkills) {
   errorFor(errors, manifest.author?.name === "Laugh Tale contributors", `${label} manifest author.name must be Laugh Tale contributors`);
   errorFor(errors, manifest.license === "MIT", `${label} manifest license must be MIT`);
   errorFor(errors, !FORBIDDEN_MARKERS.test(JSON.stringify(manifest)), `${label} manifest contains an unfinished marker`);
-  for (const component of UNSUPPORTED_COMPONENTS) {
-    errorFor(errors, !(component in manifest), `${label} manifest must not declare unsupported ${component}`);
+  for (const component of PROHIBITED_MANIFEST_COMPONENTS) {
+    errorFor(errors, !(component in manifest), `${label} manifest must not declare prohibited ${component}`);
   }
   if (requiresSkills) {
     errorFor(errors, manifest.skills === "./skills/", `${label} manifest skills must be ./skills/`);
@@ -68,7 +78,10 @@ export async function validatePluginContracts(repoRoot) {
   errorFor(errors, existsSync(new URL("LICENSE", rootUrl)), "Missing LICENSE");
   errorFor(errors, existsSync(new URL("NOTICE.md", rootUrl)), "Missing NOTICE.md");
   errorFor(errors, existsSync(new URL("plugins/eternal-pose/skills/eternal-pose/SKILL.md", rootUrl)), "Missing Eternal Pose SKILL.md");
-  errorFor(errors, !existsSync(new URL("plugins/eternal-pose/commands", rootUrl)), "v1 must not include commands/");
+  for (const relativePath of PROHIBITED_PLUGIN_PATHS) {
+    const displayPath = relativePath.includes(".") ? relativePath : `${relativePath}/`;
+    errorFor(errors, !existsSync(new URL(`plugins/eternal-pose/${relativePath}`, rootUrl)), `v1 must not include ${displayPath}`);
+  }
 
   validateManifest(errors, claudePlugin, "Claude", false);
   validateManifest(errors, codexPlugin, "Codex", true);
