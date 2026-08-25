@@ -1,4 +1,12 @@
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -9,6 +17,7 @@ import type { Trip } from "../trip-core/model";
 import {
   candidateMapOwnerId,
   nodeMapOwnerId,
+  type MapEvents,
   USER_LOCATION_OWNER_ID,
 } from "./provider-contracts";
 import { TripExperience } from "./TripExperience";
@@ -17,8 +26,34 @@ const baseCss = readFileSync(
   resolve(process.cwd(), "src/ui/styles/base.css"),
   "utf8",
 );
+const indexHtml = readFileSync(resolve(process.cwd(), "index.html"), "utf8");
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
+
+class DelayedFakeMapAdapter extends FakeMapAdapter {
+  private resolvePendingMount: (() => void) | undefined;
+
+  override mount(element: HTMLElement, events: MapEvents): Promise<void> {
+    void super.mount(element, events);
+    return new Promise<void>((resolveMount) => {
+      this.resolvePendingMount = resolveMount;
+    });
+  }
+
+  resolveMount(): void {
+    this.resolvePendingMount?.();
+  }
+}
+
+class RejectingFakeMapAdapter extends FakeMapAdapter {
+  override mount(element: HTMLElement, events: MapEvents): Promise<void> {
+    void super.mount(element, events);
+    return Promise.reject(new Error("Synthetic unavailable map"));
+  }
+}
 
 function createTrip(): Trip {
   return {
@@ -165,6 +200,15 @@ describe("TripExperience", () => {
     );
 
     await waitFor(() => expect(adapter.mountCalls).toHaveLength(1));
+    await waitFor(() =>
+      expect(adapter.fitCalls).toEqual([
+        [
+          nodeMapOwnerId("hotel"),
+          nodeMapOwnerId("museum"),
+          nodeMapOwnerId("dinner"),
+        ],
+      ]),
+    );
     const mapCanvas = screen.getByTestId("itinerary-map");
 
     act(() => adapter.emitPlaceSelect(nodeMapOwnerId("museum")));
@@ -186,18 +230,117 @@ describe("TripExperience", () => {
     });
 
     act(() => adapter.emitRouteSelect("route-museum-dinner"));
-    const route = screen.getByRole("button", { name: /Route from Museum to Dinner A/ });
-    expect(route).toHaveAttribute("aria-pressed", "true");
+    const route = screen.getByText("transit").closest(".route-connector");
+    expect(route).not.toBeNull();
+    expect(route).not.toHaveAttribute("role", "button");
+    expect(
+      screen.queryByRole("button", { name: /Route from Museum to Dinner A/ }),
+    ).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /^約 12:00 Dinner A$/ }));
-    expect(route).toHaveAttribute("aria-pressed", "true");
+    expect(adapter.fitCalls).toHaveLength(1);
 
     await user.click(screen.getByRole("button", { name: /Park day/ }));
     await waitFor(() =>
       expect(adapter.renderCalls.at(-1)?.places[0]?.label).toBe("Park"),
     );
+    expect(adapter.fitCalls).toEqual([
+      [
+        nodeMapOwnerId("hotel"),
+        nodeMapOwnerId("museum"),
+        nodeMapOwnerId("dinner"),
+      ],
+      [nodeMapOwnerId("park")],
+    ]);
     expect(screen.getByTestId("itinerary-map")).toBe(mapCanvas);
     expect(adapter.mountCalls).toHaveLength(1);
     expect(adapter.destroyCalls).toBe(0);
+  });
+
+  it("honors only the latest displayed-day camera intent when the adapter becomes ready late", async () => {
+    const adapter = new DelayedFakeMapAdapter();
+    render(
+      <TripExperience
+        trip={createTrip()}
+        adapterFactory={() => adapter}
+        clock={() => "2040-06-12T00:30:00Z"}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Park day/ }));
+    expect(adapter.fitCalls).toHaveLength(0);
+
+    await act(async () => {
+      adapter.resolveMount();
+      await Promise.resolve();
+    });
+
+    await waitFor(() =>
+      expect(adapter.fitCalls).toEqual([[nodeMapOwnerId("park")]]),
+    );
+    expect(adapter.renderCalls.at(-1)?.places.map(({ label }) => label)).toEqual([
+      "Park",
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: /^約 10:00 Park$/ }));
+    expect(adapter.fitCalls).toHaveLength(1);
+  });
+
+  it("keeps the itinerary readable and selectable while the map is unavailable", async () => {
+    render(
+      <TripExperience
+        trip={createTrip()}
+        adapterFactory={() => new RejectingFakeMapAdapter()}
+        clock={() => "2040-06-12T00:30:00Z"}
+      />,
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/Map unavailable/i);
+    const museum = screen.getByRole("button", { name: /^09:00 Museum$/ });
+    const dinner = screen.getByRole("button", { name: /^約 12:00 Dinner A$/ });
+    expect(museum).toBeVisible();
+    fireEvent.click(dinner);
+    expect(dinner).toHaveAttribute("aria-pressed", "true");
+    expect(dinner).toHaveAttribute("data-selection-source", "manual");
+  });
+
+  it("lets explicit map and current actions synchronize the authoritative day", async () => {
+    const adapter = new FakeMapAdapter();
+    render(
+      <TripExperience
+        trip={createTrip()}
+        adapterFactory={() => adapter}
+        clock={() => "2040-06-12T00:30:00Z"}
+      />,
+    );
+    await waitFor(() => expect(adapter.fitCalls).toHaveLength(1));
+
+    act(() => adapter.emitPlaceSelect(nodeMapOwnerId("park")));
+    expect(screen.getByRole("button", { name: /Park day/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: /^約 10:00 Park$/ })).toHaveAttribute(
+      "data-selection-source",
+      "manual",
+    );
+    await waitFor(() =>
+      expect(adapter.fitCalls.at(-1)).toEqual([nodeMapOwnerId("park")]),
+    );
+
+    fireEvent.click(
+      screen.getAllByRole("button", {
+        name: "Return to the current itinerary item",
+      })[0],
+    );
+    expect(screen.getByRole("button", { name: /Harbor and museum/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: /^09:00 Museum$/ })).toHaveAttribute(
+      "data-selection-source",
+      "automatic",
+    );
+    await waitFor(() => expect(adapter.fitCalls).toHaveLength(3));
   });
 
   it("preserves manual provenance until return-to-now restores automatic advancement", async () => {
@@ -233,6 +376,139 @@ describe("TripExperience", () => {
     rerender(<TripExperience trip={trip} adapterFactory={() => adapter} clock={clock} />);
     await waitFor(() => expect(dinner).toHaveAttribute("aria-pressed", "true"));
     expect(dinner).toHaveAttribute("data-selection-source", "automatic");
+  });
+
+  it("ticks Tokyo time at the minute boundary while automatic selection advances", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2040-06-12T01:59:30Z"));
+    const adapter = new FakeMapAdapter();
+    const { unmount } = render(
+      <TripExperience trip={createTrip()} adapterFactory={() => adapter} />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId("itinerary-map")).toHaveAttribute(
+      "data-map-status",
+      "ready",
+    );
+    expect(adapter.fitCalls).toHaveLength(1);
+
+    const museum = screen.getByRole("button", { name: /^09:00 Museum$/ });
+    const hotel = screen.getByRole("button", { name: /^時間未定 Harbor Hotel$/ });
+    const dinner = screen.getByRole("button", { name: /^約 12:00 Dinner A$/ });
+    expect(screen.getByLabelText("Asia/Tokyo time")).toHaveTextContent("10:59");
+    expect(museum).toHaveAttribute("data-selection-source", "automatic");
+
+    fireEvent.click(hotel);
+    expect(hotel).toHaveAttribute("data-selection-source", "manual");
+
+    await act(async () => {
+      vi.advanceTimersByTime(30_000);
+      await Promise.resolve();
+    });
+    expect(screen.getByLabelText("Asia/Tokyo time")).toHaveTextContent("11:00");
+    expect(hotel).toHaveAttribute("aria-pressed", "true");
+    expect(hotel).toHaveAttribute("data-selection-source", "manual");
+    expect(adapter.fitCalls).toHaveLength(1);
+
+    fireEvent.click(
+      screen.getAllByRole("button", {
+        name: "Return to the current itinerary item",
+      })[0],
+    );
+    expect(dinner).toHaveAttribute("aria-pressed", "true");
+    expect(dinner).toHaveAttribute("data-selection-source", "automatic");
+    expect(adapter.fitCalls).toHaveLength(1);
+
+    unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("keeps an explicitly displayed empty day open and resolves lodging from that day first", async () => {
+    const trip = createTrip();
+    trip.days[1].nodes.push({
+      id: "park-hotel",
+      dayId: "day-two",
+      kind: "lodging",
+      title: "Park Hotel",
+      timing: { certainty: "unknown" },
+      optionality: "core",
+      place: {
+        name: "Park Hotel",
+        coordinates: { lat: 35.701, lng: 139.781 },
+        certainty: "confirmed",
+      },
+      payload: { role: "base" },
+    });
+    trip.days.push({
+      id: "day-empty",
+      date: "2040-06-14",
+      title: "Empty pause",
+      nodes: [],
+    });
+    trip.endDate = "2040-06-14";
+    const adapter = new FakeMapAdapter();
+    render(
+      <TripExperience
+        trip={trip}
+        adapterFactory={() => adapter}
+        clock={() => "2040-06-12T00:30:00Z"}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Empty pause/ }));
+    const sheet = screen.getByRole("region", { name: "Itinerary" });
+    expect(within(sheet).getByText("Empty pause")).toBeVisible();
+    expect(within(sheet).getByText("0 stops")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /^09:00 Museum$/ })).not.toBeInTheDocument();
+    await waitFor(() => expect(adapter.renderCalls.at(-1)?.places).toEqual([]));
+
+    fireEvent.click(screen.getByRole("button", { name: "Return to lodging" }));
+    expect(adapter.focusCalls.at(-1)).toEqual({
+      kind: "place",
+      id: nodeMapOwnerId("park-hotel"),
+    });
+    expect(screen.getByRole("button", { name: /Park day/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("prefers lodging owned by the displayed day", async () => {
+    const trip = createTrip();
+    trip.days[1].nodes.push({
+      id: "park-hotel",
+      dayId: "day-two",
+      kind: "lodging",
+      title: "Park Hotel",
+      timing: { certainty: "unknown" },
+      optionality: "core",
+      place: {
+        name: "Park Hotel",
+        coordinates: { lat: 35.701, lng: 139.781 },
+        certainty: "confirmed",
+      },
+      payload: { role: "return" },
+    });
+    const adapter = new FakeMapAdapter();
+    render(
+      <TripExperience
+        trip={trip}
+        adapterFactory={() => adapter}
+        clock={() => "2040-06-12T00:30:00Z"}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Park day/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Return to lodging" }));
+    await waitFor(() =>
+      expect(adapter.focusCalls.at(-1)).toEqual({
+        kind: "place",
+        id: nodeMapOwnerId("park-hotel"),
+      }),
+    );
   });
 
   it("derives reversible header, sheet ceiling, and map padding from one root state", async () => {
@@ -276,6 +552,52 @@ describe("TripExperience", () => {
     expect(baseCss).toMatch(
       /\.trip-experience\s*\{[^}]*max-width:\s*100vw;[^}]*overflow:\s*hidden;/s,
     );
+  });
+
+  it("subtracts a 34px bottom safe-area inset exactly once from the sheet ceiling", async () => {
+    const originalGetComputedStyle = window.getComputedStyle.bind(window);
+    vi.spyOn(window, "getComputedStyle").mockImplementation((element, pseudoElement) => {
+      const computed = originalGetComputedStyle(element, pseudoElement);
+      if (element.classList.contains("safe-area-probe")) {
+        return {
+          ...computed,
+          paddingTop: "0px",
+          paddingBottom: "34px",
+        };
+      }
+      return computed;
+    });
+
+    render(
+      <TripExperience
+        trip={createTrip()}
+        adapterFactory={() => new FakeMapAdapter()}
+        clock={() => "2040-06-12T00:30:00Z"}
+      />,
+    );
+
+    const root = screen.getByTestId("trip-experience");
+    const sheet = screen.getByRole("region", { name: "Itinerary" });
+    await waitFor(() =>
+      expect(root.style.getPropertyValue("--safe-area-bottom")).toBe("34px"),
+    );
+    expect(root.style.getPropertyValue("--sheet-ceiling")).toBe("318px");
+    expect(root.style.getPropertyValue("--map-padding-bottom")).toBe("219px");
+    expect(sheet).toHaveStyle({ maxHeight: "318px" });
+  });
+
+  it("declares edge-to-edge safe-area support in the starter viewport contract", () => {
+    const document = new DOMParser().parseFromString(indexHtml, "text/html");
+    const viewport = document.querySelector('meta[name="viewport"]');
+    const directives = new Set(
+      (viewport?.getAttribute("content") ?? "")
+        .split(",")
+        .map((directive) => directive.trim()),
+    );
+
+    expect(directives).toContain("width=device-width");
+    expect(directives).toContain("initial-scale=1.0");
+    expect(directives).toContain("viewport-fit=cover");
   });
 
   it("applies reduced-motion geometry synchronously", async () => {
@@ -358,6 +680,25 @@ describe("TripExperience", () => {
       kind: "place",
       id: USER_LOCATION_OWNER_ID,
     });
+    expect(adapter.fitCalls).toHaveLength(1);
+    act(() => {
+      success?.({
+        coords: {
+          latitude: 35.682,
+          longitude: 139.768,
+          accuracy: 4,
+          altitude: null,
+          altitudeAccuracy: null,
+          heading: null,
+          speed: null,
+          toJSON: () => ({}),
+        },
+        timestamp: 2,
+        toJSON: () => ({}),
+      });
+    });
+    await waitFor(() => expect(adapter.userLocationCalls).toHaveLength(2));
+    expect(adapter.fitCalls).toHaveLength(1);
     expect(storageWrite).not.toHaveBeenCalled();
     expect(JSON.stringify(trip)).toBe(tripBefore);
   });

@@ -10,9 +10,7 @@ export interface ItineraryTimelineProps {
   nodes: readonly EffectiveNode[];
   routes: readonly RouteEdge[];
   selection: TripSelection;
-  selectedRouteId: string | null;
   onNodeSelect: (nodeId: string) => void;
-  onRouteSelect: (routeId: string) => void;
 }
 
 function routeKey(fromNodeId: string, toNodeId: string): string {
@@ -23,9 +21,7 @@ export function ItineraryTimeline({
   nodes,
   routes,
   selection,
-  selectedRouteId,
   onNodeSelect,
-  onRouteSelect,
 }: ItineraryTimelineProps) {
   const nodeElementsRef = useRef(new Map<string, HTMLLIElement>());
   const routesByAdjacency = useMemo(() => {
@@ -95,19 +91,15 @@ export function ItineraryTimeline({
             </button>
 
             {ownedRoutes.map((route) => (
-              <button
+              <div
                 key={route.id}
-                type="button"
                 className="route-connector"
                 aria-label={`Route from ${node.title} to ${next?.node.title ?? "next stop"}`}
-                aria-pressed={selectedRouteId === route.id}
                 data-route-owner={route.id}
-                data-touch-target="44"
-                onClick={() => onRouteSelect(route.id)}
               >
                 <Navigation aria-hidden="true" size={17} strokeWidth={1.8} />
                 <span>{route.summary ?? route.mode}</span>
-              </button>
+              </div>
             ))}
           </li>
         );

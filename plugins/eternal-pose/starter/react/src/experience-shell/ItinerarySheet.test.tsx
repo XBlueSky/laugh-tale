@@ -74,6 +74,73 @@ describe("ItinerarySheet", () => {
     expect(onSnapChange).toHaveBeenCalledWith("half");
   });
 
+  it("finalizes a drag once before pointer capture release can re-enter", () => {
+    const onSnapChange = vi.fn();
+    render(
+      <ItinerarySheet
+        snap="half"
+        geometry={geometry}
+        dayTitle="Harbor day"
+        itineraryCount={4}
+        onSnapChange={onSnapChange}
+        onReturnToNow={vi.fn()}
+      >
+        <p>Timeline</p>
+      </ItinerarySheet>,
+    );
+    const sheet = screen.getByRole("region", { name: "Itinerary" });
+    const handle = screen.getByRole("button", { name: "Drag itinerary sheet" });
+    let reentered = false;
+    Object.defineProperty(handle, "releasePointerCapture", {
+      configurable: true,
+      value: vi.fn(() => {
+        if (!reentered) {
+          reentered = true;
+          fireEvent.pointerUp(handle, {
+            pointerId: 9,
+            clientY: 320,
+            timeStamp: 40,
+          });
+        }
+      }),
+    });
+
+    fireEvent.pointerDown(handle, { pointerId: 9, clientY: 360, timeStamp: 10 });
+    fireEvent.pointerUp(handle, { pointerId: 9, clientY: 320, timeStamp: 30 });
+
+    expect(onSnapChange).toHaveBeenCalledTimes(1);
+    expect(sheet).toHaveAttribute("data-dragging", "false");
+  });
+
+  it("clears drag state on lost capture and pointer cancellation without committing a snap", () => {
+    const onSnapChange = vi.fn();
+    render(
+      <ItinerarySheet
+        snap="half"
+        geometry={geometry}
+        dayTitle="Harbor day"
+        itineraryCount={4}
+        onSnapChange={onSnapChange}
+        onReturnToNow={vi.fn()}
+      >
+        <p>Timeline</p>
+      </ItinerarySheet>,
+    );
+    const sheet = screen.getByRole("region", { name: "Itinerary" });
+    const handle = screen.getByRole("button", { name: "Drag itinerary sheet" });
+
+    fireEvent.pointerDown(handle, { pointerId: 4, clientY: 360, timeStamp: 10 });
+    expect(sheet).toHaveAttribute("data-dragging", "true");
+    fireEvent.lostPointerCapture(handle, { pointerId: 4 });
+    expect(sheet).toHaveAttribute("data-dragging", "false");
+    expect(onSnapChange).not.toHaveBeenCalled();
+
+    fireEvent.pointerDown(handle, { pointerId: 5, clientY: 360, timeStamp: 20 });
+    fireEvent.pointerCancel(handle, { pointerId: 5, clientY: 340, timeStamp: 30 });
+    expect(sheet).toHaveAttribute("data-dragging", "false");
+    expect(onSnapChange).not.toHaveBeenCalled();
+  });
+
   it("keeps collapsed content to one compact toolbar with icon navigation", async () => {
     const user = userEvent.setup();
     const onReturnToNow = vi.fn();
@@ -115,6 +182,35 @@ describe("ItinerarySheet", () => {
 
     await user.click(currentButton);
     expect(onReturnToNow).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a collapsed route status outside the 128px handle-and-toolbar budget", () => {
+    render(
+      <ItinerarySheet
+        snap="collapsed"
+        geometry={geometry}
+        dayTitle="Harbor day"
+        itineraryCount={4}
+        onSnapChange={vi.fn()}
+        onReturnToNow={vi.fn()}
+        routeStatus={{ state: "loading", label: "Loading route" }}
+      >
+        <p>Timeline</p>
+      </ItinerarySheet>,
+    );
+
+    const sheet = screen.getByRole("region", { name: "Itinerary" });
+    expect(sheet).toHaveStyle({
+      height: "128px",
+      bottom: "var(--safe-area-bottom)",
+      paddingBottom: "0px",
+    });
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByRole("toolbar", { name: "Itinerary controls" })).toHaveAttribute(
+      "data-compact",
+      "true",
+    );
+    expect(screen.queryByText("Timeline")).not.toBeInTheDocument();
   });
 
   it("offers keyboard equivalents for every stable drag snap", () => {

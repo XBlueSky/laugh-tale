@@ -33,6 +33,7 @@ export function ItineraryMap({
   const onRouteSelectRef = useRef(onRouteSelect);
   const onReadyRef = useRef(onReady);
   const [status, setStatus] = useState<MapMountStatus>("mounting");
+  const [mountAttempt, setMountAttempt] = useState(0);
 
   useEffect(() => {
     presentationRef.current = presentation;
@@ -48,6 +49,13 @@ export function ItineraryMap({
       return;
     }
     let active = true;
+    let released = false;
+    const releaseAdapter = (): void => {
+      if (!released) {
+        released = true;
+        adapter.destroy();
+      }
+    };
     readyRef.current = false;
     setStatus("mounting");
 
@@ -68,6 +76,8 @@ export function ItineraryMap({
       })
       .catch(() => {
         if (active) {
+          readyRef.current = false;
+          releaseAdapter();
           setStatus("error");
         }
       });
@@ -75,9 +85,9 @@ export function ItineraryMap({
     return () => {
       active = false;
       readyRef.current = false;
-      adapter.destroy();
+      releaseAdapter();
     };
-  }, [adapter]);
+  }, [adapter, mountAttempt]);
 
   useEffect(() => {
     if (readyRef.current) {
@@ -92,14 +102,28 @@ export function ItineraryMap({
   }, [adapter, padding]);
 
   return (
-    <div
-      ref={containerRef}
-      className="itinerary-map"
-      data-testid="itinerary-map"
-      data-map-canvas="persistent"
-      data-map-status={status}
-      role="region"
-      aria-label="Trip map"
-    />
+    <>
+      <div
+        ref={containerRef}
+        className="itinerary-map"
+        data-testid="itinerary-map"
+        data-map-canvas="persistent"
+        data-map-status={status}
+        role="region"
+        aria-label="Trip map"
+      />
+      {status === "error" ? (
+        <div className="map-degraded-state" role="alert">
+          <span>Map unavailable. The itinerary remains available.</span>
+          <button
+            type="button"
+            data-touch-target="44"
+            onClick={() => setMountAttempt((attempt) => attempt + 1)}
+          >
+            Retry map
+          </button>
+        </div>
+      ) : null}
+    </>
   );
 }

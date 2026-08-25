@@ -116,8 +116,21 @@ export function ItinerarySheet({
     );
     const elapsed = event.timeStamp - sample.lastTime;
     const velocityY = elapsed > 0 ? (event.clientY - sample.lastY) / elapsed : 0;
+    dragRef.current = null;
+    setDragFrame(null);
     onSnapChange(nearestSheetSnap(height, sample.geometry, velocityY));
-    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    if (
+      event.currentTarget.hasPointerCapture?.(event.pointerId) !== false
+    ) {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    }
+  };
+
+  const cancelDrag = (event: ReactPointerEvent<HTMLButtonElement>): void => {
+    const sample = dragRef.current;
+    if (sample === null || sample.pointerId !== event.pointerId) {
+      return;
+    }
     dragRef.current = null;
     setDragFrame(null);
   };
@@ -156,8 +169,10 @@ export function ItinerarySheet({
       data-dragging={dragging ? "true" : "false"}
       data-snap={snap}
       style={{
+        bottom: "var(--safe-area-bottom)",
         height: `${targetHeight}px`,
         maxHeight: `${targetCeiling}px`,
+        paddingBottom: "0px",
         transitionDuration: dragging ? "0ms" : undefined,
       }}
     >
@@ -171,7 +186,8 @@ export function ItinerarySheet({
         onPointerDown={beginDrag}
         onPointerMove={moveDrag}
         onPointerUp={finishDrag}
-        onPointerCancel={finishDrag}
+        onPointerCancel={cancelDrag}
+        onLostPointerCapture={cancelDrag}
       >
         <GripHorizontal aria-hidden="true" size={22} strokeWidth={1.8} />
       </button>
@@ -216,7 +232,7 @@ export function ItinerarySheet({
         </button>
       </div>
 
-      {routeStatus === undefined ? null : (
+      {routeStatus === undefined || collapsed ? null : (
         <div
           className="route-status"
           role="status"

@@ -11,7 +11,11 @@ import {
 
 import type { Trip } from "../trip-core/model";
 import { emptyTripProgress, nodeCompletionKey } from "../trip-core/progress";
-import { resolveEffectiveItinerary } from "../trip-core/resolve-itinerary";
+import {
+  resolveEffectiveItinerary,
+  type EffectiveDay,
+  type EffectiveNode,
+} from "../trip-core/resolve-itinerary";
 import { findLiveState, resolveSchedule } from "../trip-core/time";
 import { DayHeader } from "../ui/DayHeader";
 import { ItineraryTimeline } from "../ui/ItineraryTimeline";
@@ -56,6 +60,18 @@ const DEFAULT_VIEWPORT: ViewportMetrics = {
 const EXPANDED_HEADER_HEIGHT = 148;
 const COLLAPSED_HEADER_HEIGHT = 72;
 const COLLAPSED_SHEET_HEIGHT = 128;
+const MINUTE_IN_MILLISECONDS = 60_000;
+
+function systemClock(): string {
+  return new Date().toISOString();
+}
+
+function nextMinuteDelay(epochMilliseconds: number): number {
+  const remainder = epochMilliseconds % MINUTE_IN_MILLISECONDS;
+  return remainder === 0
+    ? MINUTE_IN_MILLISECONDS
+    : MINUTE_IN_MILLISECONDS - remainder;
+}
 
 function finitePixel(value: string): number {
   const parsed = Number.parseFloat(value);
@@ -135,6 +151,48 @@ function dayForNode(trip: Trip, nodeId: string | null): string | undefined {
   return trip.days.find((day) => day.nodes.some((node) => node.id === nodeId))?.id;
 }
 
+function isLocatableLodging(node: EffectiveNode): boolean {
+  if (node.node.kind !== "lodging") {
+    return false;
+  }
+  const coordinates = node.node.place?.coordinates;
+  return (
+    coordinates !== undefined &&
+    Number.isFinite(coordinates.lat) &&
+    coordinates.lat >= -90 &&
+    coordinates.lat <= 90 &&
+    Number.isFinite(coordinates.lng) &&
+    coordinates.lng >= -180 &&
+    coordinates.lng <= 180
+  );
+}
+
+function lodgingForDisplayedDay(
+  days: readonly EffectiveDay[],
+  displayedDayId: string,
+): EffectiveNode | undefined {
+  const displayedIndex = Math.max(
+    0,
+    days.findIndex(({ day }) => day.id === displayedDayId),
+  );
+  const candidates = days.flatMap((day, dayIndex) =>
+    day.nodes.flatMap((node, nodeIndex) =>
+      isLocatableLodging(node) ? [{ node, dayIndex, nodeIndex }] : [],
+    ),
+  );
+
+  // Deterministic fallback: nearest itinerary day, then the earlier day,
+  // then the first lodging in authored order.
+  candidates.sort(
+    (left, right) =>
+      Math.abs(left.dayIndex - displayedIndex) -
+        Math.abs(right.dayIndex - displayedIndex) ||
+      left.dayIndex - right.dayIndex ||
+      left.nodeIndex - right.nodeIndex,
+  );
+  return candidates[0]?.node;
+}
+
 function formatLocalClock(instant: string, timezone: string): string {
   return new Intl.DateTimeFormat("en-GB", {
     hour: "2-digit",
@@ -144,10 +202,14 @@ function formatLocalClock(instant: string, timezone: string): string {
   }).format(new Date(instant));
 }
 
+function ignoreMapRouteSelection(): void {
+  // Route geometry and route focus enter in the Task 8/11 integration seam.
+}
+
 export function TripExperience({
   trip,
   adapterFactory,
-  clock = () => new Date().toISOString(),
+  clock = systemClock,
 }: TripExperienceProps) {
   const safeAreaProbeRef = useRef<HTMLDivElement>(null);
   const viewport = useViewportMetrics(safeAreaProbeRef);
@@ -156,8 +218,18 @@ export function TripExperience({
   const [mountedAdapter, setMountedAdapter] = useState<MapAdapter | null>(null);
   const [headerExpanded, setHeaderExpanded] = useState(true);
   const [sheetSnap, setSheetSnap] = useState<SheetSnap>("half");
-  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [progress] = useState(emptyTripProgress);
+  const [clockTick, setClockTick] = useState(0);
+
+  useEffect(() => {
+    if (clock !== systemClock) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setClockTick((tick) => tick + 1);
+    }, nextMinuteDelay(Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [clock, clockTick]);
 
   const nowInstant = clock();
   const effectiveTrip = useMemo(
@@ -193,13 +265,11 @@ export function TripExperience({
   const selection = useTripSelection(automaticNodeId, availableNodeIds);
   const initialDayId =
     dayForNode(trip, automaticNodeId) ?? trip.days[0]?.id ?? "";
-  const [selectedDayId, setSelectedDayId] = useState(initialDayId);
+  const [displayedDayId, setDisplayedDayId] = useState(initialDayId);
+  const [dayCameraIntent, setDayCameraIntent] = useState(0);
 
-  const selectionDayId = dayForNode(trip, selection.selection.nodeId);
   const selectedEffectiveDay =
-    effectiveTrip.days.find(
-      ({ day }) => day.id === (selectionDayId ?? selectedDayId),
-    ) ??
+    effectiveTrip.days.find(({ day }) => day.id === displayedDayId) ??
     effectiveTrip.days[0];
   if (selectedEffectiveDay === undefined) {
     throw new Error("TripExperience requires at least one trip day.");
@@ -221,10 +291,43 @@ export function TripExperience({
         ...(selection.selection.nodeId === null
           ? {}
           : { selectedNodeId: selection.selection.nodeId }),
-        ...(selectedRouteId === null ? {} : { selectedRouteId }),
       }),
-    [selectedEffectiveDay, selectedRouteId, selection.selection.nodeId],
+    [selectedEffectiveDay, selection.selection.nodeId],
   );
+  const dayFitIds = useMemo(() => {
+    const ids = new Set(presentation.places.map(({ ownerId }) => ownerId));
+    for (const route of presentation.routes) {
+      if (route.path.length > 0) {
+        ids.add(route.edgeId);
+      }
+    }
+    return [...ids];
+  }, [presentation]);
+
+  const lastFittedDayIntentRef = useRef(-1);
+  useEffect(() => {
+    if (
+      mountedAdapter === null ||
+      lastFittedDayIntentRef.current === dayCameraIntent
+    ) {
+      return;
+    }
+    lastFittedDayIntentRef.current = dayCameraIntent;
+    if (dayFitIds.length > 0) {
+      mountedAdapter.fit(dayFitIds);
+    }
+  }, [dayCameraIntent, dayFitIds, mountedAdapter]);
+
+  const markDisplayedDayIntent = (dayId: string): void => {
+    setDisplayedDayId(dayId);
+    setDayCameraIntent((intent) => intent + 1);
+  };
+
+  const synchronizeDisplayedDay = (dayId: string): void => {
+    if (dayId !== displayedDayId) {
+      markDisplayedDayIntent(dayId);
+    }
+  };
 
   const headerClearance =
     (headerExpanded ? EXPANDED_HEADER_HEIGHT : COLLAPSED_HEADER_HEIGHT) +
@@ -240,10 +343,10 @@ export function TripExperience({
     () => ({
       top: headerClearance,
       right: 16,
-      bottom: sheetHeight + 16,
+      bottom: sheetHeight + viewport.safeBottom + 16,
       left: 16,
     }),
-    [headerClearance, sheetHeight],
+    [headerClearance, sheetHeight, viewport.safeBottom],
   );
   const pendingMapFocusRef = useRef<MapFocusTarget | null>(null);
 
@@ -262,30 +365,27 @@ export function TripExperience({
     }
   };
 
-  const selectNode = (nodeId: string): void => {
+  const selectNode = (
+    nodeId: string,
+    options: { synchronizeDay?: boolean } = {},
+  ): void => {
     if (!availableNodeIds.includes(nodeId)) {
       return;
     }
     selection.selectManual(nodeId);
-    const ownerDay = dayForNode(trip, nodeId);
-    if (ownerDay !== undefined) {
-      setSelectedDayId(ownerDay);
+    if (options.synchronizeDay === true) {
+      const ownerDay = dayForNode(trip, nodeId);
+      if (ownerDay !== undefined) {
+        synchronizeDisplayedDay(ownerDay);
+      }
     }
     focusMap({ kind: "place", id: nodeMapOwnerId(nodeId) });
-  };
-
-  const selectRoute = (routeId: string): void => {
-    if (!selectedDayRoutes.some((route) => route.id === routeId)) {
-      return;
-    }
-    setSelectedRouteId(routeId);
-    focusMap({ kind: "route", id: routeId });
   };
 
   const handleMapPlaceSelect = (ownerId: string): void => {
     const owner = decodeMapPlaceOwnerId(ownerId);
     if (owner?.kind === "node") {
-      selectNode(owner.id);
+      selectNode(owner.id, { synchronizeDay: true });
       return;
     }
     if (owner?.kind !== "candidate") {
@@ -295,7 +395,7 @@ export function TripExperience({
       candidateGroup.options.some((option) => option.id === owner.id),
     );
     if (group !== undefined) {
-      selectNode(group.parentNodeId);
+      selectNode(group.parentNodeId, { synchronizeDay: true });
     }
   };
 
@@ -303,7 +403,7 @@ export function TripExperience({
     selection.returnToNow();
     const liveDayId = dayForNode(trip, automaticNodeId);
     if (liveDayId !== undefined) {
-      setSelectedDayId(liveDayId);
+      synchronizeDisplayedDay(liveDayId);
     }
     if (automaticNodeId !== null) {
       focusMap({ kind: "place", id: nodeMapOwnerId(automaticNodeId) });
@@ -311,11 +411,12 @@ export function TripExperience({
   };
 
   const returnToLodging = (): void => {
-    const lodging = effectiveTrip.days
-      .flatMap((day) => day.nodes)
-      .find(({ node }) => node.kind === "lodging" && node.place !== undefined);
+    const lodging = lodgingForDisplayedDay(
+      effectiveTrip.days,
+      selectedEffectiveDay.day.id,
+    );
     if (lodging !== undefined) {
-      selectNode(lodging.sourceNodeId);
+      selectNode(lodging.sourceNodeId, { synchronizeDay: true });
     }
   };
 
@@ -337,7 +438,7 @@ export function TripExperience({
     if (day === undefined) {
       return;
     }
-    setSelectedDayId(dayId);
+    markDisplayedDayIntent(dayId);
     setSheetSnap("half");
     const firstNode = day.nodes[0];
     if (firstNode !== undefined) {
@@ -361,7 +462,7 @@ export function TripExperience({
         presentation={presentation}
         padding={mapPadding}
         onPlaceSelect={handleMapPlaceSelect}
-        onRouteSelect={selectRoute}
+        onRouteSelect={ignoreMapRouteSelection}
         onReady={setMountedAdapter}
       />
 
@@ -432,9 +533,7 @@ export function TripExperience({
           nodes={selectedEffectiveDay.nodes}
           routes={selectedDayRoutes}
           selection={selection.selection}
-          selectedRouteId={selectedRouteId}
           onNodeSelect={selectNode}
-          onRouteSelect={selectRoute}
         />
       </ItinerarySheet>
     </main>

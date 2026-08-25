@@ -1,4 +1,5 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import { createElement, StrictMode, type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { FakeMapAdapter } from "../providers/fake/FakeMapAdapter";
@@ -145,5 +146,41 @@ describe("useUserLocation", () => {
     act(() => unavailable.result.current.start());
     expect(unavailable.result.current.status).toBe("unavailable");
     expect(unavailable.result.current.label).toMatch(/unavailable/i);
+  });
+
+  it("guards stale GPS callbacks across StrictMode cleanup and a fresh remount", async () => {
+    const geolocation = new ControlledGeolocation();
+    const adapter = new FakeMapAdapter();
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(StrictMode, null, children);
+    const first = renderHook(
+      () => useUserLocation(adapter, geolocation as unknown as Geolocation),
+      { wrapper },
+    );
+
+    act(() => first.result.current.start());
+    expect(geolocation.watchPosition).toHaveBeenCalledTimes(1);
+    first.unmount();
+    expect(geolocation.clearWatch).toHaveBeenCalledWith(11);
+
+    const second = renderHook(
+      () => useUserLocation(adapter, geolocation as unknown as Geolocation),
+      { wrapper },
+    );
+    act(() => second.result.current.start());
+    expect(geolocation.watchPosition).toHaveBeenCalledTimes(2);
+
+    act(() => geolocation.succeed(11, 10, 20));
+    expect(adapter.userLocationCalls).toHaveLength(0);
+    act(() => geolocation.succeed(12, 35.68, 139.76));
+
+    await waitFor(() =>
+      expect(adapter.userLocationCalls).toEqual([{ lat: 35.68, lng: 139.76 }]),
+    );
+    expect(adapter.focusCalls).toEqual([
+      { kind: "place", id: USER_LOCATION_OWNER_ID },
+    ]);
+    second.unmount();
+    expect(geolocation.clearWatch).toHaveBeenCalledWith(12);
   });
 });
