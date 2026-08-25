@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -12,7 +12,16 @@ interface PublicationFinding {
   message: string;
 }
 
-type ScanPublication = (rootDir: string) => Promise<PublicationFinding[]>;
+interface TempMutationEvent {
+  phase: string;
+  path: string;
+  metadataDir: string;
+}
+interface ScanTestOperations {
+  beforeTempMutation?: (event: TempMutationEvent) => Promise<void> | void;
+  unlink?: (path: string) => Promise<void>;
+}
+type ScanPublication = (rootDir: string, testOperations?: ScanTestOperations) => Promise<PublicationFinding[]>;
 type ValidateTripProject = (rootDir: string) => Promise<PublicationFinding[]>;
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
@@ -135,6 +144,20 @@ describe("publication safety findings", () => {
     expect(JSON.stringify(findings).includes(value)).toBe(false);
   });
 
+  test.each([
+    { key: '"PRIVATE_TOKEN"', separator: ":", quote: '"', suffix: "J" },
+    { key: "'STRIPE_SECRET_KEY'", separator: ":", quote: "'", suffix: "T" },
+  ])("recognizes quoted secret key $key with a quoted value", async ({ key, separator, quote, suffix }) => {
+    const root = createTemporaryRoot();
+    const value = ["runtime_", suffix.repeat(28)].join("");
+    writeFixture(root, "quoted-config.ts", `${key}${separator} ${quote}${value}${quote}\n`);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "quoted-config.ts", "credential.generic-secret")).toBe(true);
+    expect(JSON.stringify(findings).includes(value)).toBe(false);
+  });
+
   test.each(["bookingReference", "booking_reference", "reservationReference"])(
     "recognizes %s as a booking-reference field",
     async (field) => {
@@ -149,7 +172,27 @@ describe("publication safety findings", () => {
     },
   );
 
-  test.each(["booking: required", "reservation: available", "booking: confirmed"])(
+  test.each([
+    { key: '"bookingReference"', quote: '"', prefix: "LT" },
+    { key: "'booking_reference'", quote: "'", prefix: "BR" },
+  ])("recognizes quoted booking-reference key $key", async ({ key, quote, prefix }) => {
+    const root = createTemporaryRoot();
+    const reference = [prefix, "8R", "4M7"].join("");
+    writeFixture(root, "quoted-trip.ts", `${key}: ${quote}${reference}${quote}\n`);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "quoted-trip.ts", "privacy.booking-reference")).toBe(true);
+    expect(JSON.stringify(findings).includes(reference)).toBe(false);
+  });
+
+  test.each([
+    "booking: required",
+    "reservation: available",
+    "booking: confirmed",
+    "booking: optional",
+    "reservation: recommended",
+  ])(
     "does not confuse status field %s with a reference",
     async (status) => {
       const root = createTemporaryRoot();
@@ -160,6 +203,20 @@ describe("publication safety findings", () => {
       expect(findingAt(findings, "trip-content.txt", "privacy.booking-reference")).toBe(false);
     },
   );
+
+  test.each([
+    { key: '"passportNumber"', quote: '"', prefix: "TT" },
+    { key: "'passport_number'", quote: "'", prefix: "PP" },
+  ])("recognizes quoted passport field $key", async ({ key, quote, prefix }) => {
+    const root = createTemporaryRoot();
+    const passportNumber = [prefix, "12", "34", "567"].join("");
+    writeFixture(root, "traveler.ts", `${key}: ${quote}${passportNumber}${quote}\n`);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "traveler.ts", "privacy.passport-number")).toBe(true);
+    expect(JSON.stringify(findings).includes(passportNumber)).toBe(false);
+  });
 
   test.each([
     ["taiwan-mobile", ["09", "12-", "345-", "678"]],
@@ -321,6 +378,58 @@ describe("publication inventory", () => {
     expect(findingAt(trackedFindings, ".env.local", "credential.env-file")).toBe(true);
     expect(findingAt(trackedFindings, ".env.local", "credential.google-api-key")).toBe(true);
     expect(JSON.stringify(trackedFindings).includes(ignoredKey)).toBe(false);
+  });
+
+  test("refuses cleanup when standalone Git metadata is replaced", async () => {
+    const root = createTemporaryRoot();
+    writeFixture(root, "README.md", "safe\n");
+    let replacementDir: string | undefined;
+    let displacedDir: string | undefined;
+
+    await expect(
+      scanPublication(root, {
+        beforeTempMutation: ({ phase, metadataDir }) => {
+          if (phase !== "temp-cleanup" || replacementDir !== undefined) return;
+          replacementDir = metadataDir;
+          displacedDir = `${metadataDir}-displaced`;
+          temporaryRoots.push(replacementDir, displacedDir);
+          renameSync(metadataDir, displacedDir);
+          mkdirSync(metadataDir);
+          writeFileSync(join(metadataDir, "foreign.txt"), "preserve\n");
+        },
+      }),
+    ).rejects.toThrow("temporary Git metadata ownership changed");
+
+    expect(replacementDir).toBeDefined();
+    expect(displacedDir).toBeDefined();
+    expect(readFileSync(join(replacementDir!, "foreign.txt"), "utf8")).toBe("preserve\n");
+    expect(readdirSync(displacedDir!).some((name) => name.startsWith(".laugh-tale-incomplete-"))).toBe(true);
+  });
+
+  test("leaves owned standalone Git metadata marked when per-entry cleanup fails", async () => {
+    const root = createTemporaryRoot();
+    writeFixture(root, "README.md", "safe\n");
+    let metadataDir: string | undefined;
+
+    await expect(
+      scanPublication(root, {
+        beforeTempMutation: ({ phase, metadataDir: currentMetadataDir }) => {
+          if (phase !== "temp-cleanup" || metadataDir !== undefined) return;
+          metadataDir = currentMetadataDir;
+          temporaryRoots.push(metadataDir);
+        },
+        unlink: (path) => {
+          if (path.endsWith("global-excludes")) {
+            return Promise.reject(new Error("injected temporary metadata cleanup failure"));
+          }
+          return Promise.reject(new Error(`unexpected cleanup path: ${path}`));
+        },
+      }),
+    ).rejects.toThrow("injected temporary metadata cleanup failure");
+
+    expect(metadataDir).toBeDefined();
+    expect(readdirSync(metadataDir!).some((name) => name.startsWith(".laugh-tale-incomplete-"))).toBe(true);
+    expect(readFileSync(join(metadataDir!, "global-excludes"), "utf8")).toBe("");
   });
 });
 

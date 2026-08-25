@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -12,7 +13,15 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { cp as copyPath, unlink as unlinkPath, writeFile as writeFilePath } from "node:fs/promises";
+import type { Stats } from "node:fs";
+import {
+  lstat as lstatPath,
+  open as openPath,
+  realpath as realpathPath,
+  unlink as unlinkPath,
+  writeFile as writeFilePath,
+} from "node:fs/promises";
+import type { FileHandle } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, parse } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -25,11 +34,9 @@ type CreateTripProject = (options: {
   starterDir?: string;
 }, testOperations?: TestOperations) => Promise<void>;
 type ValidateTargetDirectory = (targetDir: string) => Promise<"missing" | "empty">;
-type CopyOperation = (
-  source: string,
-  destination: string,
-  options: { recursive: boolean; errorOnExist: boolean; force: boolean },
-) => Promise<void>;
+type OpenOperation = (path: string, flags: string, mode?: number) => Promise<FileHandle>;
+type LstatOperation = (path: string) => Promise<Stats>;
+type RealpathOperation = (path: string) => Promise<string>;
 interface MutationEvent {
   phase: string;
   path: string;
@@ -38,7 +45,9 @@ interface MutationEvent {
 }
 interface TestOperations {
   beforeMutation?: (event: MutationEvent) => Promise<void> | void;
-  cp?: CopyOperation;
+  lstat?: LstatOperation;
+  open?: OpenOperation;
+  realpath?: RealpathOperation;
   unlink?: (path: string) => Promise<void>;
   writeFile?: (
     path: string,
@@ -83,14 +92,17 @@ function createStarterWithPlaceholderRecipe(parent: string): string {
   return starterDir;
 }
 
-function failTargetCopy(targetDir: string, afterSuccessfulCopies = 0): CopyOperation {
+function failTargetCopy(targetDir: string, afterSuccessfulCopies = 0): (event: MutationEvent) => void {
+  const preparedFiles = new Set<string>();
   let successfulCopies = 0;
-  return async (source, destination, options) => {
-    if (destination.startsWith(`${targetDir}/`)) {
-      if (successfulCopies >= afterSuccessfulCopies) throw new Error("injected target copy failure");
-      successfulCopies += 1;
+  return ({ phase, path }) => {
+    if (phase !== "target-copy" || !path.startsWith(`${targetDir}/`)) return;
+    if (!preparedFiles.has(path)) {
+      preparedFiles.add(path);
+      return;
     }
-    await copyPath(source, destination, options);
+    if (successfulCopies >= afterSuccessfulCopies) throw new Error("injected target copy failure");
+    successfulCopies += 1;
   };
 }
 
@@ -292,7 +304,7 @@ describe("atomic trip project creation", () => {
     await expect(
       createTripProject(
         { pluginRoot, targetDir, recipe: "quiet-wood", starterDir: fixtureStarter },
-        { cp: failTargetCopy(targetDir) },
+        { beforeMutation: failTargetCopy(targetDir) },
       ),
     ).rejects.toThrow("injected target copy failure");
 
@@ -304,7 +316,7 @@ describe("atomic trip project creation", () => {
     expect(stagingDirectories(root)).toEqual([]);
   });
 
-  test("removes only its marker when an existing empty target gains a foreign entry during adoption", async () => {
+  test("retains its marker when an existing empty target gains a foreign entry during adoption", async () => {
     const root = createTemporaryRoot();
     const pluginRoot = createPluginRoot(root);
     const targetDir = join(root, "my-trip");
@@ -326,8 +338,167 @@ describe("atomic trip project creation", () => {
     ).rejects.toThrow("target directory must be missing or empty");
 
     expect(readFileSync(foreignPath, "utf8")).toBe("preserve\n");
-    expect(readdirSync(targetDir)).toEqual(["foreign.txt"]);
+    expect(readdirSync(targetDir).some((name) => name.startsWith(".laugh-tale-incomplete-"))).toBe(true);
     expect(stagingDirectories(root)).toEqual([]);
+  });
+
+  test("rejects an existing empty target replaced by a symlink before canonical adoption", async () => {
+    const root = createTemporaryRoot();
+    const pluginRoot = createPluginRoot(root);
+    const targetDir = join(root, "my-trip");
+    const displacedTarget = join(root, "displaced-target");
+    const externalTarget = join(root, "external-target");
+    mkdirSync(targetDir);
+    mkdirSync(externalTarget);
+    let targetRealpathCalls = 0;
+
+    await expect(
+      createTripProject(
+        { pluginRoot, targetDir, recipe: "quiet-wood", starterDir: fixtureStarter },
+        {
+          realpath: async (path) => {
+            if (path === targetDir) {
+              targetRealpathCalls += 1;
+              if (targetRealpathCalls === 2) {
+                renameSync(targetDir, displacedTarget);
+                symlinkSync(externalTarget, targetDir, "dir");
+              }
+            }
+            return realpathPath(path);
+          },
+        },
+      ),
+    ).rejects.toThrow("target ownership changed");
+
+    expect(lstatSync(targetDir).isSymbolicLink()).toBe(true);
+    expect(readdirSync(externalTarget)).toEqual([]);
+    expect(readdirSync(displacedTarget)).toEqual([]);
+    expect(stagingDirectories(root)).toEqual([]);
+  });
+
+  test("treats an EEXIST race as foreign and never removes the foreign file", async () => {
+    const root = createTemporaryRoot();
+    const pluginRoot = createPluginRoot(root);
+    const targetDir = join(root, "my-trip");
+    const foreignPath = join(targetDir, "README.md");
+
+    await expect(
+      createTripProject(
+        { pluginRoot, targetDir, recipe: "quiet-wood", starterDir: fixtureStarter },
+        {
+          open: async (path, flags, mode) => {
+            if (path === foreignPath && flags === "wx") writeFileSync(foreignPath, "foreign\n");
+            return openPath(path, flags, mode);
+          },
+        },
+      ),
+    ).rejects.toThrow();
+
+    expect(readFileSync(foreignPath, "utf8")).toBe("foreign\n");
+    expect(readdirSync(targetDir).some((name) => name.startsWith(".laugh-tale-incomplete-"))).toBe(true);
+    expect(stagingDirectories(root)).toEqual([]);
+  });
+
+  test("rejects a recorded child directory replaced by a symlink before a descendant write", async () => {
+    const root = createTemporaryRoot();
+    const pluginRoot = createPluginRoot(root);
+    const starterDir = join(root, "nested-starter");
+    const targetDir = join(root, "my-trip");
+    const externalDir = join(root, "external");
+    const displacedDir = join(targetDir, "nested-owned");
+    mkdirSync(join(starterDir, "nested"), { recursive: true });
+    mkdirSync(externalDir);
+    writeFileSync(join(starterDir, "nested/child.txt"), "starter child\n");
+    let replaced = false;
+
+    await expect(
+      createTripProject(
+        { pluginRoot, targetDir, recipe: "quiet-wood", starterDir },
+        {
+          beforeMutation: ({ phase, path }) => {
+            if (phase !== "target-copy" || !path.endsWith(join("nested", "child.txt")) || replaced) return;
+            replaced = true;
+            renameSync(join(targetDir, "nested"), displacedDir);
+            symlinkSync(externalDir, join(targetDir, "nested"), "dir");
+          },
+        },
+      ),
+    ).rejects.toThrow();
+
+    expect(existsSync(join(externalDir, "child.txt"))).toBe(false);
+    expect(lstatSync(join(targetDir, "nested")).isSymbolicLink()).toBe(true);
+    expect(existsSync(displacedDir)).toBe(true);
+    expect(readdirSync(targetDir).some((name) => name.startsWith(".laugh-tale-incomplete-"))).toBe(true);
+  });
+
+  test("retains the marker when a foreign entry appears immediately before finalization", async () => {
+    const root = createTemporaryRoot();
+    const pluginRoot = createPluginRoot(root);
+    const targetDir = join(root, "my-trip");
+    const foreignPath = join(targetDir, "foreign.txt");
+
+    await expect(
+      createTripProject(
+        { pluginRoot, targetDir, recipe: "quiet-wood", starterDir: fixtureStarter },
+        {
+          beforeMutation: ({ phase }) => {
+            if (phase === "target-finalize" && !existsSync(foreignPath)) writeFileSync(foreignPath, "foreign\n");
+          },
+        },
+      ),
+    ).rejects.toThrow("target inventory changed");
+
+    expect(readFileSync(foreignPath, "utf8")).toBe("foreign\n");
+    expect(readdirSync(targetDir).some((name) => name.startsWith(".laugh-tale-incomplete-"))).toBe(true);
+  });
+
+  test("rolls back a newly created root when marker writing fails before mutation", async () => {
+    const root = createTemporaryRoot();
+    const pluginRoot = createPluginRoot(root);
+    const targetDir = join(root, "my-trip");
+
+    await expect(
+      createTripProject(
+        { pluginRoot, targetDir, recipe: "quiet-wood", starterDir: fixtureStarter },
+        {
+          writeFile: async (path, contents, options) => {
+            if (path.includes(".laugh-tale-stage-") && path.includes(".laugh-tale-incomplete-")) {
+              throw new Error("injected marker write failure");
+            }
+            await writeFilePath(path, contents, options);
+          },
+        },
+      ),
+    ).rejects.toThrow("injected marker write failure");
+
+    expect(existsSync(targetDir)).toBe(false);
+    expect(stagingDirectories(root)).toEqual([]);
+  });
+
+  test("leaves an incomplete marker when a created file cannot be identity-recorded", async () => {
+    const root = createTemporaryRoot();
+    const pluginRoot = createPluginRoot(root);
+    const targetDir = join(root, "my-trip");
+
+    await expect(
+      createTripProject(
+        { pluginRoot, targetDir, recipe: "quiet-wood", starterDir: fixtureStarter },
+        {
+          lstat: async (path) => {
+            if (path.includes(".laugh-tale-stage-") && path.endsWith("README.md") && existsSync(path)) {
+              throw new Error("injected identity record failure");
+            }
+            return lstatPath(path);
+          },
+        },
+      ),
+    ).rejects.toThrow("injected identity record failure");
+
+    expect(existsSync(targetDir)).toBe(false);
+    const [stageName] = stagingDirectories(root);
+    expect(stageName).toBeDefined();
+    expect(readFileSync(join(root, stageName, "README.md"), "utf8")).toBe("");
+    expect(readdirSync(join(root, stageName)).some((name) => name.startsWith(".laugh-tale-incomplete-"))).toBe(true);
   });
 
   test("refuses cleanup after the reserved target is replaced", async () => {
@@ -395,7 +566,7 @@ describe("atomic trip project creation", () => {
       await createTripProject(
         { pluginRoot, targetDir, recipe: "quiet-wood", starterDir: fixtureStarter },
         {
-          cp: injectedCopy,
+          beforeMutation: injectedCopy,
           unlink: async (path) => {
             if (path === join(targetDir, "README.md")) throw new Error("injected target cleanup failure");
             await unlinkPath(path);
