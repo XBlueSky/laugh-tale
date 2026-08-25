@@ -30,6 +30,10 @@ function collectResolvedUrls(value: unknown): string[] {
   });
 }
 
+function escapeForRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function createValidFixture(): string {
   const fixtureRoot = mkdtempSync(join(tmpdir(), "eternal-pose-validator-"));
   temporaryRoots.push(fixtureRoot);
@@ -60,27 +64,30 @@ afterEach(() => {
 });
 
 describe("plugin contract validator", () => {
+  test("accepts an untouched valid fixture", async () => {
+    await expect(validateFixture(createValidFixture())).resolves.toEqual([]);
+  });
+
   test.each(["commands", "agents", "hooks", "apps", "mcpServers", "mcp"])("rejects prohibited %s manifest declarations", async (component) => {
     const fixtureRoot = createValidFixture();
     const manifest = readJson("plugins/eternal-pose/.codex-plugin/plugin.json");
     manifest[component] = `./${component}/`;
     writeJson(fixtureRoot, "plugins/eternal-pose/.codex-plugin/plugin.json", manifest);
 
-    await expect(validateFixture(fixtureRoot)).resolves.toContain(`Codex manifest must not declare prohibited ${component}`);
+    const errors = await validateFixture(fixtureRoot);
+    expect(errors).not.toEqual([]);
+    expect(errors.join("\n")).toMatch(new RegExp(escapeForRegExp(component), "i"));
   });
 
-  test.each(["commands", "agents", "hooks", "apps", "mcp"])("rejects prohibited %s filesystem components", async (component) => {
+  test.each(["commands", "agents", "hooks", "apps", "mcp", ".mcp.json", ".app.json", "hooks.json"])("rejects prohibited %s filesystem components", async (component) => {
     const fixtureRoot = createValidFixture();
-    mkdirSync(join(fixtureRoot, "plugins/eternal-pose", component), { recursive: true });
+    const target = join(fixtureRoot, "plugins/eternal-pose", component);
+    if (component.includes(".")) writeFileSync(target, "{}\n");
+    else mkdirSync(target, { recursive: true });
 
-    await expect(validateFixture(fixtureRoot)).resolves.toContain(`v1 must not include ${component}/`);
-  });
-
-  test("rejects an MCP configuration file", async () => {
-    const fixtureRoot = createValidFixture();
-    writeFileSync(join(fixtureRoot, "plugins/eternal-pose/.mcp.json"), "{}\n");
-
-    await expect(validateFixture(fixtureRoot)).resolves.toContain("v1 must not include .mcp.json");
+    const errors = await validateFixture(fixtureRoot);
+    expect(errors).not.toEqual([]);
+    expect(errors.join("\n")).toMatch(new RegExp(escapeForRegExp(component), "i"));
   });
 
   test("uses only public npm registry resolved URLs in the committed lockfile", () => {
