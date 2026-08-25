@@ -4,7 +4,24 @@ import { pathToFileURL } from "node:url";
 
 import { scanPublication } from "../lib/publication-scan.mjs";
 
-const REQUIRED_FILES = ["README.md", ".gitignore", ".env.example", "package.json", "docs/trip-experience-contract.md"];
+const REQUIRED_FILES = [
+  "README.md",
+  "AGENTS.md",
+  "CLAUDE.md",
+  ".env.example",
+  ".gitignore",
+  "package.json",
+  "package-lock.json",
+  "docs/trip-experience-contract.md",
+];
+const REQUIRED_DIRECTORIES = [
+  "src/trip-content",
+  "src/trip-core",
+  "src/experience-shell",
+  "src/providers/google",
+  "src/ui",
+  "tests/e2e",
+];
 const REQUIRED_SCRIPTS = ["build", "lint", "test", "type-check"];
 
 function projectFinding(code, path, message) {
@@ -20,6 +37,19 @@ async function pathIsFile(rootDir, relativePath) {
   }
 }
 
+async function pathIsDirectory(rootDir, relativePath) {
+  try {
+    return (await lstat(join(rootDir, relativePath))).isDirectory();
+  } catch (error) {
+    if (error?.code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+function isPlainObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 export async function validateTripProject(rootDir) {
   const resolvedRoot = resolve(rootDir);
   const findings = await scanPublication(resolvedRoot);
@@ -30,6 +60,18 @@ export async function validateTripProject(rootDir) {
     }
   }
 
+  for (const relativePath of REQUIRED_DIRECTORIES) {
+    if (!(await pathIsDirectory(resolvedRoot, relativePath))) {
+      findings.push(
+        projectFinding(
+          "project.missing-directory",
+          relativePath,
+          `Required generated-project directory is missing at "${relativePath}".`,
+        ),
+      );
+    }
+  }
+
   if (await pathIsFile(resolvedRoot, "package.json")) {
     let packageJson;
     try {
@@ -37,9 +79,21 @@ export async function validateTripProject(rootDir) {
     } catch {
       findings.push(projectFinding("project.invalid-package-json", "package.json", "Generated project package.json is not valid JSON."));
     }
-    if (packageJson) {
+    if (packageJson !== undefined && !isPlainObject(packageJson)) {
+      findings.push(
+        projectFinding("project.invalid-package-shape", "package.json", "Generated project package.json must contain a JSON object."),
+      );
+    } else if (packageJson !== undefined && !isPlainObject(packageJson.scripts)) {
+      findings.push(
+        projectFinding(
+          "project.invalid-scripts",
+          "package.json",
+          "Generated project package.json scripts must contain a JSON object.",
+        ),
+      );
+    } else if (packageJson !== undefined) {
       for (const script of REQUIRED_SCRIPTS) {
-        if (typeof packageJson.scripts?.[script] !== "string" || packageJson.scripts[script].trim() === "") {
+        if (typeof packageJson.scripts[script] !== "string" || packageJson.scripts[script].trim() === "") {
           findings.push(
             projectFinding("project.missing-script", "package.json", `Required generated-project script "${script}" is missing.`),
           );

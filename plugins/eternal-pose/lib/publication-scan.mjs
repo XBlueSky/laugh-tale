@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 import { execFile } from "node:child_process";
-import { open, readFile, readdir, lstat } from "node:fs/promises";
+import { lstat, mkdtemp, open, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { basename, isAbsolute, join, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 
@@ -22,88 +23,18 @@ function finding(severity, code, path, message) {
   return { severity, code, path, message };
 }
 
-function globSource(pattern) {
-  let source = "";
-  for (let index = 0; index < pattern.length; index += 1) {
-    const character = pattern[index];
-    if (character === "*") {
-      if (pattern[index + 1] === "*") {
-        source += ".*";
-        index += 1;
-      } else {
-        source += "[^/]*";
-      }
-    } else if (character === "?") {
-      source += "[^/]";
-    } else {
-      source += character.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
-    }
-  }
-  return source;
-}
-
-function parseIgnoreRules(contents) {
-  return contents
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line !== "" && !line.startsWith("#"))
-    .map((line) => {
-      const negated = line.startsWith("!");
-      const unsigned = negated ? line.slice(1) : line;
-      const directory = unsigned.endsWith("/");
-      const withoutTrailingSlash = directory ? unsigned.slice(0, -1) : unsigned;
-      const anchored = withoutTrailingSlash.startsWith("/");
-      const pattern = anchored ? withoutTrailingSlash.slice(1) : withoutTrailingSlash;
-      const hasSlash = pattern.includes("/");
-      const prefix = anchored || hasSlash ? "^" : "(?:^|/)";
-      const suffix = directory ? "(?:/|$)" : "$";
-      return { negated, expression: new RegExp(`${prefix}${globSource(pattern)}${suffix}`) };
-    });
-}
-
-function isIgnored(path, rules) {
-  let ignored = false;
-  for (const rule of rules) {
-    if (rule.expression.test(path)) ignored = !rule.negated;
-  }
-  return ignored;
-}
-
-async function listFallbackFiles(rootDir) {
-  let ignoreRules = [];
-  try {
-    ignoreRules = parseIgnoreRules(await readFile(join(rootDir, ".gitignore"), "utf8"));
-  } catch (error) {
-    if (error?.code !== "ENOENT") throw error;
-  }
-
-  const files = [];
-  async function walk(directory, relativeDirectory = "") {
-    const entries = await readdir(directory, { withFileTypes: true });
-    for (const entry of entries) {
-      const relativePath = normalizeRelativePath(join(relativeDirectory, entry.name));
-      if (entry.isDirectory() && HARD_SKIPPED_DIRECTORIES.has(entry.name)) continue;
-      if (entry.isDirectory()) {
-        await walk(join(directory, entry.name), relativePath);
-      } else if (!isIgnored(relativePath, ignoreRules)) {
-        files.push(relativePath);
-      }
-    }
-  }
-
-  await walk(rootDir);
-  return files.sort();
-}
-
 async function listGitFiles(rootDir) {
+  let repositoryRoot;
   try {
-    await execFileAsync("git", ["-C", rootDir, "rev-parse", "--is-inside-work-tree"], {
+    const { stdout } = await execFileAsync("git", ["-C", rootDir, "rev-parse", "--show-toplevel"], {
       encoding: "utf8",
       maxBuffer: 1024 * 1024,
     });
+    repositoryRoot = await realpath(stdout.trim());
   } catch {
     return null;
   }
+  if (repositoryRoot !== rootDir) return null;
 
   const { stdout } = await execFileAsync(
     "git",
@@ -117,8 +48,40 @@ async function listGitFiles(rootDir) {
     .sort();
 }
 
+async function listStandaloneFilesWithGit(rootDir) {
+  const metadataDir = await mkdtemp(join(tmpdir(), "laugh-tale-publication-git-"));
+  const emptyGlobalExcludes = join(metadataDir, "global-excludes");
+  try {
+    await execFileAsync("git", ["init", "-q", "--bare", metadataDir], { encoding: "utf8", maxBuffer: 1024 * 1024 });
+    await writeFile(emptyGlobalExcludes, "", { flag: "wx" });
+    const { stdout } = await execFileAsync(
+      "git",
+      [
+        `--git-dir=${metadataDir}`,
+        `--work-tree=${rootDir}`,
+        "-c",
+        "core.bare=false",
+        "-c",
+        `core.excludesFile=${emptyGlobalExcludes}`,
+        "ls-files",
+        "--others",
+        "--exclude-standard",
+        "-z",
+      ],
+      { encoding: "utf8", maxBuffer: 20 * 1024 * 1024 },
+    );
+    return stdout
+      .split("\0")
+      .map(normalizeRelativePath)
+      .filter(isContainedRelativePath)
+      .sort();
+  } finally {
+    await rm(metadataDir, { recursive: true, force: true });
+  }
+}
+
 async function publicationInventory(rootDir) {
-  return (await listGitFiles(rootDir)) ?? listFallbackFiles(rootDir);
+  return (await listGitFiles(rootDir)) ?? listStandaloneFilesWithGit(rootDir);
 }
 
 function isBinary(buffer) {
@@ -151,6 +114,16 @@ function filenameFindings(path) {
   const lowerBasename = basename(lowerPath);
   const segments = lowerPath.split("/");
 
+  if (lowerBasename.startsWith(".laugh-tale-incomplete-")) {
+    findings.push(
+      finding(
+        "error",
+        "project.incomplete-publication",
+        path,
+        `Incomplete project-creation marker detected at "${path}".`,
+      ),
+    );
+  }
   if (lowerBasename.startsWith(".env") && lowerBasename !== ".env.example") {
     findings.push(finding("error", "credential.env-file", path, `Publishable environment file detected at "${path}".`));
   }
@@ -184,7 +157,7 @@ function contentFindings(path, contents) {
   addIfMatched(/AIza[0-9A-Za-z_-]{35}/, "error", "credential.google-api-key", "Google API key-shaped literal");
   addIfMatched(/\bBearer\s+[A-Za-z0-9._~+/-]{20,}={0,2}/i, "error", "credential.bearer-token", "Bearer token-shaped literal");
   addIfMatched(
-    /\b(?:api[_-]?key|secret|token|password|authorization|cookie)\b\s*[:=]\s*["']?(?!(?:<|your\b|replace\b|example\b|set-at-runtime\b|process\.env\b|import\.meta\.env\b))[A-Za-z0-9_./+~-]{16,}/i,
+    /(?:^|[^A-Za-z0-9])(?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|secret(?:[_-]?key)?|token|password|authorization|cookie)(?:[_-][A-Za-z0-9]+)*\s*[:=]\s*["']?(?!(?:<|your\b|replace\b|example\b|set-at-runtime\b|process\.env\b|import\.meta\.env\b))[A-Za-z0-9_./+~-]{16,}/im,
     "error",
     "credential.generic-secret",
     "Generic credential-shaped assignment",
@@ -197,13 +170,17 @@ function contentFindings(path, contents) {
   );
   addIfMatched(/\b(?:set-)?cookie\s*:\s*[^\s;=]+=[^\s;]{12,}/i, "error", "credential.cookie", "Cookie-shaped literal");
   addIfMatched(
-    /\b(?:booking|reservation|confirmation)(?:\s+(?:reference|ref|number|no|code))?\s*[:#=]\s*(?!(?:confirmed|pending|suggested|candidate|unverified|true|false)\b)[A-Z0-9][A-Z0-9-]{4,}\b/i,
+    /\b(?:booking|reservation|confirmation)(?:(?:[_-]?(?:reference|ref|number|no|code))|(?:\s+(?:reference|ref|number|no|code)))?\s*[:#=]\s*(?!(?:available|confirmed|pending|required|suggested|candidate|unverified|true|false)\b)[A-Z0-9][A-Z0-9-]{4,}\b/i,
     "error",
     "privacy.booking-reference",
     "Booking reference-shaped literal",
   );
-  addIfMatched(/\+\d{1,3}(?:[\s().-]*\d){7,14}\b/, "error", "privacy.phone-number", "Telephone number-shaped literal");
-  addIfMatched(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i, "error", "privacy.email-address", "Email address");
+  addIfMatched(
+    /(?<![\d.])(?:\+?(?:81|886)[ -]?(?:0)?(?:\d[ -]?){8,10}\d|0(?:9\d{2}[- ]?\d{3}[- ]?\d{3}|[1-9]\d?[- ]?\d{3,4}[- ]?\d{4}))(?![\d.])/,
+    "error",
+    "privacy.phone-number",
+    "Telephone number-shaped literal",
+  );
   addIfMatched(
     /\bpassport(?:\s+(?:number|no))?\s*[:#=]\s*[A-Z0-9][A-Z0-9-]{5,}\b/i,
     "error",
@@ -211,10 +188,36 @@ function contentFindings(path, contents) {
     "Passport number-shaped literal",
   );
 
-  if (
-    /(?:^|\/)(?:vercel\.json|netlify\.toml|firebase\.json|wrangler\.toml)$/i.test(path) &&
-    /(?:"public"\s*:\s*true|visibility\s*[=:]\s*["']?public|"private"\s*:\s*false|access\s*[=:]\s*["']?public)/i.test(contents)
-  ) {
+  const reservedEmailDomain = (domain) =>
+    ["example.com", "example.net", "example.org", "localhost"].includes(domain) ||
+    [".example", ".invalid", ".localhost", ".test"].some((suffix) => domain.endsWith(suffix));
+  const emailExpression = /\b[A-Z0-9._%+-]+@([A-Z0-9.-]+\.[A-Z]{2,}|localhost)\b/gi;
+  for (const line of contents.split(/\r?\n/)) {
+    let match;
+    while ((match = emailExpression.exec(line)) !== null) {
+      if (reservedEmailDomain(match[1].toLowerCase())) continue;
+      if (/\b(?:public|business|support)\s+(?:contact|email)\b/i.test(line)) {
+        findings.push(
+          finding(
+            "warning",
+            "privacy.public-contact-review",
+            path,
+            `Explicit public or business contact requires review in "${path}".`,
+          ),
+        );
+      } else {
+        findings.push(finding("error", "privacy.email-address", path, `Personal email address detected in "${path}".`));
+      }
+    }
+  }
+
+  const hostingConfiguration = /(?:^|\/)(?:vercel\.json|netlify\.toml|firebase\.json|\.firebaserc|wrangler\.toml|render\.yaml|fly\.toml|amplify\.ya?ml)$/i.test(
+    path,
+  );
+  const deployWorkflow =
+    /(?:^|\/)\.github\/workflows\/[^/]+\.ya?ml$/i.test(path) &&
+    /(?:deploy|pages|vercel|netlify|firebase|wrangler|cloudflare|render|amplify)/i.test(contents);
+  if (hostingConfiguration || deployWorkflow) {
     findings.push(
       finding(
         "warning",
@@ -234,12 +237,17 @@ export async function scanPublication(rootDir) {
   if (!rootStats.isDirectory() || rootStats.isSymbolicLink()) {
     throw new Error("publication root must be a non-symbolic-link directory");
   }
+  const canonicalRoot = await realpath(resolvedRoot);
 
   const findings = [];
-  const inventory = await publicationInventory(resolvedRoot);
+  const rootEntries = await readdir(canonicalRoot);
+  for (const name of rootEntries.filter((entry) => entry.toLowerCase().startsWith(".laugh-tale-incomplete-"))) {
+    findings.push(...filenameFindings(name));
+  }
+  const inventory = await publicationInventory(canonicalRoot);
   for (const relativePath of inventory) {
     findings.push(...filenameFindings(relativePath));
-    const fullPath = join(resolvedRoot, relativePath);
+    const fullPath = join(canonicalRoot, relativePath);
     let stats;
     try {
       stats = await lstat(fullPath);

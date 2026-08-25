@@ -13,12 +13,15 @@ interface PublicationFinding {
 }
 
 type ScanPublication = (rootDir: string) => Promise<PublicationFinding[]>;
+type ValidateTripProject = (rootDir: string) => Promise<PublicationFinding[]>;
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 const publicationModuleUrl = pathToFileURL(join(repoRoot, "plugins/eternal-pose/lib/publication-scan.mjs")).href;
 const { scanPublication } = (await import(publicationModuleUrl)) as { scanPublication: ScanPublication };
 const scanScript = join(repoRoot, "plugins/eternal-pose/scripts/scan-publication.mjs");
 const validateScript = join(repoRoot, "plugins/eternal-pose/scripts/validate-trip-project.mjs");
+const validateModuleUrl = pathToFileURL(validateScript).href;
+const { validateTripProject } = (await import(validateModuleUrl)) as { validateTripProject: ValidateTripProject };
 const temporaryRoots: string[] = [];
 
 function createTemporaryRoot(): string {
@@ -39,6 +42,30 @@ function findingCodes(findings: PublicationFinding[]): string[] {
 
 function findingAt(findings: PublicationFinding[], path: string, code?: string): boolean {
   return findings.some((finding) => finding.path === path && (code === undefined || finding.code === code));
+}
+
+function createValidGeneratedProject(root: string): void {
+  const files: Record<string, string> = {
+    "README.md": "# Trip\n",
+    "AGENTS.md": "Read docs/trip-experience-contract.md.\n",
+    "CLAUDE.md": "Read docs/trip-experience-contract.md.\n",
+    ".env.example": "GOOGLE_MAPS_API_KEY=\n",
+    ".gitignore": ".env.local\ndist/\ncoverage/\n",
+    "package.json": `${JSON.stringify({ scripts: { build: "vite build", lint: "eslint .", test: "vitest run", "type-check": "tsc --noEmit" } }, null, 2)}\n`,
+    "package-lock.json": "{}\n",
+    "docs/trip-experience-contract.md": "# Contract\n",
+  };
+  for (const [relativePath, contents] of Object.entries(files)) writeFixture(root, relativePath, contents);
+  for (const relativePath of [
+    "src/trip-content",
+    "src/trip-core",
+    "src/experience-shell",
+    "src/providers/google",
+    "src/ui",
+    "tests/e2e",
+  ]) {
+    mkdirSync(join(root, relativePath), { recursive: true });
+  }
 }
 
 afterEach(() => {
@@ -94,6 +121,106 @@ describe("publication safety findings", () => {
     expect(findingAt(findings, "trip-content.md", "privacy.booking-reference")).toBe(false);
   });
 
+  test.each([
+    { identifier: "PRIVATE_TOKEN", suffix: "T" },
+    { identifier: "STRIPE_SECRET_KEY", suffix: "S" },
+  ])("recognizes separator-rich generic secret identifier $identifier", async ({ identifier, suffix }) => {
+    const root = createTemporaryRoot();
+    const value = ["runtime_", suffix.repeat(28)].join("");
+    writeFixture(root, "config.txt", `${identifier}=${value}\n`);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "config.txt", "credential.generic-secret")).toBe(true);
+    expect(JSON.stringify(findings).includes(value)).toBe(false);
+  });
+
+  test.each(["bookingReference", "booking_reference", "reservationReference"])(
+    "recognizes %s as a booking-reference field",
+    async (field) => {
+      const root = createTemporaryRoot();
+      const reference = ["LT", "8R", "4M7"].join("");
+      writeFixture(root, "trip-content.txt", `${field}: ${reference}\n`);
+
+      const findings = await scanPublication(root);
+
+      expect(findingAt(findings, "trip-content.txt", "privacy.booking-reference")).toBe(true);
+      expect(JSON.stringify(findings).includes(reference)).toBe(false);
+    },
+  );
+
+  test.each(["booking: required", "reservation: available", "booking: confirmed"])(
+    "does not confuse status field %s with a reference",
+    async (status) => {
+      const root = createTemporaryRoot();
+      writeFixture(root, "trip-content.txt", `${status}\n`);
+
+      const findings = await scanPublication(root);
+
+      expect(findingAt(findings, "trip-content.txt", "privacy.booking-reference")).toBe(false);
+    },
+  );
+
+  test.each([
+    ["taiwan-mobile", ["09", "12-", "345-", "678"]],
+    ["japan-mobile", ["090", "-1234", "-5678"]],
+    ["local-landline", ["02", "-2345", "-6789"]],
+  ] as const)("recognizes bounded %s phone formats", async (_label, parts) => {
+    const root = createTemporaryRoot();
+    const phone = parts.join("");
+    writeFixture(root, "contact.txt", `phone: ${phone}\n`);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "contact.txt", "privacy.phone-number")).toBe(true);
+    expect(JSON.stringify(findings).includes(phone)).toBe(false);
+  });
+
+  test.each(["2026-08-26", "35.6762, 139.6503", "version 22.13.0", "walk 12345678 steps"])(
+    "does not classify non-phone numeric text %s",
+    async (contents) => {
+      const root = createTemporaryRoot();
+      writeFixture(root, "facts.txt", `${contents}\n`);
+
+      const findings = await scanPublication(root);
+
+      expect(findingAt(findings, "facts.txt", "privacy.phone-number")).toBe(false);
+    },
+  );
+
+  test("distinguishes reserved examples, explicit public business contact, and personal email", async () => {
+    const root = createTemporaryRoot();
+    const reservedEmail = ["traveler", "@", "example", ".com"].join("");
+    const publicEmail = ["support", "@", "laugh-tale", ".dev"].join("");
+    const personalEmail = ["traveler", "@", "personalmail", ".dev"].join("");
+    writeFixture(root, "reserved-contact.txt", `Example email: ${reservedEmail}\n`);
+    writeFixture(root, "public-contact.txt", `Public business email: ${publicEmail}\n`);
+    writeFixture(root, "personal-contact.txt", `Traveler email: ${personalEmail}\n`);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "reserved-contact.txt", "privacy.email-address")).toBe(false);
+    expect(findingAt(findings, "reserved-contact.txt", "privacy.public-contact-review")).toBe(false);
+    expect(findingAt(findings, "public-contact.txt", "privacy.public-contact-review")).toBe(true);
+    expect(findingAt(findings, "public-contact.txt", "privacy.email-address")).toBe(false);
+    expect(findingAt(findings, "personal-contact.txt", "privacy.email-address")).toBe(true);
+    expect([reservedEmail, publicEmail, personalEmail].some((value) => JSON.stringify(findings).includes(value))).toBe(false);
+  });
+
+  test.each([
+    ["vercel.json", '{"buildCommand":"npm run build"}\n'],
+    ["netlify.toml", '[build]\npublish = "dist"\n'],
+    [".github/workflows/deploy.yml", "jobs:\n  deploy:\n    uses: actions/deploy-pages@v4\n"],
+  ])("warns for realistic deploy configuration %s", async (relativePath, contents) => {
+    const root = createTemporaryRoot();
+    writeFixture(root, relativePath, contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, relativePath, "access.public-configuration")).toBe(true);
+    expect(findings.find((finding) => finding.path === relativePath)?.severity).toBe("warning");
+  });
+
   test("caps text reads, skips binary bodies, and still inspects sensitive filenames", async () => {
     const root = createTemporaryRoot();
     const googleKey = ["AI", "za", "K".repeat(35)].join("");
@@ -106,6 +233,17 @@ describe("publication safety findings", () => {
     expect(findingAt(findings, "binary.dat", "credential.google-api-key")).toBe(false);
     expect(findingAt(findings, "oversized.txt", "credential.google-api-key")).toBe(false);
     expect(findingAt(findings, "private/ticket-qr.bin", "privacy.qr-artifact")).toBe(true);
+  });
+
+  test("fails closed when an incomplete project-creation marker remains even if ignored", async () => {
+    const root = createTemporaryRoot();
+    writeFixture(root, ".gitignore", ".laugh-tale-incomplete-*\n");
+    writeFixture(root, ".laugh-tale-incomplete-test-fragment", "opaque ownership marker\n");
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, ".laugh-tale-incomplete-test-fragment", "project.incomplete-publication")).toBe(true);
+    expect(findings.find((finding) => finding.code === "project.incomplete-publication")?.severity).toBe("error");
   });
 });
 
@@ -122,6 +260,48 @@ describe("publication inventory", () => {
 
     expect(findings.some((finding) => finding.path === ".env.local")).toBe(false);
     expect(findings.some((finding) => finding.path.startsWith("ignored/"))).toBe(false);
+    expect(findingAt(findings, ".env.production", "credential.env-file")).toBe(true);
+  });
+
+  test("uses Git-compatible nested ignore, globstar, negation, bare-directory, and escaped-marker semantics", async () => {
+    const root = createTemporaryRoot();
+    const ignoredKey = ["AI", "za", "N".repeat(35)].join("");
+    const publishableKey = ["AI", "za", "P".repeat(35)].join("");
+    writeFixture(
+      root,
+      ".gitignore",
+      ["ignored", "logs/**/*.secret", "!logs/**/keep.secret", "\\#private.txt", "\\!private.txt", ""].join("\n"),
+    );
+    writeFixture(root, "ignored/config.txt", ignoredKey);
+    writeFixture(root, "logs/a/private.secret", ignoredKey);
+    writeFixture(root, "logs/a/keep.secret", publishableKey);
+    writeFixture(root, "#private.txt", ignoredKey);
+    writeFixture(root, "!private.txt", ignoredKey);
+    writeFixture(root, "nested/.gitignore", ".env.local\n");
+    writeFixture(root, "nested/.env.local", `GOOGLE_MAPS_API_KEY=${ignoredKey}\n`);
+    writeFixture(root, ".env.production", "PUBLIC_DEPLOYMENT=true\n");
+
+    const findings = await scanPublication(root);
+
+    expect(findings.some((finding) => finding.path.startsWith("ignored/"))).toBe(false);
+    expect(findings.some((finding) => finding.path === "logs/a/private.secret")).toBe(false);
+    expect(findingAt(findings, "logs/a/keep.secret", "credential.google-api-key")).toBe(true);
+    expect(findings.some((finding) => finding.path === "#private.txt")).toBe(false);
+    expect(findings.some((finding) => finding.path === "!private.txt")).toBe(false);
+    expect(findings.some((finding) => finding.path === "nested/.env.local")).toBe(false);
+    expect(findingAt(findings, ".env.production", "credential.env-file")).toBe(true);
+    expect(JSON.stringify(findings).includes(publishableKey)).toBe(false);
+  });
+
+  test("treats a standalone project under an ignored parent worktree as its own publication boundary", async () => {
+    const parent = createTemporaryRoot();
+    const root = join(parent, "standalone");
+    writeFixture(parent, ".gitignore", "standalone/\n");
+    execFileSync("git", ["init", "-q", parent]);
+    writeFixture(root, ".env.production", "PUBLIC_DEPLOYMENT=true\n");
+
+    const findings = await scanPublication(root);
+
     expect(findingAt(findings, ".env.production", "credential.env-file")).toBe(true);
   });
 
@@ -172,5 +352,98 @@ describe("publication CLIs", () => {
 
     expect(result.status).toBe(1);
     expect(findingCodes(payload.findings)).toContain("project.missing-file");
+  });
+});
+
+describe("generated-project validation", () => {
+  test("accepts the complete approved generated-project contract", async () => {
+    const root = createTemporaryRoot();
+    createValidGeneratedProject(root);
+
+    await expect(validateTripProject(root)).resolves.toEqual([]);
+  });
+
+  test.each([null, [], "package", 42])("rejects non-object package.json shape %#", async (packageShape) => {
+    const root = createTemporaryRoot();
+    createValidGeneratedProject(root);
+    writeFixture(root, "package.json", `${JSON.stringify(packageShape)}\n`);
+
+    const findings = await validateTripProject(root);
+
+    expect(findingAt(findings, "package.json", "project.invalid-package-shape")).toBe(true);
+  });
+
+  test("rejects malformed package JSON", async () => {
+    const root = createTemporaryRoot();
+    createValidGeneratedProject(root);
+    writeFixture(root, "package.json", "{ malformed\n");
+
+    const findings = await validateTripProject(root);
+
+    expect(findingAt(findings, "package.json", "project.invalid-package-json")).toBe(true);
+  });
+
+  test.each([null, [], "scripts"])("rejects non-object scripts shape %#", async (scriptsShape) => {
+    const root = createTemporaryRoot();
+    createValidGeneratedProject(root);
+    writeFixture(root, "package.json", `${JSON.stringify({ scripts: scriptsShape })}\n`);
+
+    const findings = await validateTripProject(root);
+
+    expect(findingAt(findings, "package.json", "project.invalid-scripts")).toBe(true);
+  });
+
+  test("reports an exact missing required script", async () => {
+    const root = createTemporaryRoot();
+    createValidGeneratedProject(root);
+    writeFixture(
+      root,
+      "package.json",
+      `${JSON.stringify({ scripts: { build: "vite build", lint: "eslint .", test: "vitest run" } })}\n`,
+    );
+
+    const findings = await validateTripProject(root);
+
+    expect(findingAt(findings, "package.json", "project.missing-script")).toBe(true);
+    expect(findings.some((finding) => finding.code === "project.missing-script" && finding.message.includes("type-check"))).toBe(true);
+  });
+
+  test("reports missing approved files and source directories", async () => {
+    const root = createTemporaryRoot();
+    createValidGeneratedProject(root);
+    rmSync(join(root, "AGENTS.md"));
+    rmSync(join(root, "src/trip-core"), { recursive: true });
+
+    const findings = await validateTripProject(root);
+
+    expect(findingAt(findings, "AGENTS.md", "project.missing-file")).toBe(true);
+    expect(findingAt(findings, "src/trip-core", "project.missing-directory")).toBe(true);
+  });
+
+  test("warning-only validation emits JSON and exits zero", () => {
+    const root = createTemporaryRoot();
+    createValidGeneratedProject(root);
+    writeFixture(root, "vercel.json", '{"buildCommand":"npm run build"}\n');
+
+    const result = spawnSync(process.execPath, [validateScript, root], { encoding: "utf8" });
+    const payload = JSON.parse(result.stdout) as { counts: { errors: number; warnings: number }; findings: PublicationFinding[] };
+
+    expect(result.status).toBe(0);
+    expect(payload.counts.errors).toBe(0);
+    expect(payload.counts.warnings).toBeGreaterThan(0);
+    expect(findingCodes(payload.findings)).toContain("access.public-configuration");
+  });
+
+  test("release-blocking validation emits JSON and exits one", () => {
+    const root = createTemporaryRoot();
+    createValidGeneratedProject(root);
+    writeFixture(root, ".env.production", "PUBLIC_DEPLOYMENT=true\n");
+
+    const result = spawnSync(process.execPath, [validateScript, root], { encoding: "utf8" });
+    const payload = JSON.parse(result.stdout) as { counts: { errors: number; warnings: number }; findings: PublicationFinding[] };
+
+    expect(result.status).toBe(1);
+    expect(payload.counts.errors).toBeGreaterThan(0);
+    expect(findingCodes(payload.findings)).toContain("credential.env-file");
   });
 });

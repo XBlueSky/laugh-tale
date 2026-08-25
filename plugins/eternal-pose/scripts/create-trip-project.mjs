@@ -1,17 +1,21 @@
 import { randomUUID } from "node:crypto";
-import { copyFile, cp, lstat, mkdir, readdir, rename, rm, rmdir } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { cp, lstat, mkdir, readFile, readdir, realpath, rmdir, unlink, writeFile } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { validateTargetDirectory } from "../lib/path-safety.mjs";
 
 const OMITTED_NAMES = new Set([
   ".DS_Store",
+  ".cache",
   ".git",
   ".next",
+  ".parcel-cache",
+  ".turbo",
   ".vite",
   "Thumbs.db",
   "build",
+  "cache",
   "coverage",
   "dist",
   "node_modules",
@@ -20,9 +24,15 @@ const OMITTED_NAMES = new Set([
   "test-results",
 ]);
 
+const DEFAULT_OPERATIONS = { cp, lstat, mkdir, readFile, readdir, realpath, rmdir, unlink, writeFile };
+
 function isWithin(parent, candidate) {
   const relativePath = relative(parent, candidate);
   return relativePath === "" || (!relativePath.startsWith(`..${sep}`) && relativePath !== ".." && !isAbsolute(relativePath));
+}
+
+function overlaps(left, right) {
+  return isWithin(left, right) || isWithin(right, left);
 }
 
 function shouldCopyStarterEntry(starterDir, sourcePath) {
@@ -31,17 +41,45 @@ function shouldCopyStarterEntry(starterDir, sourcePath) {
   return !relativePath.split(sep).some((part) => OMITTED_NAMES.has(part));
 }
 
-async function assertSafeParent(targetDir) {
-  const parent = dirname(targetDir);
-  const parentStats = await lstat(parent);
-  if (!parentStats.isDirectory() || parentStats.isSymbolicLink()) {
-    throw new Error("target parent must be an existing non-symbolic-link directory");
-  }
+function sameIdentity(left, right) {
+  return left.dev === right.dev && left.ino === right.ino;
 }
 
-async function targetStillMissing(targetDir) {
+async function canonicalDirectory(path, label, operations) {
+  const resolvedPath = resolve(path);
+  const stats = await operations.lstat(resolvedPath);
+  if (!stats.isDirectory() || stats.isSymbolicLink()) {
+    throw new Error(`${label} must not be a symbolic link`);
+  }
+  const canonicalPath = await operations.realpath(resolvedPath);
+  if (canonicalPath !== resolvedPath) throw new Error(`${label} must not be a symbolic link`);
+  return canonicalPath;
+}
+
+async function canonicalRecipeFile(path, recipeRoot, operations) {
+  const resolvedPath = resolve(path);
+  const stats = await operations.lstat(resolvedPath);
+  if (!stats.isFile() || stats.isSymbolicLink()) {
+    throw new Error("recipe must be a regular non-symbolic-link file");
+  }
+  const canonicalPath = await operations.realpath(resolvedPath);
+  if (!isWithin(recipeRoot, canonicalPath)) throw new Error("recipe path escapes the plugin recipe directory");
+  return canonicalPath;
+}
+
+function normalizeError(error) {
+  return error instanceof Error ? error : new Error("trip project operation failed");
+}
+
+function combinedError(errors) {
+  const normalized = errors.map(normalizeError);
+  if (normalized.length === 1) return normalized[0];
+  return new AggregateError(normalized, normalized.map((error) => error.message).join("; "));
+}
+
+async function missing(path, operations) {
   try {
-    await lstat(targetDir);
+    await operations.lstat(path);
     return false;
   } catch (error) {
     if (error?.code === "ENOENT") return true;
@@ -49,70 +87,304 @@ async function targetStillMissing(targetDir) {
   }
 }
 
-async function restoreVerifiedEmptyTarget(targetDir) {
+async function captureParent(path, operations) {
+  const canonicalPath = await operations.realpath(dirname(path));
+  const stats = await operations.lstat(canonicalPath);
+  if (!stats.isDirectory() || stats.isSymbolicLink()) {
+    throw new Error("target parent must be an existing non-symbolic-link directory");
+  }
+  return { path: canonicalPath, stats };
+}
+
+async function createMarker(directory, operations) {
+  const token = randomUUID();
+  const markerPath = join(directory, `.laugh-tale-incomplete-${randomUUID()}`);
+  await operations.writeFile(markerPath, token, { encoding: "utf8", flag: "wx", mode: 0o600 });
+  const stats = await operations.lstat(markerPath);
+  if (!stats.isFile() || stats.isSymbolicLink()) throw new Error("ownership marker must be a regular file");
+  return { path: markerPath, stats, token };
+}
+
+async function assertOwnedDirectoryIdentity(ownership, operations) {
+  let parentPath;
+  let parentStats;
+  let directoryStats;
   try {
-    await mkdir(targetDir);
-  } catch (error) {
-    if (error?.code !== "EEXIST") throw error;
+    parentPath = await operations.realpath(dirname(ownership.path));
+    parentStats = await operations.lstat(parentPath);
+    directoryStats = await operations.lstat(ownership.path);
+  } catch {
+    throw new Error(`${ownership.label} ownership changed`);
+  }
+
+  if (
+    parentPath !== ownership.parent.path ||
+    !sameIdentity(parentStats, ownership.parent.stats) ||
+    !directoryStats.isDirectory() ||
+    directoryStats.isSymbolicLink() ||
+    !sameIdentity(directoryStats, ownership.stats)
+  ) {
+    throw new Error(`${ownership.label} ownership changed`);
   }
 }
 
-export async function createTripProject({ pluginRoot, targetDir, recipe, starterDir }) {
+async function assertOwnedDirectory(ownership, operations) {
+  await assertOwnedDirectoryIdentity(ownership, operations);
+  let markerStats;
+  let markerContents;
+  try {
+    markerStats = await operations.lstat(ownership.marker.path);
+    markerContents = await operations.readFile(ownership.marker.path, "utf8");
+  } catch {
+    throw new Error(`${ownership.label} ownership changed`);
+  }
+
+  if (
+    !markerStats.isFile() ||
+    markerStats.isSymbolicLink() ||
+    !sameIdentity(markerStats, ownership.marker.stats) ||
+    markerContents !== ownership.marker.token
+  ) {
+    throw new Error(`${ownership.label} ownership changed`);
+  }
+}
+
+async function createOwnedDirectory(path, label, operations) {
+  const parent = await captureParent(path, operations);
+  const canonicalPath = join(parent.path, basename(path));
+  await operations.mkdir(canonicalPath);
+  const stats = await operations.lstat(canonicalPath);
+  if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error(`${label} ownership changed`);
+  const marker = await createMarker(canonicalPath, operations);
+  return { label, path: canonicalPath, parent, stats, marker, entries: [] };
+}
+
+async function adoptEmptyDirectory(path, label, operations) {
+  const parent = await captureParent(path, operations);
+  const canonicalPath = join(parent.path, basename(path));
+  const stats = await operations.lstat(canonicalPath);
+  if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error(`${label} ownership changed`);
+  const entriesBefore = await operations.readdir(canonicalPath);
+  if (entriesBefore.length > 0) throw new Error("target directory must be missing or empty");
+  const marker = await createMarker(canonicalPath, operations);
+  return { label, path: canonicalPath, parent, stats, marker, entries: [] };
+}
+
+async function assertAdoptedDirectoryStillEmpty(ownership, operations) {
+  await assertOwnedDirectory(ownership, operations);
+  const entriesAfter = await operations.readdir(ownership.path);
+  if (entriesAfter.length !== 1 || entriesAfter[0] !== basename(ownership.marker.path)) {
+    throw new Error("target directory must be missing or empty");
+  }
+}
+
+async function runBeforeMutation(operations, phase, path, stageDir, targetDir) {
+  await operations.beforeMutation?.({ phase, path, stageDir, targetDir });
+}
+
+async function recordCreatedEntry(ownership, path, type, operations) {
+  const stats = await operations.lstat(path);
+  const expectedType = type === "directory" ? stats.isDirectory() : stats.isFile();
+  if (!expectedType || stats.isSymbolicLink()) throw new Error(`created ${type} identity changed`);
+  ownership.entries.push({ path, type, stats });
+}
+
+async function copyFileIntoOwnedDirectory(sourcePath, destinationPath, ownership, context, operations) {
+  await runBeforeMutation(operations, context.phase, destinationPath, context.stageDir, context.targetDir);
+  await assertOwnedDirectory(ownership, operations);
+  if (!(await missing(destinationPath, operations))) throw new Error("destination entry already exists");
+  try {
+    await operations.cp(sourcePath, destinationPath, { recursive: true, errorOnExist: true, force: false });
+  } catch (error) {
+    if (!(await missing(destinationPath, operations))) {
+      await recordCreatedEntry(ownership, destinationPath, "file", operations);
+    }
+    throw error;
+  }
+  await recordCreatedEntry(ownership, destinationPath, "file", operations);
+}
+
+async function copyTreeIntoOwnedDirectory(sourceRoot, ownership, context, operations, relativeDirectory = "") {
+  const sourceDirectory = join(sourceRoot, relativeDirectory);
+  const entries = (await operations.readdir(sourceDirectory, { withFileTypes: true })).sort((left, right) =>
+    left.name.localeCompare(right.name),
+  );
+
+  for (const entry of entries) {
+    const relativePath = join(relativeDirectory, entry.name);
+    const sourcePath = join(sourceRoot, relativePath);
+    if (!shouldCopyStarterEntry(sourceRoot, sourcePath) || entry.name.startsWith(".laugh-tale-incomplete-")) continue;
+    const sourceStats = await operations.lstat(sourcePath);
+    if (sourceStats.isSymbolicLink()) throw new Error(`source tree must not contain symbolic links: ${relativePath}`);
+    const destinationPath = join(ownership.path, relativePath);
+    if (sourceStats.isDirectory()) {
+      await runBeforeMutation(operations, context.phase, destinationPath, context.stageDir, context.targetDir);
+      await assertOwnedDirectory(ownership, operations);
+      await operations.mkdir(destinationPath);
+      await recordCreatedEntry(ownership, destinationPath, "directory", operations);
+      await copyTreeIntoOwnedDirectory(sourceRoot, ownership, context, operations, relativePath);
+    } else if (sourceStats.isFile()) {
+      if (relativePath === join("src", "ui", "styles", "recipe.css") && context.phase === "stage-copy") continue;
+      await copyFileIntoOwnedDirectory(sourcePath, destinationPath, ownership, context, operations);
+    } else {
+      throw new Error(`source tree entry must be a regular file or directory: ${relativePath}`);
+    }
+  }
+}
+
+async function ensureOwnedDirectoryPath(ownership, relativeDirectory, context, operations) {
+  let currentRelativePath = "";
+  for (const part of relativeDirectory.split(sep).filter(Boolean)) {
+    currentRelativePath = join(currentRelativePath, part);
+    const destinationPath = join(ownership.path, currentRelativePath);
+    if (!(await missing(destinationPath, operations))) continue;
+    await runBeforeMutation(operations, context.phase, destinationPath, context.stageDir, context.targetDir);
+    await assertOwnedDirectory(ownership, operations);
+    await operations.mkdir(destinationPath);
+    await recordCreatedEntry(ownership, destinationPath, "directory", operations);
+  }
+}
+
+async function verifyOwnedEntry(entry, operations) {
+  const stats = await operations.lstat(entry.path);
+  const expectedType = entry.type === "directory" ? stats.isDirectory() : stats.isFile();
+  if (!expectedType || stats.isSymbolicLink() || !sameIdentity(stats, entry.stats)) {
+    throw new Error(`owned entry identity changed: ${entry.path}`);
+  }
+}
+
+async function cleanupOwnedDirectory(ownership, removeRoot, context, operations) {
+  const errors = [];
+  for (const entry of [...ownership.entries].reverse()) {
+    try {
+      await runBeforeMutation(operations, context.phase, entry.path, context.stageDir, context.targetDir);
+      await assertOwnedDirectory(ownership, operations);
+      await verifyOwnedEntry(entry, operations);
+      if (entry.type === "directory") await operations.rmdir(entry.path);
+      else await operations.unlink(entry.path);
+    } catch (error) {
+      errors.push(normalizeError(error));
+    }
+  }
+
+  if (errors.length > 0) return errors;
+  try {
+    await runBeforeMutation(operations, context.phase, ownership.marker.path, context.stageDir, context.targetDir);
+    await assertOwnedDirectory(ownership, operations);
+    await operations.unlink(ownership.marker.path);
+    await assertOwnedDirectoryIdentity(ownership, operations);
+    if (removeRoot) {
+      await runBeforeMutation(operations, context.phase, ownership.path, context.stageDir, context.targetDir);
+      await assertOwnedDirectoryIdentity(ownership, operations);
+      await operations.rmdir(ownership.path);
+    }
+  } catch (error) {
+    errors.push(normalizeError(error));
+  }
+  return errors;
+}
+
+async function finalizeOwnedDirectory(ownership, context, operations) {
+  await runBeforeMutation(operations, context.phase, ownership.marker.path, context.stageDir, context.targetDir);
+  await assertOwnedDirectory(ownership, operations);
+  await operations.unlink(ownership.marker.path);
+}
+
+export async function createTripProject({ pluginRoot, targetDir, recipe, starterDir }, testOperations = {}) {
   if (typeof pluginRoot !== "string" || pluginRoot.trim() === "") throw new Error("plugin root is required");
   if (typeof recipe !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(recipe)) {
     throw new Error("recipe name must use lowercase letters, numbers, and hyphens");
   }
 
-  const resolvedPluginRoot = resolve(pluginRoot);
+  const operations = { ...DEFAULT_OPERATIONS, ...testOperations };
+  if (typeof targetDir !== "string" || targetDir.trim() === "") await validateTargetDirectory(targetDir);
   const resolvedTarget = resolve(targetDir);
-  const resolvedStarter = resolve(starterDir ?? join(resolvedPluginRoot, "starter/react"));
-  if (resolvedTarget === resolvedPluginRoot || resolvedTarget === resolvedStarter || isWithin(resolvedStarter, resolvedTarget)) {
-    throw new Error("refusing broad target");
+  const canonicalPluginRoot = await canonicalDirectory(pluginRoot, "plugin root", operations);
+  if (resolvedTarget === canonicalPluginRoot) throw new Error("refusing broad target");
+  try {
+    if ((await operations.realpath(resolvedTarget)) === canonicalPluginRoot) throw new Error("refusing broad target");
+  } catch (error) {
+    if (error?.message === "refusing broad target") throw error;
+    if (error?.code !== "ENOENT") throw error;
   }
-
-  const targetState = await validateTargetDirectory(resolvedTarget);
-  await assertSafeParent(resolvedTarget);
-
-  const recipeRoot = join(resolvedPluginRoot, "recipes");
-  const recipeSource = resolve(recipeRoot, recipe, "recipe.css");
-  if (!isWithin(recipeRoot, recipeSource)) throw new Error("recipe path escapes the plugin recipe directory");
-
-  const stageDir = join(dirname(resolvedTarget), `.laugh-tale-stage-${randomUUID()}`);
-  let removedEmptyTarget = false;
-  let published = false;
-  let stageOwned = false;
+  const targetState = await validateTargetDirectory(targetDir);
+  const canonicalStarter = await canonicalDirectory(
+    starterDir ?? join(canonicalPluginRoot, "starter/react"),
+    "starter root",
+    operations,
+  );
+  const recipeRoot = await canonicalDirectory(join(canonicalPluginRoot, "recipes"), "recipe root", operations);
+  const recipeSource = await canonicalRecipeFile(join(recipeRoot, recipe, "recipe.css"), recipeRoot, operations);
+  const canonicalParent = await operations.realpath(dirname(resolvedTarget));
+  const canonicalTarget =
+    targetState === "empty" ? await operations.realpath(resolvedTarget) : join(canonicalParent, basename(resolvedTarget));
+  if (
+    [canonicalPluginRoot, canonicalStarter, recipeRoot].some((sourceRoot) => overlaps(sourceRoot, canonicalTarget))
+  ) {
+    throw new Error("refusing overlapping target");
+  }
+  const stageDir = join(canonicalParent, `.laugh-tale-stage-${randomUUID()}`);
+  let stageOwnership;
+  let targetOwnership;
+  let targetFinalized = false;
+  let primaryError;
 
   try {
-    await mkdir(stageDir);
-    stageOwned = true;
-    for (const entry of await readdir(resolvedStarter)) {
-      await cp(join(resolvedStarter, entry), join(stageDir, entry), {
-        recursive: true,
-        errorOnExist: true,
-        force: false,
-        filter: (sourcePath) => shouldCopyStarterEntry(resolvedStarter, sourcePath),
-      });
-    }
-    const recipeTarget = join(stageDir, "src/ui/styles/recipe.css");
-    await mkdir(dirname(recipeTarget), { recursive: true });
-    await copyFile(recipeSource, recipeTarget);
+    stageOwnership = await createOwnedDirectory(stageDir, "stage", operations);
+    const stageContext = { phase: "stage-copy", stageDir, targetDir: canonicalTarget };
+    await copyTreeIntoOwnedDirectory(canonicalStarter, stageOwnership, stageContext, operations);
+    const recipeTarget = join(stageOwnership.path, "src/ui/styles/recipe.css");
+    const recipeDirectory = dirname(recipeTarget);
+    await ensureOwnedDirectoryPath(stageOwnership, relative(stageOwnership.path, recipeDirectory), stageContext, operations);
+    await copyFileIntoOwnedDirectory(recipeSource, recipeTarget, stageOwnership, stageContext, operations);
 
-    if (targetState === "missing") {
-      if (!(await targetStillMissing(resolvedTarget))) {
-        throw new Error("target directory must be missing or empty");
-      }
-    } else {
-      await rmdir(resolvedTarget);
-      removedEmptyTarget = true;
-    }
-
-    await rename(stageDir, resolvedTarget);
-    published = true;
+    targetOwnership =
+      targetState === "missing"
+        ? await createOwnedDirectory(canonicalTarget, "target", operations)
+        : await adoptEmptyDirectory(canonicalTarget, "target", operations);
+    if (targetState === "empty") await assertAdoptedDirectoryStillEmpty(targetOwnership, operations);
+    const targetContext = { phase: "target-copy", stageDir, targetDir: canonicalTarget };
+    await copyTreeIntoOwnedDirectory(stageOwnership.path, targetOwnership, targetContext, operations);
   } catch (error) {
-    if (!published && stageOwned) await rm(stageDir, { recursive: true, force: true });
-    if (removedEmptyTarget) await restoreVerifiedEmptyTarget(resolvedTarget);
-    throw error;
+    primaryError = normalizeError(error);
   }
+
+  const errors = primaryError ? [primaryError] : [];
+  if (targetOwnership && !targetFinalized && primaryError) {
+    errors.push(
+      ...(await cleanupOwnedDirectory(
+        targetOwnership,
+        targetState === "missing",
+        { phase: "target-cleanup", stageDir, targetDir: canonicalTarget },
+        operations,
+      )),
+    );
+  }
+  if (stageOwnership) {
+    errors.push(
+      ...(await cleanupOwnedDirectory(
+        stageOwnership,
+        true,
+        { phase: "stage-cleanup", stageDir, targetDir: canonicalTarget },
+        operations,
+      )),
+    );
+  }
+
+  if (errors.length === 0 && targetOwnership) {
+    try {
+      await finalizeOwnedDirectory(
+        targetOwnership,
+        { phase: "target-finalize", stageDir, targetDir: canonicalTarget },
+        operations,
+      );
+      targetFinalized = true;
+    } catch (error) {
+      errors.push(normalizeError(error));
+    }
+  }
+
+  if (errors.length > 0) throw combinedError(errors);
 }
 
 function parseArguments(arguments_) {
