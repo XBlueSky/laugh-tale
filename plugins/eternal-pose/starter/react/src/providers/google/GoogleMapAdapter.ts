@@ -81,8 +81,13 @@ export class GoogleMapAdapter implements MapAdapter {
   private pendingPresentation: MapPresentation | null = null;
   private readonly markers: google.maps.marker.AdvancedMarkerElement[] = [];
   private readonly polylines: google.maps.Polyline[] = [];
-  private readonly listeners: google.maps.MapsEventListener[] = [];
-  private readonly coordinatesById = new Map<string, Coordinates[]>();
+  private readonly markerListeners: Array<{
+    marker: google.maps.marker.AdvancedMarkerElement;
+    listener: EventListener;
+  }> = [];
+  private readonly mapListeners: google.maps.MapsEventListener[] = [];
+  private readonly placeCoordinatesByOwnerId = new Map<string, Coordinates[]>();
+  private readonly routeCoordinatesById = new Map<string, Coordinates[]>();
   private userMarker: google.maps.marker.AdvancedMarkerElement | null = null;
   private userLocation: Coordinates | null = null;
   private padding: MapPadding = { ...DEFAULT_PADDING };
@@ -131,7 +136,10 @@ export class GoogleMapAdapter implements MapAdapter {
   }
 
   focus(target: MapFocusTarget): void {
-    const coordinates = this.coordinatesById.get(target.id);
+    const coordinates =
+      target.kind === "place"
+        ? this.placeCoordinatesByOwnerId.get(target.id)
+        : this.routeCoordinatesById.get(target.id);
     if (this.map === null || coordinates === undefined || coordinates.length === 0) {
       return;
     }
@@ -143,9 +151,10 @@ export class GoogleMapAdapter implements MapAdapter {
   }
 
   fit(ids: string[]): void {
-    const coordinates = ids.flatMap(
-      (id) => this.coordinatesById.get(id)?.map((point) => ({ ...point })) ?? [],
-    );
+    const coordinates = ids.flatMap((id) => [
+      ...(this.placeCoordinatesByOwnerId.get(id) ?? []),
+      ...(this.routeCoordinatesById.get(id) ?? []),
+    ]).map((point) => ({ ...point }));
     if (coordinates.length === 1) {
       this.map?.panTo(coordinates[0]);
     } else {
@@ -203,28 +212,35 @@ export class GoogleMapAdapter implements MapAdapter {
         content: markerContent(place),
         gmpClickable: true,
       });
-      const listener = marker.addListener("gmp-click", () => {
+      const listener: EventListener = () => {
         if (
           lifecycleGeneration === this.lifecycleGeneration &&
           renderGeneration === this.renderGeneration
         ) {
           this.events?.onPlaceSelect(place.ownerId);
         }
-      });
+      };
+      marker.addEventListener("gmp-click", listener);
       this.markers.push(marker);
-      this.listeners.push(listener);
-      this.coordinatesById.set(place.ownerId, [{ ...coordinates }]);
+      this.markerListeners.push({ marker, listener });
+      this.placeCoordinatesByOwnerId.set(place.ownerId, [{ ...coordinates }]);
     }
 
     for (const route of presentation.routes) {
       if (route.tone === "unavailable") {
         continue;
       }
-      const path = route.path.flatMap((point) => {
+      const path: Coordinates[] = [];
+      let invalidPath = false;
+      for (const point of route.path) {
         const normalized = normalizeProviderLocation(point);
-        return normalized === undefined ? [] : [normalized];
-      });
-      if (path.length < 2) {
+        if (normalized === undefined) {
+          invalidPath = true;
+          break;
+        }
+        path.push(normalized);
+      }
+      if (invalidPath || path.length < 2) {
         continue;
       }
       const polyline = new this.runtime.Polyline({
@@ -244,8 +260,8 @@ export class GoogleMapAdapter implements MapAdapter {
         }
       });
       this.polylines.push(polyline);
-      this.listeners.push(listener);
-      this.coordinatesById.set(
+      this.mapListeners.push(listener);
+      this.routeCoordinatesById.set(
         route.edgeId,
         path.map((point) => ({ ...point })),
       );
@@ -272,13 +288,16 @@ export class GoogleMapAdapter implements MapAdapter {
       title: "Your location",
       content,
     });
-    this.coordinatesById.set(USER_LOCATION_OWNER_ID, [
+    this.placeCoordinatesByOwnerId.set(USER_LOCATION_OWNER_ID, [
       { ...this.userLocation },
     ]);
   }
 
   private clearPresentation(): void {
-    for (const listener of this.listeners.splice(0)) {
+    for (const { marker, listener } of this.markerListeners.splice(0)) {
+      marker.removeEventListener("gmp-click", listener);
+    }
+    for (const listener of this.mapListeners.splice(0)) {
       listener.remove();
     }
     for (const marker of this.markers.splice(0)) {
@@ -287,16 +306,17 @@ export class GoogleMapAdapter implements MapAdapter {
     for (const polyline of this.polylines.splice(0)) {
       polyline.setMap(null);
     }
-    this.coordinatesById.clear();
+    this.placeCoordinatesByOwnerId.clear();
+    this.routeCoordinatesById.clear();
     if (this.userLocation !== null) {
-      this.coordinatesById.set(USER_LOCATION_OWNER_ID, [
+      this.placeCoordinatesByOwnerId.set(USER_LOCATION_OWNER_ID, [
         { ...this.userLocation },
       ]);
     }
   }
 
   private clearUserMarker(): void {
-    this.coordinatesById.delete(USER_LOCATION_OWNER_ID);
+    this.placeCoordinatesByOwnerId.delete(USER_LOCATION_OWNER_ID);
     if (this.userMarker !== null) {
       this.userMarker.map = null;
       this.userMarker = null;

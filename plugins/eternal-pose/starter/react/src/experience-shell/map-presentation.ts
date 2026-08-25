@@ -1,9 +1,11 @@
 import type { CandidateGroup, Coordinates } from "../trip-core/model";
 import type { EffectiveDay } from "../trip-core/resolve-itinerary";
-import type {
-  MapPlacePresentation,
-  MapPresentation,
-  RouteResult,
+import {
+  candidateMapOwnerId,
+  nodeMapOwnerId,
+  type MapPlacePresentation,
+  type MapPresentation,
+  type RouteResult,
 } from "./provider-contracts";
 
 export interface MapPresentationContext {
@@ -52,7 +54,7 @@ function effectivePlaces(
           : "default";
     return [
       {
-        ownerId: sourceNodeId,
+        ownerId: nodeMapOwnerId(sourceNodeId),
         label: node.title,
         coordinates: cloneCoordinates(node.place.coordinates),
         tone,
@@ -79,7 +81,7 @@ function expandedCandidatePlaces(
     }
     return [
       {
-        ownerId: option.id,
+        ownerId: candidateMapOwnerId(option.id),
         label: option.title,
         coordinates: cloneCoordinates(option.place.coordinates),
         tone:
@@ -96,16 +98,21 @@ function selectedPlaceOwnerId(
   context: MapPresentationContext,
 ): string | undefined {
   const candidateId = context.activeCandidateOptionId;
+  const candidateOwnerId =
+    candidateId === undefined ? undefined : candidateMapOwnerId(candidateId);
   if (
     context.expandedCandidateGroup !== undefined &&
-    candidateId !== undefined &&
-    places.some(({ ownerId }) => ownerId === candidateId)
+    candidateOwnerId !== undefined &&
+    places.some(({ ownerId }) => ownerId === candidateOwnerId)
   ) {
-    return candidateId;
+    return candidateOwnerId;
   }
-  return context.selectedNodeId !== undefined &&
-    places.some(({ ownerId }) => ownerId === context.selectedNodeId)
-    ? context.selectedNodeId
+  if (context.selectedNodeId === undefined) {
+    return undefined;
+  }
+  const nodeOwnerId = nodeMapOwnerId(context.selectedNodeId);
+  return places.some(({ ownerId }) => ownerId === nodeOwnerId)
+    ? nodeOwnerId
     : undefined;
 }
 

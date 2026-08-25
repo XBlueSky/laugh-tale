@@ -1,12 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  candidateMapOwnerId,
+  decodeMapPlaceOwnerId,
+  nodeMapOwnerId,
   USER_LOCATION_OWNER_ID,
   type MapPresentation,
   type RouteRequest,
+  type RouteResult,
 } from "../../experience-shell/provider-contracts";
 import type { RouteEdge } from "../../trip-core/model";
+import { FakeRouteAdapter } from "../fake/FakeRouteAdapter";
 import {
   configureGoogleMaps,
+  createGoogleMapsConfigurator,
+  createGoogleMapsLoader,
   type GoogleMapsRuntime,
 } from "./google-config";
 import { GoogleMapAdapter } from "./GoogleMapAdapter";
@@ -101,6 +108,266 @@ describe("Google provider configuration", () => {
 
     expect(state).toEqual({ status: "load-error", reason: "loader failed" });
     expect(createAdapter).not.toHaveBeenCalled();
+  });
+
+  it("shares one default-style loader and adapter for concurrent equivalent keys", async () => {
+    const setLoaderOptions = vi.fn();
+    const mapsLibrary = {
+      Map: class FakeConfiguredMap {},
+      Polyline: class FakeConfiguredPolyline {},
+    } as unknown as google.maps.MapsLibrary;
+    const markerLibrary = {
+      AdvancedMarkerElement: class FakeConfiguredMarker {},
+    } as unknown as google.maps.MarkerLibrary;
+    const importLoaderLibrary = vi.fn(
+      (name: "maps" | "marker") =>
+        Promise.resolve(name === "maps" ? mapsLibrary : markerLibrary),
+    );
+    const createLoader = vi.fn(() =>
+      createGoogleMapsLoader({
+        setOptions: setLoaderOptions,
+        importLibrary: importLoaderLibrary,
+      }),
+    );
+    const adapter = {} as GoogleMapAdapter;
+    const createAdapter = vi.fn(() => adapter);
+    const configure = createGoogleMapsConfigurator({
+      createLoader,
+      createAdapter,
+    });
+
+    const [first, concurrent] = await Promise.all([
+      configure({ apiKey: "  shared-key  " }),
+      configure({ apiKey: "shared-key" }),
+    ]);
+    const repeated = await configure({ apiKey: "shared-key" });
+    const conflicting = await configure({ apiKey: "different-key" });
+
+    expect(first).toEqual({ status: "ready", adapter });
+    expect(concurrent).toEqual({ status: "ready", adapter });
+    expect(repeated).toEqual({ status: "ready", adapter });
+    expect(conflicting).toEqual({
+      status: "load-error",
+      reason: "Google Maps is already configured for a different key",
+    });
+    expect(createLoader).toHaveBeenCalledTimes(1);
+    expect(setLoaderOptions).toHaveBeenCalledTimes(1);
+    expect(setLoaderOptions).toHaveBeenCalledWith({
+      key: "shared-key",
+      v: "weekly",
+    });
+    expect(importLoaderLibrary.mock.calls.map(([name]) => name)).toEqual([
+      "maps",
+      "marker",
+    ]);
+    expect(createAdapter).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries the same key after load error without resetting global loader options", async () => {
+    const setLoaderOptions = vi.fn();
+    const mapsLibrary = {
+      Map: class FakeConfiguredMap {},
+      Polyline: class FakeConfiguredPolyline {},
+    } as unknown as google.maps.MapsLibrary;
+    const markerLibrary = {
+      AdvancedMarkerElement: class FakeConfiguredMarker {},
+    } as unknown as google.maps.MarkerLibrary;
+    let mapsAttempts = 0;
+    const importLoaderLibrary = vi.fn(
+      (name: "maps" | "marker") => {
+        if (name === "maps" && ++mapsAttempts === 1) {
+          return Promise.reject(new Error("temporary loader failure"));
+        }
+        return Promise.resolve(name === "maps" ? mapsLibrary : markerLibrary);
+      },
+    );
+    const createLoader = vi.fn(() =>
+      createGoogleMapsLoader({
+        setOptions: setLoaderOptions,
+        importLibrary: importLoaderLibrary,
+      }),
+    );
+    const adapter = {} as GoogleMapAdapter;
+    const createAdapter = vi.fn(() => adapter);
+    const configure = createGoogleMapsConfigurator({
+      createLoader,
+      createAdapter,
+    });
+
+    expect(await configure({ apiKey: "retry-key" })).toEqual({
+      status: "load-error",
+      reason: "temporary loader failure",
+    });
+    expect(await configure({ apiKey: "other-key" })).toEqual({
+      status: "load-error",
+      reason: "Google Maps is already configured for a different key",
+    });
+    expect(await configure({ apiKey: " retry-key " })).toEqual({
+      status: "ready",
+      adapter,
+    });
+
+    expect(createLoader).toHaveBeenCalledTimes(1);
+    expect(setLoaderOptions).toHaveBeenCalledTimes(1);
+    expect(importLoaderLibrary.mock.calls.map(([name]) => name)).toEqual([
+      "maps",
+      "marker",
+      "maps",
+      "marker",
+    ]);
+    expect(createAdapter).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("FakeRouteAdapter", () => {
+  it("settles immediately on abort and safely ignores a late resolver rejection", async () => {
+    let rejectResolver: ((reason?: unknown) => void) | undefined;
+    const adapter = new FakeRouteAdapter(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectResolver = reject;
+        }),
+    );
+    const controller = new AbortController();
+    const removeListener = vi.spyOn(controller.signal, "removeEventListener");
+
+    const pending = adapter.load(
+      { edge: routeEdge({ id: "never-settles" }) },
+      controller.signal,
+    );
+    controller.abort();
+    const result = await Promise.race([
+      pending,
+      new Promise<"still-pending">((resolve) => {
+        queueMicrotask(() => resolve("still-pending"));
+      }),
+    ]);
+
+    expect(result).toEqual({ status: "unavailable", reason: "Request aborted" });
+    expect(removeListener).toHaveBeenCalledWith("abort", expect.any(Function));
+    rejectResolver?.(new Error("late resolver failure"));
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  it("treats prototype names as missing unless they are own fixture keys", async () => {
+    const missing = new FakeRouteAdapter({});
+    for (const id of ["__proto__", "constructor", "toString"]) {
+      expect(
+        await missing.load(
+          { edge: routeEdge({ id }) },
+          new AbortController().signal,
+        ),
+      ).toEqual({
+        status: "unavailable",
+        reason: `No fake route configured for ${id}`,
+      });
+    }
+
+    const fixtures = Object.create(null) as Record<string, RouteResult>;
+    for (const id of ["__proto__", "constructor", "toString"]) {
+      Object.defineProperty(fixtures, id, {
+        configurable: true,
+        enumerable: false,
+        value: {
+          status: "ready",
+          durationMinutes: 1,
+          path: [
+            { lat: 25, lng: 121 },
+            { lat: 25.1, lng: 121.1 },
+          ],
+          steps: [id],
+        } satisfies RouteResult,
+      });
+    }
+    const configured = new FakeRouteAdapter(fixtures);
+    for (const id of ["__proto__", "constructor", "toString"]) {
+      expect(
+        await configured.load(
+          { edge: routeEdge({ id }) },
+          new AbortController().signal,
+        ),
+      ).toMatchObject({ status: "ready", steps: [id] });
+    }
+  });
+
+  it("isolates recorded requests, resolver mutation, returned values, and resolver errors", async () => {
+    const request: RouteRequest = {
+      edge: routeEdge({ id: "mutation-safe" }),
+      departureAt: "2040-01-01T09:00:00Z",
+      transitPreferences: { allowedModes: ["rail"] },
+    };
+    const adapter = new FakeRouteAdapter((received) => {
+      if (received.edge.navigation !== undefined) {
+        received.edge.navigation.origin = "resolver mutation";
+      }
+      received.transitPreferences?.allowedModes?.push("bus");
+      throw new Error("fake resolver failed");
+    });
+
+    const result = await adapter.load(request, new AbortController().signal);
+    request.edge.navigation!.origin = "caller mutation";
+    request.transitPreferences?.allowedModes?.push("subway");
+
+    expect(result).toEqual({
+      status: "unavailable",
+      reason: "fake resolver failed",
+    });
+    expect(adapter.loadCalls).toEqual([
+      {
+        edge: routeEdge({ id: "mutation-safe" }),
+        departureAt: "2040-01-01T09:00:00Z",
+        transitPreferences: { allowedModes: ["rail"] },
+      },
+    ]);
+
+    const expectedReady: RouteResult = {
+      status: "ready",
+      durationMinutes: 2,
+      path: [
+        { lat: 25, lng: 121 },
+        { lat: 25.1, lng: 121.1 },
+      ],
+      steps: ["Original"],
+    };
+    const readyFixture: RouteResult = {
+      status: "ready",
+      durationMinutes: 2,
+      path: [
+        { lat: 25, lng: 121 },
+        { lat: 25.1, lng: 121.1 },
+      ],
+      steps: ["Original"],
+    };
+    const fixtures = new FakeRouteAdapter({ stable: readyFixture });
+    if (readyFixture.status === "ready") {
+      readyFixture.path[0] = { lat: 9, lng: 9 };
+      readyFixture.steps[0] = "source mutation";
+    }
+    const successController = new AbortController();
+    const removeSuccessListener = vi.spyOn(
+      successController.signal,
+      "removeEventListener",
+    );
+    const first = await fixtures.load(
+      { edge: routeEdge({ id: "stable" }) },
+      successController.signal,
+    );
+    expect(first).toEqual(expectedReady);
+    expect(removeSuccessListener).toHaveBeenCalledWith(
+      "abort",
+      expect.any(Function),
+    );
+    if (first.status === "ready") {
+      first.path[0] = { lat: 0, lng: 0 };
+      first.steps[0] = "mutated";
+    }
+    expect(
+      await fixtures.load(
+        { edge: routeEdge({ id: "stable" }) },
+        new AbortController().signal,
+      ),
+    ).toEqual(expectedReady);
   });
 });
 
@@ -294,6 +561,59 @@ describe("Google Routes normalization", () => {
         origin: { address: "Place A" },
         destination: { address: "Place B" },
         travelMode: "TRANSIT",
+      },
+    ]);
+  });
+
+  it("ignores transit preferences in non-transit request bodies and cache identities", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        routes: [
+          {
+            duration: "60s",
+            polyline: { encodedPolyline: "_p~iF~ps|U_ulLnnqC" },
+            legs: [],
+          },
+        ],
+      }),
+    );
+    const adapter = new GoogleRouteAdapter({ apiKey: "test-key", fetch: fetchMock });
+
+    for (const mode of ["walking", "driving"] as const) {
+      const request: RouteRequest = {
+        edge: routeEdge({ id: `${mode}-route`, mode }),
+      };
+      const withIrrelevantModes: RouteRequest = {
+        ...request,
+        transitPreferences: { allowedModes: ["bus", "rail"] },
+      };
+      expect(routeRequestCacheKey(withIrrelevantModes)).toBe(
+        routeRequestCacheKey(request),
+      );
+      expect(
+        (await adapter.load(request, new AbortController().signal)).status,
+      ).toBe("ready");
+      expect(
+        (await adapter.load(withIrrelevantModes, new AbortController().signal))
+          .status,
+      ).toBe("ready");
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const bodies = fetchMock.mock.calls.map((call) => {
+      const [, init] = call as [string, RequestInit];
+      return parseJsonBody(init);
+    });
+    expect(bodies).toEqual([
+      {
+        origin: { address: "Place A" },
+        destination: { address: "Place B" },
+        travelMode: "WALK",
+      },
+      {
+        origin: { address: "Place A" },
+        destination: { address: "Place B" },
+        travelMode: "DRIVE",
       },
     ]);
   });
@@ -811,8 +1131,12 @@ class FakeAdvancedMarker {
   readonly title: google.maps.marker.AdvancedMarkerElementOptions["title"];
   readonly content: google.maps.marker.AdvancedMarkerElementOptions["content"];
   readonly gmpClickable: google.maps.marker.AdvancedMarkerElementOptions["gmpClickable"];
-  readonly listeners: FakeListener[] = [];
-  readonly eventNames: string[] = [];
+  readonly addedEventNames: string[] = [];
+  readonly removedEventNames: string[] = [];
+  private readonly eventListeners = new Map<
+    string,
+    Set<EventListenerOrEventListenerObject>
+  >();
 
   constructor(options: google.maps.marker.AdvancedMarkerElementOptions) {
     this.map = options.map;
@@ -823,11 +1147,33 @@ class FakeAdvancedMarker {
     FakeAdvancedMarker.instances.push(this);
   }
 
-  addListener(eventName: string, callback: () => void): FakeListener {
-    const listener = new FakeListener(callback);
-    this.eventNames.push(eventName);
-    this.listeners.push(listener);
-    return listener;
+  addEventListener(
+    eventName: string,
+    listener: EventListenerOrEventListenerObject,
+  ): void {
+    this.addedEventNames.push(eventName);
+    const listeners = this.eventListeners.get(eventName) ?? new Set();
+    listeners.add(listener);
+    this.eventListeners.set(eventName, listeners);
+  }
+
+  removeEventListener(
+    eventName: string,
+    listener: EventListenerOrEventListenerObject,
+  ): void {
+    this.removedEventNames.push(eventName);
+    this.eventListeners.get(eventName)?.delete(listener);
+  }
+
+  emitGmpClick(source: "pointer" | "keyboard"): void {
+    const event = new CustomEvent("gmp-click", { detail: { source } });
+    for (const listener of this.eventListeners.get("gmp-click") ?? []) {
+      if (typeof listener === "function") {
+        listener(event);
+      } else {
+        listener.handleEvent(event);
+      }
+    }
   }
 }
 
@@ -869,25 +1215,25 @@ describe("GoogleMapAdapter lifecycle", () => {
   const presentation: MapPresentation = {
     places: [
       {
-        ownerId: "museum",
+        ownerId: nodeMapOwnerId("museum"),
         label: "Museum",
         coordinates: { lat: 25, lng: 121 },
         tone: "default",
       },
       {
-        ownerId: "candidate",
+        ownerId: candidateMapOwnerId("candidate"),
         label: "Cafe",
         coordinates: { lat: 25.01, lng: 121.01 },
         tone: "candidate",
       },
       {
-        ownerId: "selected",
+        ownerId: nodeMapOwnerId("selected"),
         label: "Park",
         coordinates: { lat: 25.02, lng: 121.02 },
         tone: "selected",
       },
       {
-        ownerId: "completed",
+        ownerId: nodeMapOwnerId("completed"),
         label: "Hotel",
         coordinates: { lat: 25.03, lng: 121.03 },
         tone: "completed",
@@ -931,7 +1277,7 @@ describe("GoogleMapAdapter lifecycle", () => {
       ),
     ).toEqual(["true", "true", "true", "true"]);
     expect(
-      FakeAdvancedMarker.instances.map(({ eventNames }) => eventNames),
+      FakeAdvancedMarker.instances.map(({ addedEventNames }) => addedEventNames),
     ).toEqual([["gmp-click"], ["gmp-click"], ["gmp-click"], ["gmp-click"]]);
     expect(
       FakeAdvancedMarker.instances.map(({ gmpClickable }) => gmpClickable),
@@ -943,10 +1289,19 @@ describe("GoogleMapAdapter lifecycle", () => {
     ).toEqual(["SPAN", "SPAN", "SPAN", "SPAN"]);
     expect(FakePolyline.instances).toHaveLength(1);
 
-    FakeAdvancedMarker.instances[0]?.listeners[0]?.emit();
+    FakeAdvancedMarker.instances[0]?.emitGmpClick("pointer");
+    FakeAdvancedMarker.instances[0]?.emitGmpClick("keyboard");
     FakePolyline.instances[0]?.listeners[0]?.emit();
-    expect(onPlaceSelect).toHaveBeenCalledWith("museum");
+    expect(onPlaceSelect).toHaveBeenNthCalledWith(1, nodeMapOwnerId("museum"));
+    expect(onPlaceSelect).toHaveBeenNthCalledWith(2, nodeMapOwnerId("museum"));
     expect(onRouteSelect).toHaveBeenCalledWith("ready-route");
+
+    const marker = FakeAdvancedMarker.instances[0];
+    adapter.destroy();
+    marker?.emitGmpClick("pointer");
+    marker?.emitGmpClick("keyboard");
+    expect(onPlaceSelect).toHaveBeenCalledTimes(2);
+    expect(marker?.removedEventNames).toEqual(["gmp-click"]);
   });
 
   it("queues the latest render before mount is ready and supports focus, fit, and padding", async () => {
@@ -959,11 +1314,11 @@ describe("GoogleMapAdapter lifecycle", () => {
     adapter.setPadding({ top: 10, right: 20, bottom: 30, left: 40 });
 
     await pending;
-    adapter.focus({ kind: "place", id: "museum" });
+    adapter.focus({ kind: "place", id: nodeMapOwnerId("museum") });
     expect(FakeGoogleMap.instances[0]?.panTo).toHaveBeenCalledWith({ lat: 25, lng: 121 });
 
     adapter.focus({ kind: "route", id: "ready-route" });
-    adapter.fit(["museum", "ready-route"]);
+    adapter.fit([nodeMapOwnerId("museum"), "ready-route"]);
     expect(FakeGoogleMap.instances[0]?.fitBounds).toHaveBeenCalledWith(
       { north: 25.01, south: 25, east: 121.01, west: 121 },
       { top: 10, right: 20, bottom: 30, left: 40 },
@@ -1007,11 +1362,14 @@ describe("GoogleMapAdapter lifecycle", () => {
     const oldPolylines = [...FakePolyline.instances];
 
     adapter.render({ places: [], routes: [] });
-    itineraryMarkers[0]?.listeners[0]?.emit();
+    itineraryMarkers[0]?.emitGmpClick("pointer");
+    itineraryMarkers[0]?.emitGmpClick("keyboard");
 
     expect(itineraryMarkers.every(({ map }) => map === null)).toBe(true);
     expect(
-      itineraryMarkers.every(({ listeners }) => listeners.every(({ removed }) => removed)),
+      itineraryMarkers.every(({ removedEventNames }) =>
+        removedEventNames.includes("gmp-click"),
+      ),
     ).toBe(true);
     expect(oldPolylines.every(({ setMap }) => setMap.mock.calls.at(-1)?.[0] === null)).toBe(true);
     expect(onPlaceSelect).not.toHaveBeenCalled();
@@ -1026,6 +1384,94 @@ describe("GoogleMapAdapter lifecycle", () => {
 
     adapter.destroy();
     expect(FakeGoogleMap.instances[0]?.unbindAll).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps place, route, and reserved user-location focus namespaces distinct", async () => {
+    const adapter = new GoogleMapAdapter(fakeRuntime());
+    const onPlaceSelect = vi.fn();
+    await adapter.mount(document.createElement("div"), {
+      onPlaceSelect,
+      onRouteSelect: vi.fn(),
+    });
+    const rawNodeId = USER_LOCATION_OWNER_ID;
+    const nodeOwner = nodeMapOwnerId(rawNodeId);
+    const collidingRouteId = nodeOwner;
+    adapter.render({
+      places: [
+        {
+          ownerId: nodeOwner,
+          label: "Reserved-looking node",
+          coordinates: { lat: 25.1, lng: 121.1 },
+          tone: "default",
+        },
+      ],
+      routes: [
+        {
+          edgeId: collidingRouteId,
+          path: [
+            { lat: 25.2, lng: 121.2 },
+            { lat: 25.3, lng: 121.3 },
+          ],
+          tone: "default",
+        },
+      ],
+    });
+    adapter.setUserLocation({ lat: 24.9, lng: 120.9 });
+    const map = FakeGoogleMap.instances[0];
+
+    adapter.focus({ kind: "place", id: nodeOwner });
+    expect(map?.panTo).toHaveBeenLastCalledWith({ lat: 25.1, lng: 121.1 });
+    adapter.focus({ kind: "route", id: collidingRouteId });
+    expect(map?.fitBounds).toHaveBeenLastCalledWith(
+      { north: 25.3, south: 25.2, east: 121.3, west: 121.2 },
+      { top: 0, right: 0, bottom: 0, left: 0 },
+    );
+    adapter.fit([collidingRouteId]);
+    expect(map?.fitBounds).toHaveBeenLastCalledWith(
+      { north: 25.3, south: 25.1, east: 121.3, west: 121.1 },
+      { top: 0, right: 0, bottom: 0, left: 0 },
+    );
+    adapter.focus({ kind: "place", id: USER_LOCATION_OWNER_ID });
+    expect(map?.panTo).toHaveBeenLastCalledWith({ lat: 24.9, lng: 120.9 });
+
+    FakeAdvancedMarker.instances[0]?.emitGmpClick("keyboard");
+    const emittedOwner: unknown = onPlaceSelect.mock.calls[0]?.[0];
+    expect(typeof emittedOwner).toBe("string");
+    expect(
+      decodeMapPlaceOwnerId(typeof emittedOwner === "string" ? emittedOwner : ""),
+    ).toEqual({
+      kind: "node",
+      id: rawNodeId,
+    });
+  });
+
+  it("rejects a whole route path when any intermediate coordinate is invalid", async () => {
+    const adapter = new GoogleMapAdapter(fakeRuntime());
+    const onRouteSelect = vi.fn();
+    await adapter.mount(document.createElement("div"), {
+      onPlaceSelect: vi.fn(),
+      onRouteSelect,
+    });
+    adapter.render({
+      places: [],
+      routes: [
+        {
+          edgeId: "invalid-middle",
+          path: [
+            { lat: 25, lng: 121 },
+            { lat: Number.NaN, lng: 121.1 },
+            { lat: 25.2, lng: 121.2 },
+          ],
+          tone: "default",
+        },
+      ],
+    });
+
+    adapter.focus({ kind: "route", id: "invalid-middle" });
+    expect(FakePolyline.instances).toHaveLength(0);
+    expect(FakeGoogleMap.instances[0]?.fitBounds).not.toHaveBeenCalled();
+    expect(FakeGoogleMap.instances[0]?.panTo).not.toHaveBeenCalled();
+    expect(onRouteSelect).not.toHaveBeenCalled();
   });
 
   it("does not finish a mount after destroy invalidates its generation", async () => {

@@ -8,6 +8,12 @@ import {
   buildMapPresentation,
   type MapPresentationContext,
 } from "./map-presentation";
+import {
+  candidateMapOwnerId,
+  decodeMapPlaceOwnerId,
+  nodeMapOwnerId,
+  USER_LOCATION_OWNER_ID,
+} from "./provider-contracts";
 
 function placeNode(
   id: string,
@@ -126,31 +132,35 @@ describe("buildMapPresentation", () => {
 
     expect(presentation.places).toEqual([
       {
-        ownerId: "museum",
+        ownerId: nodeMapOwnerId("museum"),
         label: "Museum",
         coordinates: { lat: 25.01, lng: 121.51 },
         tone: "default",
       },
       {
-        ownerId: "garden",
+        ownerId: nodeMapOwnerId("garden"),
         label: "Garden",
         coordinates: { lat: 25.02, lng: 121.5 },
         tone: "default",
       },
       {
-        ownerId: "hotel",
+        ownerId: nodeMapOwnerId("hotel"),
         label: "Hotel",
         coordinates: { lat: 25.03, lng: 121.49 },
         tone: "completed",
       },
       {
-        ownerId: "dinner",
+        ownerId: nodeMapOwnerId("dinner"),
         label: "Dinner A",
         coordinates: { lat: 25.04, lng: 121.52 },
         tone: "default",
       },
     ]);
-    expect(presentation.places.some(({ ownerId }) => ownerId === "dinner-b")).toBe(false);
+    expect(
+      presentation.places.some(
+        ({ ownerId }) => ownerId === candidateMapOwnerId("dinner-b"),
+      ),
+    ).toBe(false);
     expect(presentation.places.filter(({ tone }) => tone === "candidate")).toHaveLength(0);
   });
 
@@ -162,23 +172,27 @@ describe("buildMapPresentation", () => {
     };
 
     const presentation = buildMapPresentation(fixtureDay(), context);
-    const dinnerPlaces = presentation.places.filter(({ ownerId }) => ownerId.startsWith("dinner"));
+    const dinnerPlaces = presentation.places.filter(
+      ({ ownerId }) => decodeMapPlaceOwnerId(ownerId)?.kind === "candidate",
+    );
 
     expect(dinnerPlaces).toEqual([
       {
-        ownerId: "dinner-a",
+        ownerId: candidateMapOwnerId("dinner-a"),
         label: "Dinner A",
         coordinates: { lat: 25.04, lng: 121.52 },
         tone: "candidate",
       },
       {
-        ownerId: "dinner-b",
+        ownerId: candidateMapOwnerId("dinner-b"),
         label: "Dinner B",
         coordinates: { lat: 25.05, lng: 121.53 },
         tone: "selected",
       },
     ]);
-    expect(presentation.selectedPlaceOwnerId).toBe("dinner-b");
+    expect(presentation.selectedPlaceOwnerId).toBe(
+      candidateMapOwnerId("dinner-b"),
+    );
   });
 
   it("expands browse groups on the main map without fabricating a selected option", () => {
@@ -190,11 +204,13 @@ describe("buildMapPresentation", () => {
 
     expect(
       presentation.places
-        .filter(({ ownerId }) => ownerId.startsWith("dinner"))
-        .map(({ ownerId, tone }) => ({ ownerId, tone })),
+        .flatMap(({ ownerId, tone }) => {
+          const owner = decodeMapPlaceOwnerId(ownerId);
+          return owner?.kind === "candidate" ? [{ id: owner.id, tone }] : [];
+        }),
     ).toEqual([
-      { ownerId: "dinner-a", tone: "candidate" },
-      { ownerId: "dinner-b", tone: "candidate" },
+      { id: "dinner-a", tone: "candidate" },
+      { id: "dinner-b", tone: "candidate" },
     ]);
     expect(presentation.selectedPlaceOwnerId).toBeUndefined();
   });
@@ -217,11 +233,13 @@ describe("buildMapPresentation", () => {
       },
     });
 
-    expect(presentation.selectedPlaceOwnerId).toBe("museum");
+    expect(presentation.selectedPlaceOwnerId).toBe(nodeMapOwnerId("museum"));
     expect(presentation.selectedRouteId).toBe("walk-to-garden");
-    expect(presentation.places.find(({ ownerId }) => ownerId === "museum")?.tone).toBe(
-      "selected",
-    );
+    expect(
+      presentation.places.find(
+        ({ ownerId }) => ownerId === nodeMapOwnerId("museum"),
+      )?.tone,
+    ).toBe("selected");
     expect(presentation.routes).toEqual([
       {
         edgeId: "walk-to-garden",
@@ -233,6 +251,85 @@ describe("buildMapPresentation", () => {
       },
       { edgeId: "drive-to-hotel", path: [], tone: "unavailable" },
     ]);
+  });
+
+  it("encodes colliding node, candidate, route, and reserved user-location identities", () => {
+    const sharedNode = placeNode("shared", {
+      title: "Shared node",
+      coordinates: { lat: 25.06, lng: 121.54 },
+    });
+    const reservedLookingNode = placeNode(USER_LOCATION_OWNER_ID, {
+      title: "Reserved-looking node",
+      coordinates: { lat: 25.07, lng: 121.55 },
+    });
+    const base = fixtureDay();
+    const day: EffectiveDay = {
+      day: {
+        ...base.day,
+        nodes: [sharedNode, reservedLookingNode, ...base.day.nodes],
+      },
+      nodes: [effective(sharedNode), effective(reservedLookingNode), ...base.nodes],
+    };
+    const collidingGroup: CandidateGroup = {
+      ...candidateGroup,
+      options: [
+        {
+          id: "shared",
+          title: "Shared candidate",
+          place: {
+            name: "Shared candidate",
+            coordinates: { lat: 25.08, lng: 121.56 },
+            certainty: "candidate",
+          },
+        },
+      ],
+    };
+
+    const presentation = buildMapPresentation(day, {
+      expandedCandidateGroup: collidingGroup,
+      activeCandidateOptionId: "shared",
+      routeResults: {
+        shared: {
+          status: "ready",
+          durationMinutes: 2,
+          path: [
+            { lat: 25.06, lng: 121.54 },
+            { lat: 25.08, lng: 121.56 },
+          ],
+          steps: [],
+        },
+      },
+      selectedRouteId: "shared",
+    });
+
+    const nodeOwner = nodeMapOwnerId("shared");
+    const candidateOwner = candidateMapOwnerId("shared");
+    const reservedLookingOwner = nodeMapOwnerId(USER_LOCATION_OWNER_ID);
+    expect(nodeOwner).not.toBe(candidateOwner);
+    expect(reservedLookingOwner).not.toBe(USER_LOCATION_OWNER_ID);
+    expect(presentation.places).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ ownerId: nodeOwner, tone: "default" }),
+        expect.objectContaining({ ownerId: candidateOwner, tone: "selected" }),
+        expect.objectContaining({ ownerId: reservedLookingOwner }),
+      ]),
+    );
+    expect(presentation.selectedPlaceOwnerId).toBe(candidateOwner);
+    expect(presentation.selectedRouteId).toBe("shared");
+    expect(presentation.routes[0]?.edgeId).toBe("shared");
+    expect(decodeMapPlaceOwnerId(nodeOwner)).toEqual({ kind: "node", id: "shared" });
+    expect(decodeMapPlaceOwnerId(candidateOwner)).toEqual({
+      kind: "candidate",
+      id: "shared",
+    });
+    expect(decodeMapPlaceOwnerId(reservedLookingOwner)).toEqual({
+      kind: "node",
+      id: USER_LOCATION_OWNER_ID,
+    });
+    expect(decodeMapPlaceOwnerId(USER_LOCATION_OWNER_ID)).toEqual({
+      kind: "user-location",
+    });
+    expect(decodeMapPlaceOwnerId("shared")).toBeUndefined();
   });
 });
 
@@ -264,20 +361,24 @@ describe("provider-neutral boundaries", () => {
     await fake.mount(element, { onPlaceSelect, onRouteSelect });
     const presentation = buildMapPresentation(fixtureDay(), {});
     fake.render(presentation);
-    fake.focus({ kind: "place", id: "museum" });
-    fake.fit(["museum", "garden"]);
+    fake.focus({ kind: "place", id: nodeMapOwnerId("museum") });
+    fake.fit([nodeMapOwnerId("museum"), nodeMapOwnerId("garden")]);
     fake.setPadding({ top: 10, right: 20, bottom: 30, left: 40 });
     fake.setUserLocation({ lat: 25, lng: 121 });
-    fake.emitPlaceSelect("museum");
+    fake.emitPlaceSelect(nodeMapOwnerId("museum"));
     fake.emitRouteSelect("walk-to-garden");
 
     expect(fake.mountCalls).toEqual([element]);
     expect(fake.renderCalls).toEqual([presentation]);
-    expect(fake.focusCalls).toEqual([{ kind: "place", id: "museum" }]);
-    expect(fake.fitCalls).toEqual([["museum", "garden"]]);
+    expect(fake.focusCalls).toEqual([
+      { kind: "place", id: nodeMapOwnerId("museum") },
+    ]);
+    expect(fake.fitCalls).toEqual([
+      [nodeMapOwnerId("museum"), nodeMapOwnerId("garden")],
+    ]);
     expect(fake.paddingCalls).toEqual([{ top: 10, right: 20, bottom: 30, left: 40 }]);
     expect(fake.userLocationCalls).toEqual([{ lat: 25, lng: 121 }]);
-    expect(onPlaceSelect).toHaveBeenCalledWith("museum");
+    expect(onPlaceSelect).toHaveBeenCalledWith(nodeMapOwnerId("museum"));
     expect(onRouteSelect).toHaveBeenCalledWith("walk-to-garden");
 
     fake.destroy();

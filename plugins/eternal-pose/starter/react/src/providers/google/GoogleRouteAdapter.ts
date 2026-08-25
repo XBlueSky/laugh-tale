@@ -55,6 +55,9 @@ function trimmed(value: string | undefined): string | undefined {
 function allowedTransitModes(
   request: RouteRequest,
 ): ("SUBWAY" | "TRAIN" | "BUS")[] {
+  if (request.edge.mode !== "transit") {
+    return [];
+  }
   const requested = new Set(request.transitPreferences?.allowedModes ?? []);
   return CANONICAL_TRANSIT_MODES.flatMap(([neutral, googleMode]) =>
     requested.has(neutral) ? [googleMode] : [],
