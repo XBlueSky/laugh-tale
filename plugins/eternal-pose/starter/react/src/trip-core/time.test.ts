@@ -1,0 +1,141 @@
+import { Temporal } from "@js-temporal/polyfill";
+import { describe, expect, it } from "vitest";
+
+import type { Timing, Trip, TripNode } from "./model";
+import { findLiveState, formatTimingLabel, resolveSchedule } from "./time";
+
+function sightseeingNode(id: string, dayId: string, timing: Timing): TripNode {
+  return {
+    id,
+    dayId,
+    kind: "sightseeing",
+    title: id,
+    timing,
+    optionality: "core",
+    payload: {},
+  };
+}
+
+function nowAt(localDateTime: string, timezone: string): Temporal.ZonedDateTime {
+  return Temporal.ZonedDateTime.from(`${localDateTime}[${timezone}]`);
+}
+
+describe("formatTimingLabel", () => {
+  it("keeps fixed time exact, marks suggestions, and labels unknown time", () => {
+    expect(formatTimingLabel({ start: "14:00", certainty: "fixed" })).toBe("14:00");
+    expect(formatTimingLabel({ start: "15:00", certainty: "suggested" })).toBe("約 15:00");
+    expect(formatTimingLabel({ certainty: "unknown" })).toBe("時間未定");
+    expect(formatTimingLabel({ certainty: "fixed" })).toBe("時間未定");
+  });
+});
+
+describe("resolveSchedule", () => {
+  it("resolves the day absolute date in the trip IANA timezone", () => {
+    const trip = {
+      timezone: "Asia/Tokyo",
+      days: [
+        {
+          id: "day-1",
+          date: "2026-08-23",
+          title: "Tokyo day",
+          nodes: [
+            sightseeingNode("stop-1", "day-1", {
+              start: "08:15",
+              end: "09:00",
+              certainty: "fixed",
+            }),
+          ],
+        },
+      ],
+    } satisfies Pick<Trip, "timezone" | "days">;
+
+    const [entry] = resolveSchedule(trip);
+
+    expect(entry?.startsAt.toString()).toBe("2026-08-23T08:15:00+09:00[Asia/Tokyo]");
+    expect(entry?.endsAt.toString()).toBe("2026-08-23T09:00:00+09:00[Asia/Tokyo]");
+  });
+
+  it("applies an end dayOffset for a cross-midnight schedule", () => {
+    const trip = {
+      timezone: "Asia/Tokyo",
+      days: [
+        {
+          id: "day-1",
+          date: "2026-08-23",
+          title: "Late night",
+          nodes: [
+            sightseeingNode("late-stop", "day-1", {
+              start: "23:30",
+              end: "00:30",
+              dayOffset: 1,
+              certainty: "fixed",
+            }),
+          ],
+        },
+      ],
+    } satisfies Pick<Trip, "timezone" | "days">;
+
+    const [entry] = resolveSchedule(trip);
+
+    expect(entry?.startsAt.toPlainDateTime().toString()).toBe("2026-08-23T23:30:00");
+    expect(entry?.endsAt.toPlainDateTime().toString()).toBe("2026-08-24T00:30:00");
+  });
+
+  it("infers missing ends from the full schedule before ignored nodes are filtered", () => {
+    const trip = {
+      timezone: "Asia/Tokyo",
+      days: [
+        {
+          id: "day-1",
+          date: "2026-08-23",
+          title: "Boundary day",
+          nodes: [
+            sightseeingNode("stop-09", "day-1", {
+              start: "09:00",
+              certainty: "suggested",
+            }),
+            sightseeingNode("stop-10", "day-1", {
+              start: "10:00",
+              certainty: "suggested",
+            }),
+            sightseeingNode("stop-11", "day-1", {
+              start: "11:00",
+              certainty: "suggested",
+            }),
+          ],
+        },
+      ],
+    } satisfies Pick<Trip, "timezone" | "days">;
+    const fullSchedule = resolveSchedule(trip);
+
+    expect(fullSchedule[0]?.endsAt.toPlainTime().toString()).toBe("10:00:00");
+    expect(
+      findLiveState(fullSchedule, nowAt("2026-08-23T10:30", "Asia/Tokyo"), {
+        ignoredNodeIds: new Set(["stop-10"]),
+      }),
+    ).toEqual({ currentId: null, nextId: "stop-11" });
+  });
+
+  it("uses a 120-minute fallback only for the final missing end", () => {
+    const trip = {
+      timezone: "Asia/Tokyo",
+      days: [
+        {
+          id: "day-1",
+          date: "2026-08-23",
+          title: "Fallback day",
+          nodes: [
+            sightseeingNode("last-stop", "day-1", {
+              start: "21:00",
+              certainty: "unknown",
+            }),
+          ],
+        },
+      ],
+    } satisfies Pick<Trip, "timezone" | "days">;
+
+    const [entry] = resolveSchedule(trip);
+
+    expect(entry?.endsAt.toPlainDateTime().toString()).toBe("2026-08-23T23:00:00");
+  });
+});
