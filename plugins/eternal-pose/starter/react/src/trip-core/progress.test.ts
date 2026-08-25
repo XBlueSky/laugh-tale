@@ -4,8 +4,11 @@ import { completeTrip } from "../trip-content/fixtures/complete-trip";
 import type { Trip } from "./model";
 import {
   collectDayProgressScope,
+  checklistCompletionKey,
   emptyTripProgress,
+  nodeCompletionKey,
   parseTripProgress,
+  taskCompletionKey,
   tripProgressReducer,
   type TripProgressV1,
 } from "./progress";
@@ -102,7 +105,7 @@ describe("tripProgressReducer", () => {
     });
     const completed = tripProgressReducer(skipped, {
       type: "set-completed",
-      id: "node-1",
+      id: nodeCompletionKey("node-1"),
       completed: true,
     });
 
@@ -111,7 +114,7 @@ describe("tripProgressReducer", () => {
       selectedCandidateIds: { "group-1": "candidate-1" },
       shoppingStatuses: { "item-1": "unavailable" },
       skippedNodeIds: ["optional-1"],
-      completedIds: ["node-1"],
+      completedIds: ["node:node-1"],
     });
     expect(initial).toEqual(emptyTripProgress());
   });
@@ -180,20 +183,20 @@ describe("day-scoped reset", () => {
       shoppingItemIds: ["shopping-item-journal", "shopping-item-second"],
       skippedNodeIds: ["node-shopping", "node-custom"],
       completionIds: [
-        "node-transport",
-        "node-transfer",
-        "node-lodging",
-        "checklist-lodging-document",
-        "node-dining",
-        "node-shopping",
-        "node-sightseeing",
-        "node-experience",
-        "node-logistics",
-        "checklist-logistics-receipt",
-        "node-custom",
-        "task-day-water",
-        "task-day-child-a",
-        "task-day-child-b",
+        "node:node-transport",
+        "node:node-transfer",
+        "node:node-lodging",
+        "checklist:checklist-lodging-document",
+        "node:node-dining",
+        "node:node-shopping",
+        "node:node-sightseeing",
+        "node:node-experience",
+        "node:node-logistics",
+        "checklist:checklist-logistics-receipt",
+        "node:node-custom",
+        "task:task-day-water",
+        "checklist:task-day-child-a",
+        "checklist:task-day-child-b",
       ],
     });
   });
@@ -211,7 +214,11 @@ describe("day-scoped reset", () => {
         "other-item": "unavailable",
       },
       skippedNodeIds: ["node-shopping", "other-optional"],
-      completedIds: ["node-logistics", "checklist-logistics-receipt", "other-task"],
+      completedIds: [
+        nodeCompletionKey("node-logistics"),
+        checklistCompletionKey("checklist-logistics-receipt"),
+        taskCompletionKey("other-task"),
+      ],
     };
     const snapshot = structuredClone(initial);
 
@@ -220,7 +227,7 @@ describe("day-scoped reset", () => {
       selectedCandidateIds: { "other-group": "other-candidate" },
       shoppingStatuses: { "other-item": "unavailable" },
       skippedNodeIds: ["other-optional"],
-      completedIds: ["other-task"],
+      completedIds: ["task:other-task"],
     });
     expect(initial).toEqual(snapshot);
   });
@@ -232,5 +239,55 @@ describe("day-scoped reset", () => {
       skippedNodeIds: [],
       completionIds: [],
     });
+  });
+
+  it("does not reset a same-text completion owned by another namespace and day", () => {
+    const trip: Trip = {
+      id: "collision-trip",
+      title: "Collision trip",
+      timezone: "Asia/Tokyo",
+      startDate: "2026-08-23",
+      endDate: "2026-08-24",
+      days: [
+        {
+          id: "day-1",
+          date: "2026-08-23",
+          title: "First day",
+          nodes: [
+            {
+              id: "shared",
+              dayId: "day-1",
+              kind: "logistics",
+              title: "First-day logistics",
+              timing: { certainty: "unknown" },
+              optionality: "core",
+              payload: { checklist: [{ id: "shared", title: "Shared checklist" }] },
+            },
+          ],
+        },
+        { id: "day-2", date: "2026-08-24", title: "Second day", nodes: [] },
+      ],
+      routes: [],
+      candidateGroups: [],
+      reservations: [],
+      tasks: [
+        { id: "shared", title: "Second-day task", scope: "day", dayId: "day-2" },
+      ],
+    };
+    const initial: TripProgressV1 = {
+      ...emptyTripProgress(),
+      completedIds: [
+        nodeCompletionKey("shared"),
+        checklistCompletionKey("shared"),
+        taskCompletionKey("shared"),
+      ],
+    };
+
+    expect(
+      tripProgressReducer(initial, {
+        type: "reset-day",
+        scope: collectDayProgressScope(trip, "day-1"),
+      }).completedIds,
+    ).toEqual(["task:shared"]);
   });
 });

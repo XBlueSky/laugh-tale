@@ -9,8 +9,8 @@ import type {
   TripDay,
   TripNode,
 } from "./model";
-import type { TripProgressV1 } from "./progress";
-import { resolveRouteEdges } from "./routes";
+import { nodeCompletionKey, type TripProgressV1 } from "./progress";
+import { deduplicateRouteOwners, resolveRouteEdges } from "./routes";
 
 export interface EffectiveNode {
   node: TripNode;
@@ -108,18 +108,33 @@ function candidateForNode(
   node: TripNode,
   candidateGroups: readonly CandidateGroup[],
   selectedCandidateIds: Readonly<Record<string, string>>,
-): { group: CandidateGroup; option: CandidateOption } | undefined {
-  const group = candidateGroups.find((candidate) => candidate.parentNodeId === node.id);
-  if (group === undefined) {
+): CandidateOption | undefined {
+  const explicitGroupId = node.kind === "dining" ? node.payload.candidateGroupId : undefined;
+  let group: CandidateGroup | undefined;
+
+  if (explicitGroupId !== undefined) {
+    group = candidateGroups.find(
+      (candidate) => candidate.id === explicitGroupId && candidate.parentNodeId === node.id,
+    );
+  } else {
+    const parentGroups = candidateGroups.filter(
+      (candidate) => candidate.parentNodeId === node.id,
+    );
+    group = parentGroups.length === 1 ? parentGroups[0] : undefined;
+  }
+
+  if (group === undefined || group.mode !== "single") {
     return undefined;
   }
 
-  const selectedId = selectedCandidateIds[group.id] ?? group.defaultOptionId;
-  if (selectedId === undefined) {
-    return undefined;
-  }
-  const option = group.options.find((candidate) => candidate.id === selectedId);
-  return option === undefined ? undefined : { group, option };
+  const storedId = Object.hasOwn(selectedCandidateIds, group.id)
+    ? selectedCandidateIds[group.id]
+    : undefined;
+  const storedOption = group.options.find((candidate) => candidate.id === storedId);
+  const defaultOption = group.options.find(
+    (candidate) => candidate.id === group.defaultOptionId,
+  );
+  return storedOption ?? defaultOption;
 }
 
 function resolveNode(
@@ -132,23 +147,23 @@ function resolveNode(
     return {
       node,
       sourceNodeId: node.id,
-      completed: progress.completedIds.includes(node.id),
+      completed: progress.completedIds.includes(nodeCompletionKey(node.id)),
     };
   }
 
-  const selectedPlace = sanitizePlace(selected.option.place) ?? sanitizePlace(node.place);
-  const selectedBooking = sanitizeBooking(selected.option.booking ?? node.booking);
+  const selectedPlace = sanitizePlace(selected.place) ?? sanitizePlace(node.place);
+  const selectedBooking = sanitizeBooking(selected.booking ?? node.booking);
 
   return {
     node: {
       ...node,
-      title: selected.option.title,
+      title: selected.title,
       place: selectedPlace,
       booking: selectedBooking,
     },
     sourceNodeId: node.id,
-    completed: progress.completedIds.includes(node.id),
-    selectedCandidateId: selected.option.id,
+    completed: progress.completedIds.includes(nodeCompletionKey(node.id)),
+    selectedCandidateId: selected.id,
   };
 }
 
@@ -161,7 +176,9 @@ export function resolveEffectiveItinerary(trip: Trip, progress: TripProgressV1):
       .map((node) => resolveNode(node, trip.candidateGroups, progress)),
   }));
 
-  const routes = days.flatMap(({ day, nodes }) => resolveRouteEdges(day, trip.routes, nodes));
+  const routes = deduplicateRouteOwners(
+    days.flatMap(({ day, nodes }) => resolveRouteEdges(day, trip.routes, nodes)),
+  );
 
   return { tripId: trip.id, days, routes };
 }

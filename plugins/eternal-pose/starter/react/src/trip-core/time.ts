@@ -31,6 +31,24 @@ interface UnboundedScheduleEntry {
   explicitEnd?: Temporal.ZonedDateTime;
 }
 
+const EXACT_LOCAL_TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+
+function assertResolvableTiming(node: TripNode): void {
+  for (const [field, value] of [
+    ["start", node.timing.start],
+    ["end", node.timing.end],
+  ] as const) {
+    if (value !== undefined && !EXACT_LOCAL_TIME.test(value)) {
+      throw new Error(`Node ${node.id} ${field} must use exact HH:mm form.`);
+    }
+  }
+
+  const { dayOffset } = node.timing;
+  if (dayOffset !== undefined && (!Number.isInteger(dayOffset) || dayOffset < 0)) {
+    throw new Error(`Node ${node.id} dayOffset must be a non-negative integer.`);
+  }
+}
+
 export function formatTimingLabel(timing: Timing): string {
   if (timing.certainty === "unknown" || timing.start === undefined) {
     return "時間未定";
@@ -82,6 +100,7 @@ export function resolveSchedule(
     const date = Temporal.PlainDate.from(day.date);
 
     return day.nodes.flatMap((node) => {
+      assertResolvableTiming(node);
       if (node.timing.start === undefined) {
         return [];
       }
@@ -102,6 +121,21 @@ export function resolveSchedule(
   });
 
   unbounded.sort((left, right) => Temporal.ZonedDateTime.compare(left.startsAt, right.startsAt));
+
+  for (let index = 1; index < unbounded.length; index += 1) {
+    const previous = unbounded[index - 1];
+    const current = unbounded[index];
+    if (
+      previous !== undefined &&
+      current !== undefined &&
+      Temporal.ZonedDateTime.compare(previous.startsAt, current.startsAt) === 0
+    ) {
+      throw new Error(
+        `Duplicate schedule start for nodes ${previous.nodeId} and ${current.nodeId}. ` +
+          "Represent simultaneous alternatives as a candidate group.",
+      );
+    }
+  }
 
   return unbounded.map(({ explicitEnd, ...entry }, index) => ({
     ...entry,

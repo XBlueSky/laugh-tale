@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { Trip } from "./model";
-import { emptyTripProgress } from "./progress";
+import type { RouteEdge, Trip } from "./model";
+import { emptyTripProgress, nodeCompletionKey } from "./progress";
 import { resolveEffectiveItinerary } from "./resolve-itinerary";
 
 function deepFreeze<T>(value: T): T {
@@ -178,6 +178,51 @@ describe("resolveEffectiveItinerary", () => {
     expect(trip).toEqual(snapshot);
   });
 
+  it("rebuilds a direct owner when a candidate changes an endpoint place", () => {
+    type RuntimeProviderEdge = RouteEdge & {
+      providerPlan: string;
+      departureTime: string;
+      steps: string[];
+      geometry: { encodedPolyline: string };
+      preferences: { avoidTolls: boolean };
+    };
+    const trip = tripFixture();
+    const staleEdge: RuntimeProviderEdge = {
+      ...trip.routes[0],
+      source: "provider",
+      providerPlan: "Old venue plan",
+      departureTime: "2026-08-23T18:00:00+09:00",
+      steps: ["Walk from the old entrance"],
+      geometry: { encodedPolyline: "stale" },
+      preferences: { avoidTolls: true },
+    };
+    trip.routes[0] = staleEdge;
+
+    const effective = resolveEffectiveItinerary(deepFreeze(trip), {
+      ...emptyTripProgress(),
+      selectedCandidateIds: { "dinner-group": "candidate-safe" },
+    });
+    const rebuilt = effective.routes.find(({ id }) => id === "route-a-b");
+
+    expect(rebuilt).toMatchObject({
+      id: "route-a-b",
+      fromNodeId: "a",
+      toNodeId: "b",
+      mode: "walking",
+      source: "recomposed",
+      certainty: "unverified",
+      navigation: { origin: "Selected counter", destination: "Middle" },
+    });
+    expect(rebuilt).not.toHaveProperty("durationMinutes");
+    expect(rebuilt).not.toHaveProperty("distanceMeters");
+    expect(rebuilt).not.toHaveProperty("summary");
+    expect(rebuilt).not.toHaveProperty("providerPlan");
+    expect(rebuilt).not.toHaveProperty("departureTime");
+    expect(rebuilt).not.toHaveProperty("steps");
+    expect(rebuilt).not.toHaveProperty("geometry");
+    expect(rebuilt).not.toHaveProperty("preferences");
+  });
+
   it("prefers an option booking over the parent booking", () => {
     const trip = deepFreeze(tripFixture());
     const effective = resolveEffectiveItinerary(trip, {
@@ -191,12 +236,160 @@ describe("resolveEffectiveItinerary", () => {
     });
   });
 
+  it("honors a dining node's explicit candidate-group binding amid multiple parent groups", () => {
+    const trip = tripFixture();
+    trip.candidateGroups.unshift({
+      id: "wrong-first-group",
+      parentNodeId: "a",
+      mode: "single",
+      defaultOptionId: "wrong-first-option",
+      options: [{ id: "wrong-first-option", title: "Wrong first option" }],
+    });
+
+    const effective = resolveEffectiveItinerary(deepFreeze(trip), {
+      ...emptyTripProgress(),
+      selectedCandidateIds: { "dinner-group": "candidate-safe" },
+    });
+
+    expect(effective.days[0]?.nodes[0]).toMatchObject({
+      selectedCandidateId: "candidate-safe",
+      node: { title: "Selected counter" },
+    });
+  });
+
+  it("does not follow an explicit candidate-group binding owned by another node", () => {
+    const trip = tripFixture();
+    const dining = trip.days[0]?.nodes[0];
+    if (dining?.kind !== "dining") {
+      throw new Error("fixture must begin with dining");
+    }
+    dining.payload.candidateGroupId = "foreign-group";
+    trip.candidateGroups[0].defaultOptionId = "candidate-safe";
+    trip.candidateGroups.push({
+      id: "foreign-group",
+      parentNodeId: "c",
+      mode: "single",
+      defaultOptionId: "foreign-option",
+      options: [{ id: "foreign-option", title: "Foreign option" }],
+    });
+
+    const effective = resolveEffectiveItinerary(deepFreeze(trip), emptyTripProgress());
+
+    expect(effective.days[0]?.nodes[0]).toMatchObject({
+      node: { title: "Choose dinner" },
+    });
+    expect(effective.days[0]?.nodes[0]).not.toHaveProperty("selectedCandidateId");
+  });
+
+  it("does not guess when an unbound node has multiple parent candidate groups", () => {
+    const trip = tripFixture();
+    const dining = trip.days[0]?.nodes[0];
+    if (dining?.kind !== "dining") {
+      throw new Error("fixture must begin with dining");
+    }
+    delete dining.payload.candidateGroupId;
+    trip.candidateGroups.push({
+      id: "second-parent-group",
+      parentNodeId: "a",
+      mode: "single",
+      defaultOptionId: "second-parent-option",
+      options: [{ id: "second-parent-option", title: "Second parent option" }],
+    });
+
+    const effective = resolveEffectiveItinerary(deepFreeze(trip), {
+      ...emptyTripProgress(),
+      selectedCandidateIds: { "dinner-group": "candidate-safe" },
+    });
+
+    expect(effective.days[0]?.nodes[0]?.node.title).toBe("Choose dinner");
+    expect(effective.days[0]?.nodes[0]).not.toHaveProperty("selectedCandidateId");
+  });
+
+  it("uses the sole parent candidate group when a node has no explicit binding", () => {
+    const trip = tripFixture();
+    const dining = trip.days[0]?.nodes[0];
+    if (dining?.kind !== "dining") {
+      throw new Error("fixture must begin with dining");
+    }
+    delete dining.payload.candidateGroupId;
+    trip.candidateGroups[0].defaultOptionId = "candidate-safe";
+
+    const effective = resolveEffectiveItinerary(deepFreeze(trip), emptyTripProgress());
+
+    expect(effective.days[0]?.nodes[0]).toMatchObject({
+      selectedCandidateId: "candidate-safe",
+      node: { title: "Selected counter" },
+    });
+  });
+
+  it("never commits or overlays a browse candidate group", () => {
+    const trip = tripFixture();
+    trip.candidateGroups[0].mode = "browse";
+
+    const effective = resolveEffectiveItinerary(deepFreeze(trip), {
+      ...emptyTripProgress(),
+      selectedCandidateIds: { "dinner-group": "candidate-safe" },
+    });
+
+    expect(effective.days[0]?.nodes[0]?.node.title).toBe("Choose dinner");
+    expect(effective.days[0]?.nodes[0]).not.toHaveProperty("selectedCandidateId");
+  });
+
+  it.each(["__proto__", "constructor", "toString"])(
+    "does not read inherited progress for candidate group %s",
+    (groupId) => {
+      const trip = tripFixture();
+      const group = trip.candidateGroups[0];
+      const dining = trip.days[0]?.nodes[0];
+      if (dining?.kind !== "dining") {
+        throw new Error("fixture must begin with dining");
+      }
+      group.id = groupId;
+      group.defaultOptionId = "candidate-safe";
+      dining.payload.candidateGroupId = groupId;
+
+      const effective = resolveEffectiveItinerary(deepFreeze(trip), emptyTripProgress());
+
+      expect(effective.days[0]?.nodes[0]).toMatchObject({
+        selectedCandidateId: "candidate-safe",
+        node: { title: "Selected counter" },
+      });
+
+      const ownSelections = JSON.parse(
+        `{${JSON.stringify(groupId)}:"candidate-booked"}`,
+      ) as Record<string, string>;
+      const selected = resolveEffectiveItinerary(deepFreeze(trip), {
+        ...emptyTripProgress(),
+        selectedCandidateIds: ownSelections,
+      });
+      expect(selected.days[0]?.nodes[0]).toMatchObject({
+        selectedCandidateId: "candidate-booked",
+        node: { title: "Booked counter" },
+      });
+    },
+  );
+
+  it("falls back from a stale stored selection to a valid group default", () => {
+    const trip = tripFixture();
+    trip.candidateGroups[0].defaultOptionId = "candidate-safe";
+
+    const effective = resolveEffectiveItinerary(deepFreeze(trip), {
+      ...emptyTripProgress(),
+      selectedCandidateIds: { "dinner-group": "deleted-candidate" },
+    });
+
+    expect(effective.days[0]?.nodes[0]).toMatchObject({
+      selectedCandidateId: "candidate-safe",
+      node: { title: "Selected counter" },
+    });
+  });
+
   it("keeps completed logistics visible, removes skipped optionals, and recomposes routes", () => {
     const trip = deepFreeze(tripFixture());
     const effective = resolveEffectiveItinerary(trip, {
       ...emptyTripProgress(),
       skippedNodeIds: ["b", "c"],
-      completedIds: ["c"],
+      completedIds: [nodeCompletionKey("c")],
     });
 
     expect(effective.tripId).toBe("trip-resolver");
@@ -222,5 +415,115 @@ describe("resolveEffectiveItinerary", () => {
     expect(recomposed).not.toHaveProperty("departureTime");
     expect(recomposed).not.toHaveProperty("steps");
     expect(recomposed).not.toHaveProperty("preferences");
+  });
+
+  it("uses the node completion namespace instead of matching a bare colliding ID", () => {
+    const trip = deepFreeze(tripFixture());
+    const bare = resolveEffectiveItinerary(trip, {
+      ...emptyTripProgress(),
+      completedIds: ["c"],
+    });
+    const namespaced = resolveEffectiveItinerary(trip, {
+      ...emptyTripProgress(),
+      completedIds: [nodeCompletionKey("c")],
+    });
+
+    expect(bare.days[0]?.nodes.find(({ sourceNodeId }) => sourceNodeId === "c")?.completed).toBe(
+      false,
+    );
+    expect(
+      namespaced.days[0]?.nodes.find(({ sourceNodeId }) => sourceNodeId === "c")?.completed,
+    ).toBe(true);
+  });
+
+  it("keeps distinct route owners from multiple days exactly once", () => {
+    const trip = tripFixture();
+    trip.endDate = "2026-08-24";
+    trip.days.push({
+      id: "day-2",
+      date: "2026-08-24",
+      title: "Second day",
+      nodes: [
+        {
+          id: "d",
+          dayId: "day-2",
+          kind: "sightseeing",
+          title: "D",
+          timing: { start: "09:00", certainty: "suggested" },
+          optionality: "core",
+          payload: {},
+        },
+        {
+          id: "e",
+          dayId: "day-2",
+          kind: "sightseeing",
+          title: "E",
+          timing: { start: "10:00", certainty: "suggested" },
+          optionality: "core",
+          payload: {},
+        },
+      ],
+    });
+    trip.routes.push({
+      id: "route-d-e",
+      dayId: "day-2",
+      fromNodeId: "d",
+      toNodeId: "e",
+      mode: "walking",
+      source: "manual",
+      certainty: "suggested",
+    });
+
+    const effective = resolveEffectiveItinerary(deepFreeze(trip), emptyTripProgress());
+
+    expect(effective.routes.map(({ id }) => id)).toEqual([
+      "route-a-b",
+      "route-b-c",
+      "route-d-e",
+    ]);
+    expect(new Set(effective.routes.map(({ id }) => id)).size).toBe(effective.routes.length);
+  });
+
+  it("fails loudly in development when different days emit the same route owner ID", () => {
+    const trip = tripFixture();
+    trip.endDate = "2026-08-24";
+    trip.days.push({
+      id: "day-2",
+      date: "2026-08-24",
+      title: "Second day",
+      nodes: [
+        {
+          id: "d",
+          dayId: "day-2",
+          kind: "sightseeing",
+          title: "D",
+          timing: { certainty: "unknown" },
+          optionality: "core",
+          payload: {},
+        },
+        {
+          id: "e",
+          dayId: "day-2",
+          kind: "sightseeing",
+          title: "E",
+          timing: { certainty: "unknown" },
+          optionality: "core",
+          payload: {},
+        },
+      ],
+    });
+    trip.routes.push({
+      id: "route-a-b",
+      dayId: "day-2",
+      fromNodeId: "d",
+      toNodeId: "e",
+      mode: "walking",
+      source: "manual",
+      certainty: "suggested",
+    });
+
+    expect(() => resolveEffectiveItinerary(deepFreeze(trip), emptyTripProgress())).toThrow(
+      /duplicate route owner.*route-a-b/i,
+    );
   });
 });

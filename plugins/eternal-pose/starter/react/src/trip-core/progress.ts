@@ -37,6 +37,18 @@ const SHOPPING_STATUSES: ReadonlySet<string> = new Set([
   "skipped",
 ]);
 
+export function nodeCompletionKey(nodeId: string): string {
+  return `node:${nodeId}`;
+}
+
+export function checklistCompletionKey(checklistId: string): string {
+  return `checklist:${checklistId}`;
+}
+
+export function taskCompletionKey(taskId: string): string {
+  return `task:${taskId}`;
+}
+
 export function emptyTripProgress(): TripProgressV1 {
   return {
     version: 1,
@@ -227,7 +239,7 @@ export function collectDayProgressScope(trip: Trip, dayId: string): DayProgressS
   const skippedNodeIds: string[] = [];
 
   for (const node of day.nodes) {
-    completionIds.push(node.id);
+    completionIds.push(nodeCompletionKey(node.id));
 
     if (node.optionality === "optional") {
       skippedNodeIds.push(node.id);
@@ -236,13 +248,18 @@ export function collectDayProgressScope(trip: Trip, dayId: string): DayProgressS
       shoppingItemIds.push(...node.payload.items.map((item) => item.id));
     }
     if (node.kind === "lodging" || node.kind === "logistics") {
-      completionIds.push(...(node.payload.checklist ?? []).map((item) => item.id));
+      completionIds.push(
+        ...(node.payload.checklist ?? []).map((item) => checklistCompletionKey(item.id)),
+      );
     }
   }
 
   for (const task of trip.tasks) {
     if (task.scope === "day" && task.dayId === dayId) {
-      completionIds.push(task.id, ...(task.children ?? []).map((child) => child.id));
+      completionIds.push(
+        taskCompletionKey(task.id),
+        ...(task.children ?? []).map((child) => checklistCompletionKey(child.id)),
+      );
     }
   }
 

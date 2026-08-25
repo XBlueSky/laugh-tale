@@ -53,12 +53,35 @@ const sourceRoutes: RouteEdge[] = [
   },
 ];
 
-function effectiveNodes(ids: string[]): EffectiveNode[] {
+function effectiveNodes(ids: string[], day: TripDay = sourceDay): EffectiveNode[] {
   return ids.map((id) => ({
-    node: sourceDay.nodes.find((candidate) => candidate.id === id)!,
+    node: day.nodes.find((candidate) => candidate.id === id)!,
     sourceNodeId: id,
     completed: false,
   }));
+}
+
+function edge(
+  id: string,
+  fromNodeId: string,
+  toNodeId: string,
+  mode: RouteEdge["mode"],
+): RouteEdge {
+  return {
+    id,
+    dayId: "day-1",
+    fromNodeId,
+    toNodeId,
+    mode,
+    source: "provider",
+    certainty: "suggested",
+    durationMinutes: 8,
+    summary: `Stale ${mode} summary`,
+    navigation: {
+      origin: `${fromNodeId.toUpperCase()} place`,
+      destination: `${toNodeId.toUpperCase()} place`,
+    },
+  };
 }
 
 describe("buildRoutePresentations", () => {
@@ -91,6 +114,7 @@ describe("buildRoutePresentations", () => {
         id: "route:a--c",
         fromNodeId: "a",
         toNodeId: "c",
+        mode: "walking",
         source: "recomposed",
         certainty: "unverified",
         navigation: { origin: "A place", destination: "C place" },
@@ -113,6 +137,114 @@ describe("buildRoutePresentations", () => {
     );
 
     expect(presentation).toMatchObject({ navigable: false });
+  });
+
+  it("emits every owner on one adjacency in stable input order and ignores other days", () => {
+    const alternate = {
+      ...sourceRoutes[0],
+      id: "walk-4m-alternate",
+      source: "provider" as const,
+    };
+    const otherDay = {
+      ...sourceRoutes[0],
+      id: "other-day-edge",
+      dayId: "day-2",
+    };
+
+    const presentations = buildRoutePresentations(
+      {
+        ...sourceDay,
+        routes: [otherDay, alternate, sourceRoutes[0], sourceRoutes[1]],
+      },
+      effectiveNodes(["a", "b", "c"]),
+    );
+
+    expect(presentations.map(({ edge: route }) => route.id)).toEqual([
+      "walk-4m-alternate",
+      "walk-4m",
+      "walk-7m",
+    ]);
+  });
+
+  it("ignores walking access and egress around one substantive recomposed mode", () => {
+    const day: TripDay = {
+      ...sourceDay,
+      nodes: [node("a"), node("b"), node("c"), node("d")],
+    };
+    const [presentation] = buildRoutePresentations(
+      {
+        ...day,
+        routes: [
+          edge("access", "a", "b", "walking"),
+          edge("main-transit", "b", "c", "transit"),
+          edge("egress", "c", "d", "walking"),
+        ],
+      },
+      effectiveNodes(["a", "d"], day),
+    );
+
+    expect(presentation).toMatchObject({
+      edge: {
+        id: "route:a--d",
+        mode: "transit",
+        source: "recomposed",
+        certainty: "unverified",
+        navigation: { origin: "A place", destination: "D place" },
+      },
+      navigable: true,
+    });
+    expect(presentation?.edge).not.toHaveProperty("summary");
+  });
+
+  it("uses the first substantive mode and disables navigation for heterogeneous recomposition", () => {
+    type RuntimeProviderEdge = RouteEdge & {
+      providerPlan: string;
+      departureTime: string;
+      steps: string[];
+      geometry: { encodedPolyline: string };
+      preferences: { avoidTolls: boolean };
+    };
+    const day: TripDay = {
+      ...sourceDay,
+      nodes: [node("a"), node("b"), node("c"), node("d"), node("e")],
+    };
+    const staleTransit: RuntimeProviderEdge = {
+      ...edge("main-transit", "b", "c", "transit"),
+      providerPlan: "Old train plan",
+      departureTime: "2026-08-23T10:00:00+09:00",
+      steps: ["Old platform"],
+      geometry: { encodedPolyline: "stale" },
+      preferences: { avoidTolls: true },
+    };
+    const [presentation] = buildRoutePresentations(
+      {
+        ...day,
+        routes: [
+          edge("access", "a", "b", "walking"),
+          staleTransit,
+          edge("main-driving", "c", "d", "driving"),
+          edge("egress", "d", "e", "walking"),
+        ],
+      },
+      effectiveNodes(["a", "e"], day),
+    );
+
+    expect(presentation).toMatchObject({
+      edge: {
+        id: "route:a--e",
+        mode: "transit",
+        summary: "Mixed modes: transit → driving",
+        source: "recomposed",
+        certainty: "unverified",
+      },
+      navigable: false,
+    });
+    expect(presentation?.edge).not.toHaveProperty("navigation");
+    expect(presentation?.edge).not.toHaveProperty("providerPlan");
+    expect(presentation?.edge).not.toHaveProperty("departureTime");
+    expect(presentation?.edge).not.toHaveProperty("steps");
+    expect(presentation?.edge).not.toHaveProperty("geometry");
+    expect(presentation?.edge).not.toHaveProperty("preferences");
   });
 
   it("fails loudly in development when two edges claim the same owner ID", () => {

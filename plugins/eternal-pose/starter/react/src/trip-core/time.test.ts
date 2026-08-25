@@ -30,6 +30,75 @@ describe("formatTimingLabel", () => {
 });
 
 describe("resolveSchedule", () => {
+  it("rejects timing strings that are not exactly valid HH:mm values", () => {
+    const trip = {
+      timezone: "Asia/Tokyo",
+      days: [
+        {
+          id: "day-1",
+          date: "2026-08-23",
+          title: "Malformed time",
+          nodes: [
+            sightseeingNode("bad-time", "day-1", {
+              start: "08:15:garbage",
+              certainty: "fixed",
+            }),
+          ],
+        },
+      ],
+    } satisfies Pick<Trip, "timezone" | "days">;
+
+    expect(() => resolveSchedule(trip)).toThrow(/bad-time.*HH:mm/i);
+  });
+
+  it.each([-1, 1.5])("rejects invalid dayOffset %s directly", (dayOffset) => {
+    const trip = {
+      timezone: "Asia/Tokyo",
+      days: [
+        {
+          id: "day-1",
+          date: "2026-08-23",
+          title: "Invalid offset",
+          nodes: [
+            sightseeingNode("bad-offset", "day-1", {
+              start: "08:15",
+              end: "09:00",
+              dayOffset,
+              certainty: "fixed",
+            }),
+          ],
+        },
+      ],
+    } satisfies Pick<Trip, "timezone" | "days">;
+
+    expect(() => resolveSchedule(trip)).toThrow(/bad-offset.*dayOffset/i);
+  });
+
+  it("fails fast when two nodes have the same absolute start", () => {
+    const trip = {
+      timezone: "Asia/Tokyo",
+      days: [
+        {
+          id: "day-1",
+          date: "2026-08-23",
+          title: "Ambiguous schedule",
+          nodes: [
+            sightseeingNode("same-a", "day-1", {
+              start: "10:00",
+              certainty: "suggested",
+            }),
+            sightseeingNode("same-b", "day-1", {
+              start: "10:00",
+              certainty: "suggested",
+            }),
+          ],
+        },
+      ],
+    } satisfies Pick<Trip, "timezone" | "days">;
+
+    expect(() => resolveSchedule(trip)).toThrow(/duplicate schedule start.*same-a.*same-b/i);
+  });
+
   it("resolves the day absolute date in the trip IANA timezone", () => {
     const trip = {
       timezone: "Asia/Tokyo",
