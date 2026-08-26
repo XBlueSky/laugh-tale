@@ -2,11 +2,16 @@ import { Buffer } from "node:buffer";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rmdir, unlink } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+const require = createRequire(import.meta.url);
+const { parse: parseBabelProgram, parseExpression: parseBabelExpression } = require(
+  "../vendor/@babel/parser/index.cjs",
+);
 const MAX_TEXT_BYTES = 2 * 1024 * 1024;
 const HARD_SKIPPED_DIRECTORIES = new Set([".git", "coverage", "node_modules"]);
 const BUILD_DIRECTORIES = new Set([".next", ".vite", "build", "coverage", "dist", "out", "playwright-report", "test-results"]);
@@ -423,43 +428,48 @@ function filenameFindings(path) {
   return findings;
 }
 
-const MIN_SECRET_SYNTAX_STEPS = 2_048;
-const SECRET_SYNTAX_STEPS_PER_TOKEN = 16;
-const MAX_CODE_NESTING = 256;
+const MAX_CODE_AST_NODES = 100_000;
+const MAX_COMPONENT_EXPRESSION_ATTEMPTS = 512;
+const MAX_COMPONENT_EXPRESSION_BYTES = 4 * 1024 * 1024;
 const GENERIC_SECRET_NAME =
   /^(?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|secret(?:[_-]?key)?|token|password|authorization|cookie)(?:[_-][A-Za-z0-9]+)*$/i;
 const GENERIC_SECRET_KEY =
   /(^|[^A-Za-z0-9_$])(["']?(?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|secret(?:[_-]?key)?|token|password|authorization|cookie)(?:[_-][A-Za-z0-9]+)*["']?)(?![A-Za-z0-9_$])/gim;
 const CODE_SOURCE_PATH = /\.(?:[cm]?[jt]sx?|vue|svelte|astro)$/i;
-const MARKUP_SOURCE_PATH = /\.(?:vue|svelte|astro)$/i;
-const ASSIGNMENT_OPERATORS = new Set(["=", "??=", "||=", "&&="]);
-const MULTI_CHARACTER_TOKENS = [
-  "??=", "||=", "&&=", "===", "!==", "...", "=>", "/>", "?.", "??", "||", "&&",
-  "==", "!=", "<=", ">=", "++", "--", "**", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=",
-];
-const DECLARATION_BOUNDARIES = new Set([
-  "const", "let", "var", "class", "interface", "type", "function", "import", "export", "return", "throw",
+const COMPONENT_SOURCE_PATH = /\.(?:vue|svelte|astro)$/i;
+const DIRECT_ASSIGNMENT_OPERATORS = new Set(["=", "??=", "||=", "&&="]);
+const TRANSPARENT_EXPRESSION_TYPES = new Set([
+  "ParenthesizedExpression",
+  "TSAsExpression",
+  "TSSatisfiesExpression",
+  "TSTypeAssertion",
+  "TSNonNullExpression",
+  "TypeCastExpression",
 ]);
-const MEMBER_BOUNDARY_MODIFIERS = new Set([
-  "abstract", "accessor", "declare", "override", "private", "protected", "public", "readonly", "static",
+const AST_TRAVERSAL_IGNORED_KEYS = new Set([
+  "comments",
+  "errors",
+  "extra",
+  "leadingComments",
+  "loc",
+  "innerComments",
+  "tokens",
+  "trailingComments",
 ]);
-const POSTFIX_RUNTIME_OPERATORS = new Set([
-  "+", "-", "*", "/", "%", "=", "??=", "||=", "&&=", "??", "||", "&&", "?", "!",
-]);
-const REGEX_PREFIX_KEYWORDS = new Set([
-  "case", "delete", "do", "else", "in", "instanceof", "new", "return", "throw", "typeof", "void", "yield",
-]);
-const CONTROL_HEAD_KEYWORDS = new Set(["catch", "for", "if", "switch", "while", "with"]);
-const REGEX_PREFIX_TOKENS = new Set(["(", "[", "{", ",", ";", ":", "=", "=>", "?", "??", "||", "&&"]);
-const MEMBER_BOUNDARY_TOKENS = new Set(["=", ":", "?", "!", "(", "["]);
-const CODE_VALUE_BOUNDARIES = new Set([";", ",", "}", ")", "]", "/>"]);
-const TYPE_CONTINUATION_TOKENS = new Set([
-  "|", "&", ".", "<", ",", ":", "?", "(", "[", "{", "=>", "extends", "infer", "keyof", "new", "readonly", "typeof", "unique",
-]);
-const TYPE_CONTINUATION_PREFIXES = new Set(["as", "extends", "satisfies"]);
-const STRUCTURAL_OPENERS = new Set(["(", "[", "{"]);
-const STRUCTURAL_CLOSERS = { ")": "(", "]": "[", "}": "{" };
 const RUNTIME_REFERENCE_VALUE = /^(?:process\.env|import\.meta\.env)(?:\.|\[)/i;
+
+class CodeAnalysisLimitError extends Error {}
+
+function createCodeAnalysisState() {
+  return {
+    analysisLimited: false,
+    astNodes: 0,
+    expressionAttempts: 0,
+    expressionBytes: 0,
+    hasSecret: false,
+    malformed: false,
+  };
+}
 
 function lineTerminatorWidth(contents, cursor, limit) {
   if (cursor >= limit) return 0;
@@ -490,461 +500,6 @@ function readQuotedLiteral(contents, start, limit) {
   return { closed: false, end: limit, value: contents.slice(start + 1, limit) };
 }
 
-function canStartRegex(previousToken) {
-  if (previousToken === undefined) return true;
-  if (previousToken.endsControlHead || previousToken.endsStatementBlock) return true;
-  if (previousToken.kind === "identifier" && REGEX_PREFIX_KEYWORDS.has(previousToken.value)) {
-    return true;
-  }
-  return REGEX_PREFIX_TOKENS.has(previousToken.value);
-}
-
-function readRegexLiteral(contents, start, limit) {
-  let cursor = start + 1;
-  let inCharacterClass = false;
-  while (cursor < limit) {
-    if (contents[cursor] === "\\") {
-      if (lineTerminatorWidth(contents, cursor + 1, limit) > 0) {
-        return { closed: false, end: cursor + 1 };
-      }
-      if (cursor + 1 >= limit) return { closed: false, end: limit };
-      cursor += 2;
-      continue;
-    }
-    if (contents[cursor] === "[") inCharacterClass = true;
-    if (contents[cursor] === "]") inCharacterClass = false;
-    if (contents[cursor] === "/" && !inCharacterClass) {
-      cursor += 1;
-      while (cursor < limit && /[A-Za-z]/.test(contents[cursor])) cursor += 1;
-      return { closed: true, end: cursor };
-    }
-    if (lineTerminatorWidth(contents, cursor, limit) > 0) {
-      return { closed: false, end: cursor };
-    }
-    cursor += 1;
-  }
-  return { closed: false, end: limit };
-}
-
-function readIdentifierEscape(contents, start, limit) {
-  if (contents[start] !== "\\" || contents[start + 1] !== "u") return null;
-  let cursor = start + 2;
-  let digits;
-  if (contents[cursor] === "{") {
-    const close = contents.indexOf("}", cursor + 1);
-    if (close === -1 || close >= limit) return null;
-    digits = contents.slice(cursor + 1, close);
-    if (!/^[0-9A-Fa-f]{1,6}$/.test(digits)) return null;
-    cursor = close + 1;
-  } else {
-    digits = contents.slice(cursor, cursor + 4);
-    if (digits.length !== 4 || !/^[0-9A-Fa-f]{4}$/.test(digits)) return null;
-    cursor += 4;
-  }
-  const codePoint = Number.parseInt(digits, 16);
-  if (codePoint > 0x10ffff) return null;
-  return { character: String.fromCodePoint(codePoint), end: cursor };
-}
-
-function identifierCharacterAllowed(character, first) {
-  return first ? /^[A-Za-z_$]$/.test(character) : /^[A-Za-z0-9_$]$/.test(character);
-}
-
-function readIdentifierToken(contents, start, limit) {
-  let cursor = start;
-  let value = "";
-  while (cursor < limit) {
-    const escape = readIdentifierEscape(contents, cursor, limit);
-    const character = escape?.character ?? contents[cursor];
-    if (!identifierCharacterAllowed(character, value.length === 0)) break;
-    value += character;
-    cursor = escape?.end ?? cursor + 1;
-  }
-  return value === "" ? null : { end: cursor, value };
-}
-
-function scanTemplateLiteral(contents, start, limit, nestingDepth) {
-  if (nestingDepth >= MAX_CODE_NESTING) {
-    return {
-      analysisLimited: true,
-      closed: false,
-      end: limit,
-      hasInterpolation: false,
-      hasLineBreak: false,
-      interpolationResults: [],
-      malformed: false,
-      value: "",
-    };
-  }
-  let cursor = start + 1;
-  let value = "";
-  let hasInterpolation = false;
-  let hasLineBreak = false;
-  let malformed = false;
-  let analysisLimited = false;
-  const interpolationResults = [];
-  while (cursor < limit) {
-    const character = contents[cursor];
-    if (character === "\\") {
-      if (contents[cursor + 1] === "\n" || contents[cursor + 1] === "\r") hasLineBreak = true;
-      value += contents.slice(cursor, Math.min(cursor + 2, limit));
-      cursor = Math.min(cursor + 2, limit);
-      continue;
-    }
-    if (character === "`") {
-      return {
-        closed: true,
-        end: cursor + 1,
-        hasInterpolation,
-        hasLineBreak,
-        interpolationResults,
-        malformed,
-        analysisLimited,
-        value,
-      };
-    }
-    if (character === "$" && contents[cursor + 1] === "{") {
-      hasInterpolation = true;
-      const interpolation = tokenizeCodeSegment(contents, cursor + 2, limit, true, true, nestingDepth + 1);
-      interpolationResults.push(interpolation);
-      malformed ||= interpolation.malformed || !interpolation.closedByBrace;
-      analysisLimited ||= interpolation.analysisLimited;
-      cursor = interpolation.cursor;
-      if (contents[cursor] === "}") cursor += 1;
-      continue;
-    }
-    if (character === "\n" || character === "\r") hasLineBreak = true;
-    value += character;
-    cursor += 1;
-  }
-  return {
-    analysisLimited,
-    closed: false,
-    end: limit,
-    hasInterpolation,
-    hasLineBreak,
-    interpolationResults,
-    malformed: true,
-    value,
-  };
-}
-
-function startsStatementBlock(previousToken) {
-  if (previousToken === undefined) return true;
-  if (previousToken.endsControlHead || previousToken.endsStatementBlock) return true;
-  if (previousToken.value === ")" || previousToken.value === "=>") return true;
-  if ([";", "{", "}"].includes(previousToken.value)) return true;
-  return previousToken.kind === "identifier" && ["do", "else", "finally", "try"].includes(previousToken.value);
-}
-
-function startsControlHead(tokens, previousToken) {
-  return (
-    previousToken?.kind === "identifier" &&
-    CONTROL_HEAD_KEYWORDS.has(previousToken.value) &&
-    ![".", "?."].includes(tokens.at(-2)?.value)
-  );
-}
-
-function tokenizeCodeSegment(
-  contents,
-  start = 0,
-  limit = contents.length,
-  stopOnClosingBrace = false,
-  recognizeComments = true,
-  nestingDepth = 0,
-) {
-  const tokens = [];
-  const comments = [];
-  let cursor = start;
-  const delimiterStack = [];
-  let pendingLineBreak = false;
-  let previousSurfaceToken;
-  let malformed = false;
-  let analysisLimited = false;
-
-  const push = (kind, value, extra = {}) => {
-    const token = { kind, value, lineBreakBefore: pendingLineBreak, ...extra };
-    tokens.push(token);
-    previousSurfaceToken = token;
-    pendingLineBreak = false;
-  };
-
-  while (cursor < limit) {
-    const character = contents[cursor];
-    if (/\s/.test(character)) {
-      if (character === "\n" || character === "\r") {
-        pendingLineBreak = true;
-      }
-      cursor += 1;
-      continue;
-    }
-    if (recognizeComments && contents.startsWith("//", cursor)) {
-      let end = cursor + 2;
-      while (end < limit && lineTerminatorWidth(contents, end, limit) === 0) end += 1;
-      comments.push(contents.slice(cursor + 2, end));
-      cursor = end;
-      continue;
-    }
-    if (recognizeComments && contents.startsWith("/*", cursor)) {
-      const close = contents.indexOf("*/", cursor + 2);
-      const contentEnd = close === -1 || close >= limit ? limit : close;
-      const end = close === -1 || close + 2 > limit ? limit : close + 2;
-      const text = contents.slice(cursor + 2, contentEnd);
-      comments.push(text);
-      if (/\r|\n/.test(text)) {
-        pendingLineBreak = true;
-      }
-      if (close === -1 || close + 2 > limit) malformed = true;
-      cursor = end;
-      continue;
-    }
-    if (character === '"' || character === "'") {
-      const literal = readQuotedLiteral(contents, cursor, limit);
-      push("string", literal.value, { static: literal.closed });
-      if (!literal.closed) malformed = true;
-      cursor = literal.end;
-      continue;
-    }
-    if (character === "`") {
-      const template = scanTemplateLiteral(contents, cursor, limit, nestingDepth);
-      push("template", template.value, { static: template.closed && !template.hasInterpolation });
-      malformed ||= template.malformed || !template.closed;
-      analysisLimited ||= template.analysisLimited;
-      for (const interpolation of template.interpolationResults) {
-        tokens.push({ kind: "punctuation", value: "{", lineBreakBefore: false, virtual: true });
-        tokens.push(...interpolation.tokens);
-        tokens.push({ kind: "punctuation", value: "}", lineBreakBefore: false, virtual: true });
-        comments.push(...interpolation.comments);
-      }
-      if (template.hasLineBreak) {
-        pendingLineBreak = true;
-      }
-      cursor = template.end;
-      continue;
-    }
-    if (STRUCTURAL_OPENERS.has(character)) {
-      const context =
-        character === "(" && startsControlHead(tokens, previousSurfaceToken)
-          ? "control-head"
-          : character === "{" && startsStatementBlock(previousSurfaceToken)
-            ? "statement-block"
-            : "expression";
-      delimiterStack.push({ context, value: character });
-      push("punctuation", character);
-      cursor += 1;
-      continue;
-    }
-    if (Object.hasOwn(STRUCTURAL_CLOSERS, character)) {
-      if (stopOnClosingBrace && character === "}" && delimiterStack.length === 0) {
-        return { analysisLimited, closedByBrace: true, comments, cursor, malformed, tokens };
-      }
-      const expectedOpener = STRUCTURAL_CLOSERS[character];
-      const opener = delimiterStack.at(-1);
-      if (opener?.value === expectedOpener) {
-        delimiterStack.pop();
-      } else {
-        malformed = true;
-      }
-      push("punctuation", character, {
-        endsControlHead: character === ")" && opener?.context === "control-head",
-        endsStatementBlock: character === "}" && opener?.context === "statement-block",
-      });
-      cursor += 1;
-      continue;
-    }
-    const identifier = readIdentifierToken(contents, cursor, limit);
-    if (identifier !== null) {
-      push("identifier", identifier.value);
-      cursor = identifier.end;
-      continue;
-    }
-    const number = /^(?:\d+(?:\.\d*)?|\.\d+)/.exec(contents.slice(cursor, limit));
-    if (number !== null) {
-      push("number", number[0]);
-      cursor += number[0].length;
-      continue;
-    }
-    if (character === "/" && !contents.startsWith("/>", cursor) && canStartRegex(previousSurfaceToken)) {
-      const regex = readRegexLiteral(contents, cursor, limit);
-      push("regex", "", { static: regex.closed });
-      if (!regex.closed) malformed = true;
-      cursor = Math.max(regex.end, cursor + 1);
-      continue;
-    }
-    const operator = MULTI_CHARACTER_TOKENS.find((candidate) => contents.startsWith(candidate, cursor));
-    if (operator !== undefined) {
-      push("punctuation", operator);
-      cursor += operator.length;
-      continue;
-    }
-    if (character === "\\" && contents[cursor + 1] === "u") malformed = true;
-    push("punctuation", character);
-    cursor += 1;
-  }
-  if (delimiterStack.length > 0 || stopOnClosingBrace) malformed = true;
-  return { analysisLimited, closedByBrace: false, comments, cursor, malformed, tokens };
-}
-
-function depthsAreZero(depths) {
-  return Object.values(depths).every((depth) => depth === 0);
-}
-
-function createSyntaxBudget(tokenCount) {
-  return {
-    exhausted: false,
-    remaining: Math.max(MIN_SECRET_SYNTAX_STEPS, tokenCount * SECRET_SYNTAX_STEPS_PER_TOKEN),
-  };
-}
-
-function consumeSyntaxStep(budget) {
-  if (budget.remaining <= 0) {
-    budget.exhausted = true;
-    return false;
-  }
-  budget.remaining -= 1;
-  return true;
-}
-
-function looksLikeMemberBoundary(tokens, index) {
-  const token = tokens[index];
-  if (token === undefined) return true;
-  if (token.value === "@" || DECLARATION_BOUNDARIES.has(token.value) || MEMBER_BOUNDARY_MODIFIERS.has(token.value)) {
-    return true;
-  }
-  if (token.kind !== "identifier") return false;
-  return MEMBER_BOUNDARY_TOKENS.has(tokens[index + 1]?.value);
-}
-
-function continuesTypeAcrossLine(tokens, index) {
-  return (
-    TYPE_CONTINUATION_TOKENS.has(tokens[index - 1]?.value) ||
-    TYPE_CONTINUATION_PREFIXES.has(tokens[index]?.value)
-  );
-}
-
-function startsAsiOrMemberBoundary(tokens, index) {
-  if (continuesTypeAcrossLine(tokens, index)) return false;
-  const token = tokens[index];
-  return (
-    token !== undefined &&
-    (token.kind === "identifier" ||
-      token.value === "@" ||
-      DECLARATION_BOUNDARIES.has(token.value) ||
-      MEMBER_BOUNDARY_MODIFIERS.has(token.value) ||
-      looksLikeMemberBoundary(tokens, index))
-  );
-}
-
-function typedAssignmentValueStart(tokens, start, budget) {
-  const depths = { "(": 0, "[": 0, "{": 0, "<": 0 };
-  const opening = new Set(Object.keys(depths));
-  const closing = { ")": "(", "]": "[", "}": "{", ">": "<" };
-  let hasTypeToken = false;
-  for (let cursor = start; cursor < tokens.length; cursor += 1) {
-    if (!consumeSyntaxStep(budget)) return null;
-    const token = tokens[cursor];
-    const topLevel = depthsAreZero(depths);
-    if (
-      topLevel &&
-      token.lineBreakBefore &&
-      hasTypeToken &&
-      startsAsiOrMemberBoundary(tokens, cursor)
-    ) {
-      return null;
-    }
-    const opener = closing[token.value];
-    if (topLevel && (token.value === ";" || token.value === "," || opener !== undefined)) return null;
-    if (topLevel && token.value === "=") return cursor + 1;
-    if (opening.has(token.value)) {
-      depths[token.value] += 1;
-    } else if (opener !== undefined && depths[opener] > 0) {
-      depths[opener] -= 1;
-    }
-    hasTypeToken = true;
-  }
-  return null;
-}
-
-function staticComputedKeyEnd(tokens, keyIndex, budget) {
-  let left = keyIndex - 1;
-  let right = keyIndex + 1;
-  while (tokens[left]?.value === "(" && tokens[right]?.value === ")") {
-    if (!consumeSyntaxStep(budget)) return null;
-    left -= 1;
-    right += 1;
-  }
-  return tokens[left]?.value === "[" && tokens[right]?.value === "]" ? right : null;
-}
-
-function assignmentValueStarts(tokens, keyIndex, budget, computedKeyEnd = null) {
-  let cursor = computedKeyEnd === null ? keyIndex + 1 : computedKeyEnd + 1;
-  if (tokens[cursor]?.value === "?" || tokens[cursor]?.value === "!") cursor += 1;
-  if (ASSIGNMENT_OPERATORS.has(tokens[cursor]?.value)) return [cursor + 1];
-  if (tokens[cursor]?.value !== ":") return [];
-  const directValue = cursor + 1;
-  const typedValue = typedAssignmentValueStart(tokens, directValue, budget);
-  return typedValue === null ? [directValue] : [directValue, typedValue];
-}
-
-function prefixAssertionEnd(tokens, start, budget) {
-  if (tokens[start]?.value !== "<") return null;
-  let depth = 0;
-  let hasTypeToken = false;
-  for (let cursor = start; cursor < tokens.length; cursor += 1) {
-    if (!consumeSyntaxStep(budget)) return null;
-    if (tokens[cursor].value === "<") {
-      depth += 1;
-      continue;
-    }
-    if (tokens[cursor].value === ">") {
-      depth -= 1;
-      if (depth === 0) return hasTypeToken ? cursor + 1 : null;
-      continue;
-    }
-    if (depth > 0) hasTypeToken = true;
-  }
-  return null;
-}
-
-function consumeTypeScriptPostfix(tokens, start, closers, budget) {
-  if (tokens[start]?.value !== "as" && tokens[start]?.value !== "satisfies") {
-    return { cursor: start, valid: true };
-  }
-  const depths = { "(": 0, "[": 0, "{": 0, "<": 0 };
-  const opening = new Set(Object.keys(depths));
-  const closing = { ")": "(", "]": "[", "}": "{", ">": "<" };
-  let cursor = start + 1;
-  let hasTypeToken = false;
-  while (cursor < tokens.length) {
-    if (!consumeSyntaxStep(budget)) return { cursor, valid: false };
-    const token = tokens[cursor];
-    const topLevel = depthsAreZero(depths);
-    if (
-      topLevel &&
-      (token.value === ";" || token.value === "," || token.value === "/>" || closers.includes(token.value))
-    ) {
-      break;
-    }
-    if (topLevel && POSTFIX_RUNTIME_OPERATORS.has(token.value)) return { cursor, valid: false };
-    if (
-      topLevel &&
-      token.lineBreakBefore &&
-      startsAsiOrMemberBoundary(tokens, cursor)
-    ) {
-      break;
-    }
-    const opener = closing[token.value];
-    if (opening.has(token.value)) {
-      depths[token.value] += 1;
-    } else if (opener !== undefined && depths[opener] > 0) {
-      depths[opener] -= 1;
-    }
-    hasTypeToken = true;
-    cursor += 1;
-  }
-  return { cursor, valid: hasTypeToken };
-}
-
 function isSecretLiteralValue(value) {
   return (
     /^[A-Za-z0-9_./+~-]{16,}={0,2}$/.test(value) &&
@@ -953,64 +508,286 @@ function isSecretLiteralValue(value) {
   );
 }
 
-function isCodeValueBoundary(tokens, cursor) {
-  const token = tokens[cursor];
-  if (token === undefined) return true;
-  if (CODE_VALUE_BOUNDARIES.has(token.value)) return true;
-  return token.lineBreakBefore && startsAsiOrMemberBoundary(tokens, cursor);
+function parserLanguage(path, languageHint) {
+  const normalizedHint = languageHint?.trim().toLowerCase() ?? "";
+  const typeScript =
+    ["ts", "tsx", "typescript", "text/typescript"].includes(normalizedHint) ||
+    /\.(?:[cm]?ts|tsx)$/i.test(path) ||
+    normalizedHint === "astro";
+  const jsx =
+    ["jsx", "tsx", "astro"].includes(normalizedHint) ||
+    /\.(?:jsx|tsx)$/i.test(path);
+  return { jsx, typeScript };
 }
 
-function secretLiteralAt(tokens, start, allowTrailingProse, budget) {
-  const closers = [];
-  let cursor = start;
-  while (tokens[cursor]?.value === "{" || tokens[cursor]?.value === "(") {
-    closers.push(tokens[cursor].value === "{" ? "}" : ")");
-    cursor += 1;
+function parserSourceType(path) {
+  if (/\.(?:mjs|mts)$/i.test(path)) return "module";
+  if (/\.(?:cjs|cts)$/i.test(path)) return "commonjs";
+  return "unambiguous";
+}
+
+function babelParserOptions(path, languageHint) {
+  const language = parserLanguage(path, languageHint);
+  const plugins = ["decorators-legacy"];
+  const sourceType = parserSourceType(path);
+  if (language.typeScript) {
+    plugins.push(["typescript", { dts: /\.d\.(?:ts|mts|cts)$/i.test(path) }]);
   }
-  while (tokens[cursor]?.value === "<") {
-    const assertionEnd = prefixAssertionEnd(tokens, cursor, budget);
-    if (assertionEnd === null) return false;
-    cursor = assertionEnd;
-  }
-  const literal = tokens[cursor];
-  if (
-    literal === undefined ||
-    (literal.kind !== "string" && literal.kind !== "template") ||
-    !literal.static ||
-    !isSecretLiteralValue(literal.value)
+  if (language.jsx) plugins.push("jsx");
+  const options = {
+    attachComment: false,
+    createParenthesizedExpressions: true,
+    errorRecovery: false,
+    plugins,
+    sourceType,
+  };
+  if (sourceType !== "commonjs") options.allowAwaitOutsideFunction = true;
+  return options;
+}
+
+function componentExpressionParserOptions(path) {
+  return {
+    allowAwaitOutsideFunction: true,
+    attachComment: false,
+    createParenthesizedExpressions: true,
+    errorRecovery: false,
+    plugins: ["decorators-legacy", "typescript", "jsx"],
+    sourceType: "unambiguous",
+    sourceFilename: path,
+  };
+}
+
+function isParserSyntaxError(error) {
+  return (
+    error instanceof SyntaxError ||
+    error?.code === "BABEL_PARSER_SYNTAX_ERROR" ||
+    error?.code === "BABEL_PARSER_SOURCETYPE_MODULE_REQUIRED"
+  );
+}
+
+function unwrapTransparentExpression(node) {
+  let current = node;
+  const seen = new Set();
+  while (
+    current !== null &&
+    typeof current === "object" &&
+    TRANSPARENT_EXPRESSION_TYPES.has(current.type) &&
+    current.expression !== undefined &&
+    !seen.has(current)
   ) {
-    return false;
+    seen.add(current);
+    current = current.expression;
   }
-  cursor += 1;
-  const postfix = consumeTypeScriptPostfix(tokens, cursor, closers, budget);
-  if (!postfix.valid) return false;
-  cursor = postfix.cursor;
-  for (const closer of closers.reverse()) {
-    if (tokens[cursor]?.value !== closer) return false;
-    cursor += 1;
-  }
-  return allowTrailingProse || isCodeValueBoundary(tokens, cursor);
+  return current;
 }
 
-function containsTokenizedSecret(tokens, budget, allowTrailingProse = false) {
-  for (let index = 0; index < tokens.length; index += 1) {
-    if (!consumeSyntaxStep(budget)) return false;
-    const token = tokens[index];
-    const isIdentifierKey = token.kind === "identifier" && GENERIC_SECRET_NAME.test(token.value);
-    const computedKeyEnd =
-      token.kind === "string" || (token.kind === "template" && token.static)
-        ? staticComputedKeyEnd(tokens, index, budget)
-        : null;
-    const isQuotedKey =
-      (token.kind === "string" || (token.kind === "template" && token.static)) &&
-      GENERIC_SECRET_NAME.test(token.value) &&
-      (tokens[index + 1]?.value === ":" || computedKeyEnd !== null);
-    if (!isIdentifierKey && !isQuotedKey) continue;
-    for (const valueStart of assignmentValueStarts(tokens, index, budget, computedKeyEnd)) {
-      if (secretLiteralAt(tokens, valueStart, allowTrailingProse, budget)) return true;
+function staticLiteralValue(node) {
+  const current = unwrapTransparentExpression(node);
+  if (current?.type === "StringLiteral") return current.value;
+  if (current?.type !== "TemplateLiteral" || current.expressions?.length !== 0 || current.quasis?.length !== 1) {
+    return null;
+  }
+  return current.quasis[0]?.value?.cooked ?? current.quasis[0]?.value?.raw ?? null;
+}
+
+function staticPropertyName(node) {
+  const current = unwrapTransparentExpression(node);
+  if (current?.type === "Identifier" || current?.type === "JSXIdentifier") return current.name;
+  return staticLiteralValue(current);
+}
+
+function staticComputedPropertyName(node) {
+  const current = unwrapTransparentExpression(node);
+  if (current?.type === "StringLiteral" || current?.type === "TemplateLiteral") {
+    return staticLiteralValue(current);
+  }
+  return null;
+}
+
+function propertyDefinitionKeyName(node) {
+  return node.computed ? staticComputedPropertyName(node.key) : staticPropertyName(node.key);
+}
+
+function directKeyName(node) {
+  const current = unwrapTransparentExpression(node);
+  if (current?.type === "Identifier" || current?.type === "JSXIdentifier") return current.name;
+  if (current?.type === "MemberExpression" || current?.type === "OptionalMemberExpression") {
+    return current.computed
+      ? staticComputedPropertyName(current.property)
+      : staticPropertyName(current.property);
+  }
+  return staticPropertyName(current);
+}
+
+function valueFromAssignmentPattern(node) {
+  return node?.type === "AssignmentPattern" ? node.right : node;
+}
+
+function directSecretPair(name, valueNode) {
+  if (typeof name !== "string" || !GENERIC_SECRET_NAME.test(name)) return false;
+  const value = staticLiteralValue(valueFromAssignmentPattern(valueNode));
+  return typeof value === "string" && isSecretLiteralValue(value);
+}
+
+function astNodeHasDirectSecret(node) {
+  switch (node.type) {
+    case "VariableDeclarator":
+      return directSecretPair(directKeyName(node.id), node.init);
+    case "AssignmentPattern":
+      return directSecretPair(directKeyName(node.left), node.right);
+    case "AssignmentExpression":
+      return (
+        DIRECT_ASSIGNMENT_OPERATORS.has(node.operator) &&
+        directSecretPair(directKeyName(node.left), node.right)
+      );
+    case "ObjectProperty":
+      return directSecretPair(propertyDefinitionKeyName(node), node.value);
+    case "ClassProperty":
+    case "ClassAccessorProperty":
+    case "TSPropertySignature":
+      return directSecretPair(propertyDefinitionKeyName(node), node.value ?? node.initializer);
+    case "TSEnumMember":
+      return directSecretPair(staticPropertyName(node.id), node.initializer);
+    case "JSXAttribute": {
+      const value =
+        node.value?.type === "JSXExpressionContainer" ? node.value.expression : node.value;
+      return directSecretPair(staticPropertyName(node.name), value);
+    }
+    default:
+      return false;
+  }
+}
+
+function astChildren(node) {
+  const children = [];
+  for (const [key, value] of Object.entries(node)) {
+    if (AST_TRAVERSAL_IGNORED_KEYS.has(key) || value === null || typeof value !== "object") continue;
+    if (Array.isArray(value)) {
+      for (let index = value.length - 1; index >= 0; index -= 1) {
+        if (value[index] !== null && typeof value[index] === "object" && typeof value[index].type === "string") {
+          children.push(value[index]);
+        }
+      }
+      continue;
+    }
+    if (typeof value.type === "string") children.push(value);
+  }
+  return children;
+}
+
+function analyzeAst(root, comments, state) {
+  for (const comment of comments ?? []) {
+    if (typeof comment?.value === "string" && containsNonCodeGenericSecret(comment.value)) {
+      state.hasSecret = true;
     }
   }
-  return false;
+
+  const stack = [root];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    state.astNodes += 1;
+    if (state.astNodes > MAX_CODE_AST_NODES) throw new CodeAnalysisLimitError();
+    if (astNodeHasDirectSecret(node)) state.hasSecret = true;
+    stack.push(...astChildren(node));
+  }
+}
+
+function analyzeQuotedPropertyFragment(path, contents, state) {
+  if (!/^\s*["']/.test(contents)) return;
+  try {
+    const expression = parseBabelExpression(`({\n${contents}\n})`, componentExpressionParserOptions(path));
+    analyzeAst(expression, expression.comments, state);
+  } catch {
+    // The complete-program parser still owns the stable malformed-code result.
+  }
+}
+
+function analyzeProgramSource(path, contents, state, languageHint) {
+  if (state.analysisLimited || state.malformed) return;
+  try {
+    const ast = parseBabelProgram(contents, {
+      ...babelParserOptions(path, languageHint),
+      sourceFilename: path,
+    });
+    analyzeAst(ast.program, ast.comments, state);
+  } catch (error) {
+    if (error instanceof CodeAnalysisLimitError || error instanceof RangeError) {
+      state.analysisLimited = true;
+    } else {
+      if (isParserSyntaxError(error)) analyzeQuotedPropertyFragment(path, contents, state);
+      state.malformed = true;
+    }
+  }
+}
+
+function normalizeFrameworkExpression(contents, componentType) {
+  const expression = contents.trim();
+  if (expression.startsWith("...")) return "[" + expression + "]";
+  if (componentType !== "svelte") return expression;
+  if (/^\/[A-Za-z][\w-]*$/.test(expression) || /^:else$/.test(expression)) return "undefined";
+  const directive = /^([#:@/])([A-Za-z][\w-]*)(?:\s+([\s\S]*))?$/.exec(expression);
+  if (directive === null) return expression;
+  const [, marker, name, remainder = ""] = directive;
+  if (marker === "/") return "undefined";
+  if (marker === ":" && name === "else" && remainder.startsWith("if ")) return remainder.slice(3);
+  if (marker === "#" && name === "each") {
+    const asIndex = remainder.indexOf(" as ");
+    return asIndex === -1 ? remainder : remainder.slice(0, asIndex);
+  }
+  if (marker === "@" && name === "const") return remainder;
+  return remainder === "" ? "undefined" : remainder;
+}
+
+function consumeExpressionProbe(state, contents) {
+  state.expressionAttempts += 1;
+  state.expressionBytes += Buffer.byteLength(contents);
+  if (
+    state.expressionAttempts > MAX_COMPONENT_EXPRESSION_ATTEMPTS ||
+    state.expressionBytes > MAX_COMPONENT_EXPRESSION_BYTES
+  ) {
+    throw new CodeAnalysisLimitError();
+  }
+}
+
+function tryParseComponentExpression(path, contents, componentType, state) {
+  const expression = normalizeFrameworkExpression(contents, componentType);
+  consumeExpressionProbe(state, expression);
+  try {
+    const node = parseBabelExpression(expression, componentExpressionParserOptions(path));
+    return { comments: node.comments ?? [], node };
+  } catch (error) {
+    if (isParserSyntaxError(error)) return null;
+    throw new CodeAnalysisLimitError();
+  }
+}
+
+function findBracedComponentExpression(path, contents, start, componentType, state) {
+  let candidate = contents.indexOf("}", start + 1);
+  while (candidate !== -1) {
+    const parsed = tryParseComponentExpression(
+      path,
+      contents.slice(start + 1, candidate),
+      componentType,
+      state,
+    );
+    if (parsed !== null) return { ...parsed, end: candidate + 1 };
+    candidate = contents.indexOf("}", candidate + 1);
+  }
+  return null;
+}
+
+function findVueInterpolation(path, contents, start, state) {
+  let candidate = contents.indexOf("}}", start + 2);
+  while (candidate !== -1) {
+    const parsed = tryParseComponentExpression(path, contents.slice(start + 2, candidate), "vue", state);
+    if (parsed !== null) return { ...parsed, end: candidate + 2 };
+    candidate = contents.indexOf("}}", candidate + 1);
+  }
+  return null;
+}
+
+function analyzeComponentExpression(expression, state) {
+  analyzeAst(expression.node, expression.comments, state);
 }
 
 function markupNameCharacter(character) {
@@ -1023,90 +800,347 @@ function skipMarkupWhitespace(contents, start) {
   return cursor;
 }
 
-function skipMarkupExpression(contents, start) {
-  let cursor = start;
-  let depth = 0;
+function readMarkupQuotedValue(contents, start) {
+  const quote = contents[start];
+  const end = contents.indexOf(quote, start + 1);
+  if (end === -1) return { closed: false, end: contents.length, value: "" };
+  return { closed: true, end: end + 1, value: contents.slice(start + 1, end) };
+}
+
+function markupBinding(name, componentType) {
+  let normalized = name;
+  let expression = false;
+  if (componentType === "vue" && normalized.startsWith(":")) {
+    normalized = normalized.slice(1);
+    expression = true;
+  } else if (componentType === "vue" && normalized.startsWith("v-bind:")) {
+    normalized = normalized.slice("v-bind:".length);
+    expression = true;
+  } else if (componentType === "vue" && normalized === "v-bind") {
+    normalized = "";
+    expression = true;
+  }
+  normalized = normalized.split(".")[0];
+  return { expression, name: normalized };
+}
+
+function analyzeMarkupAttribute(path, componentType, name, value, valueType, state) {
+  const binding = markupBinding(name, componentType);
+  if (valueType === "expression") {
+    analyzeComponentExpression(value, state);
+    if (directSecretPair(binding.name, value.node)) state.hasSecret = true;
+    return;
+  }
+  if (binding.expression) {
+    const expression = tryParseComponentExpression(path, value, componentType, state);
+    if (expression === null) {
+      state.malformed = true;
+      return;
+    }
+    analyzeComponentExpression(expression, state);
+    if (directSecretPair(binding.name, expression.node)) state.hasSecret = true;
+    return;
+  }
+  if (directSecretPair(binding.name, { type: "StringLiteral", value })) state.hasSecret = true;
+}
+
+function parseMarkupStartTag(path, contents, start, componentType, state) {
+  let cursor = start + 1;
+  const nameStart = cursor;
+  while (markupNameCharacter(contents[cursor])) cursor += 1;
+  if (cursor === nameStart) return null;
+  const tagName = contents.slice(nameStart, cursor);
+  const attributes = new Map();
+
   while (cursor < contents.length) {
-    const character = contents[cursor];
-    if (character === '"' || character === "'" || character === "`") {
-      const literal = readQuotedLiteral(contents, cursor, contents.length);
-      cursor = Math.max(literal.end, cursor + 1);
+    cursor = skipMarkupWhitespace(contents, cursor);
+    if (contents.startsWith("/>", cursor)) {
+      return { attributes, cursor: cursor + 2, selfClosing: true, tagName };
+    }
+    if (contents[cursor] === ">") {
+      return { attributes, cursor: cursor + 1, selfClosing: false, tagName };
+    }
+    if (contents[cursor] === "{") {
+      const expression = findBracedComponentExpression(path, contents, cursor, componentType, state);
+      if (expression === null) {
+        state.malformed = true;
+        return { attributes, cursor: contents.length, selfClosing: false, tagName };
+      }
+      analyzeComponentExpression(expression, state);
+      cursor = expression.end;
       continue;
     }
-    if (character === "{") depth += 1;
-    if (character === "}") {
-      depth -= 1;
-      cursor += 1;
-      if (depth === 0) return cursor;
+
+    const attributeStart = cursor;
+    while (markupNameCharacter(contents[cursor])) cursor += 1;
+    if (cursor === attributeStart) {
+      state.malformed = true;
+      return { attributes, cursor: contents.length, selfClosing: false, tagName };
+    }
+    const attributeName = contents.slice(attributeStart, cursor);
+    cursor = skipMarkupWhitespace(contents, cursor);
+    if (contents[cursor] !== "=") {
+      attributes.set(attributeName.toLowerCase(), "");
       continue;
+    }
+    cursor = skipMarkupWhitespace(contents, cursor + 1);
+    if (cursor >= contents.length) {
+      state.malformed = true;
+      return { attributes, cursor, selfClosing: false, tagName };
+    }
+
+    if (contents[cursor] === '"' || contents[cursor] === "'") {
+      const literal = readMarkupQuotedValue(contents, cursor);
+      if (!literal.closed) {
+        state.malformed = true;
+        return { attributes, cursor: contents.length, selfClosing: false, tagName };
+      }
+      attributes.set(attributeName.toLowerCase(), literal.value);
+      analyzeMarkupAttribute(path, componentType, attributeName, literal.value, "literal", state);
+      cursor = literal.end;
+      continue;
+    }
+    if (contents[cursor] === "{") {
+      const expression = findBracedComponentExpression(path, contents, cursor, componentType, state);
+      if (expression === null) {
+        state.malformed = true;
+        return { attributes, cursor: contents.length, selfClosing: false, tagName };
+      }
+      analyzeMarkupAttribute(path, componentType, attributeName, expression, "expression", state);
+      cursor = expression.end;
+      continue;
+    }
+
+    const valueStart = cursor;
+    while (
+      cursor < contents.length &&
+      !/\s/.test(contents[cursor]) &&
+      contents[cursor] !== ">" &&
+      !contents.startsWith("/>", cursor)
+    ) {
+      cursor += 1;
+    }
+    if (cursor === valueStart) {
+      state.malformed = true;
+      return { attributes, cursor: contents.length, selfClosing: false, tagName };
+    }
+    const value = contents.slice(valueStart, cursor);
+    attributes.set(attributeName.toLowerCase(), value);
+    analyzeMarkupAttribute(path, componentType, attributeName, value, "literal", state);
+  }
+
+  state.malformed = true;
+  return { attributes, cursor, selfClosing: false, tagName };
+}
+
+function findRawElementClose(contents, lowerContents, start, tagName) {
+  const prefix = "</" + tagName.toLowerCase();
+  let candidate = lowerContents.indexOf(prefix, start);
+  while (candidate !== -1) {
+    const boundary = lowerContents[candidate + prefix.length];
+    if (boundary === ">" || /\s/.test(boundary ?? "")) {
+      const close = lowerContents.indexOf(">", candidate + prefix.length);
+      if (close === -1) return null;
+      return { bodyEnd: candidate, end: close + 1 };
+    }
+    candidate = lowerContents.indexOf(prefix, candidate + 1);
+  }
+  return null;
+}
+
+function scriptLanguage(attributes) {
+  const language = attributes.get("lang")?.trim().toLowerCase();
+  if (language) return language;
+  const type = attributes.get("type")?.trim().toLowerCase();
+  if (type?.includes("typescript")) return "ts";
+  if (type?.includes("jsx")) return "jsx";
+  return "js";
+}
+
+function scriptContainsCode(attributes) {
+  const type = attributes.get("type")?.trim().toLowerCase();
+  return (
+    type === undefined ||
+    type === "" ||
+    type === "module" ||
+    type.includes("javascript") ||
+    type.includes("ecmascript") ||
+    type.includes("typescript") ||
+    type.includes("jsx")
+  );
+}
+
+function consumeMarkupDeclaration(contents, start) {
+  let cursor = start;
+  let quote = null;
+  while (cursor < contents.length) {
+    const character = contents[cursor];
+    if (quote !== null) {
+      if (character === quote) quote = null;
+    } else if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === ">") {
+      return cursor + 1;
     }
     cursor += 1;
   }
-  return cursor;
+  return null;
 }
 
-function containsStaticMarkupSecret(contents) {
-  let cursor = 0;
-  while (cursor < contents.length) {
-    const tagStart = contents.indexOf("<", cursor);
-    if (tagStart === -1) return false;
-    cursor = tagStart + 1;
-    if (!/[A-Za-z]/.test(contents[cursor] ?? "")) continue;
-    while (markupNameCharacter(contents[cursor])) cursor += 1;
+function componentTypeForPath(path) {
+  return path.slice(path.lastIndexOf(".") + 1).toLowerCase();
+}
 
-    while (cursor < contents.length) {
-      cursor = skipMarkupWhitespace(contents, cursor);
-      if (contents.startsWith("/>", cursor)) {
-        cursor += 2;
+function analyzeMarkupSource(path, contents, start, state) {
+  const componentType = componentTypeForPath(path);
+  const lowerContents = contents.toLowerCase();
+  let cursor = start;
+
+  while (cursor < contents.length && !state.analysisLimited && !state.malformed) {
+    if (contents.startsWith("<!--", cursor)) {
+      const close = contents.indexOf("-->", cursor + 4);
+      if (close === -1) {
+        state.malformed = true;
         break;
       }
-      if (contents[cursor] === ">") {
-        cursor += 1;
+      if (containsNonCodeGenericSecret(contents.slice(cursor + 4, close))) state.hasSecret = true;
+      cursor = close + 3;
+      continue;
+    }
+    if (componentType === "vue" && contents.startsWith("{{", cursor)) {
+      const interpolation = findVueInterpolation(path, contents, cursor, state);
+      if (interpolation === null) {
+        state.malformed = true;
         break;
       }
-      if (contents[cursor] === "{") {
-        cursor = skipMarkupExpression(contents, cursor);
-        continue;
+      analyzeComponentExpression(interpolation, state);
+      cursor = interpolation.end;
+      continue;
+    }
+    if ((componentType === "svelte" || componentType === "astro") && contents[cursor] === "{") {
+      const expression = findBracedComponentExpression(path, contents, cursor, componentType, state);
+      if (expression === null) {
+        state.malformed = true;
+        break;
       }
+      analyzeComponentExpression(expression, state);
+      cursor = expression.end;
+      continue;
+    }
+    if (contents[cursor] !== "<") {
+      cursor += 1;
+      continue;
+    }
+    if (contents.startsWith("</", cursor)) {
+      const close = consumeMarkupDeclaration(contents, cursor + 2);
+      if (close === null) {
+        state.malformed = true;
+        break;
+      }
+      cursor = close;
+      continue;
+    }
+    if (contents.startsWith("<!", cursor) || contents.startsWith("<?", cursor)) {
+      const close = consumeMarkupDeclaration(contents, cursor + 2);
+      if (close === null) {
+        state.malformed = true;
+        break;
+      }
+      cursor = close;
+      continue;
+    }
+    if (!/[A-Za-z]/.test(contents[cursor + 1] ?? "")) {
+      cursor += 1;
+      continue;
+    }
 
-      const nameStart = cursor;
-      while (markupNameCharacter(contents[cursor])) cursor += 1;
-      if (cursor === nameStart) {
-        cursor += 1;
-        continue;
+    const tag = parseMarkupStartTag(path, contents, cursor, componentType, state);
+    if (tag === null) {
+      cursor += 1;
+      continue;
+    }
+    cursor = tag.cursor;
+    const lowerTagName = tag.tagName.toLowerCase();
+    if (tag.selfClosing || (lowerTagName !== "script" && lowerTagName !== "style")) continue;
+    const close = findRawElementClose(contents, lowerContents, cursor, lowerTagName);
+    if (close === null) {
+      state.malformed = true;
+      break;
+    }
+    const body = contents.slice(cursor, close.bodyEnd);
+    if (lowerTagName === "script") {
+      if (scriptContainsCode(tag.attributes)) {
+        analyzeProgramSource(path, body, state, scriptLanguage(tag.attributes));
+      } else if (containsNonCodeGenericSecret(body)) {
+        state.hasSecret = true;
       }
-      const name = contents.slice(nameStart, cursor);
-      cursor = skipMarkupWhitespace(contents, cursor);
-      if (contents[cursor] !== "=") continue;
-      cursor = skipMarkupWhitespace(contents, cursor + 1);
-      const quote = contents[cursor];
-      if (quote !== '"' && quote !== "'") {
-        cursor = contents[cursor] === "{" ? skipMarkupExpression(contents, cursor) : cursor + 1;
-        continue;
+    }
+    cursor = close.end;
+  }
+}
+
+function lineEnd(contents, start) {
+  const newline = contents.indexOf("\n", start);
+  return newline === -1 ? contents.length : newline;
+}
+
+function lineContents(contents, start, end) {
+  const withoutCarriageReturn = end > start && contents[end - 1] === "\r" ? end - 1 : end;
+  return contents.slice(start, withoutCarriageReturn);
+}
+
+function astroFrontmatter(contents) {
+  const firstStart = contents.charCodeAt(0) === 0xfeff ? 1 : 0;
+  const firstEnd = lineEnd(contents, firstStart);
+  if (lineContents(contents, firstStart, firstEnd).trim() !== "---") {
+    return { body: null, markupStart: 0, malformed: false };
+  }
+  let cursor = firstEnd < contents.length ? firstEnd + 1 : contents.length;
+  const bodyStart = cursor;
+  while (cursor <= contents.length) {
+    const end = lineEnd(contents, cursor);
+    if (lineContents(contents, cursor, end).trim() === "---") {
+      return {
+        body: contents.slice(bodyStart, cursor),
+        malformed: false,
+        markupStart: end < contents.length ? end + 1 : end,
+      };
+    }
+    if (end === contents.length) break;
+    cursor = end + 1;
+  }
+  return { body: null, markupStart: contents.length, malformed: true };
+}
+
+function containsComponentGenericSecret(path, contents) {
+  const state = createCodeAnalysisState();
+  try {
+    let markupStart = 0;
+    if (/\.astro$/i.test(path)) {
+      const frontmatter = astroFrontmatter(contents);
+      if (frontmatter.malformed) {
+        state.malformed = true;
+        return state;
       }
-      const literal = readQuotedLiteral(contents, cursor, contents.length);
-      if (literal.closed && GENERIC_SECRET_NAME.test(name) && isSecretLiteralValue(literal.value)) {
-        return true;
-      }
-      cursor = Math.max(literal.end, cursor + 1);
+      markupStart = frontmatter.markupStart;
+      if (frontmatter.body !== null) analyzeProgramSource(path, frontmatter.body, state, "astro");
+    }
+    analyzeMarkupSource(path, contents, markupStart, state);
+  } catch (error) {
+    if (error instanceof CodeAnalysisLimitError || error instanceof RangeError) {
+      state.analysisLimited = true;
+    } else {
+      state.malformed = true;
     }
   }
-  return false;
+  return state;
 }
 
 function containsCodeGenericSecret(path, contents) {
-  const tokenized = tokenizeCodeSegment(contents);
-  const budget = createSyntaxBudget(tokenized.tokens.length);
-  const codeHasSecret = containsTokenizedSecret(tokenized.tokens, budget);
-  const commentHasSecret = tokenized.comments.some((comment) => containsNonCodeGenericSecret(comment));
-  return {
-    analysisLimited: tokenized.analysisLimited || budget.exhausted,
-    hasSecret:
-      codeHasSecret ||
-      commentHasSecret ||
-      (MARKUP_SOURCE_PATH.test(path) && containsStaticMarkupSecret(contents)),
-    malformed: tokenized.malformed,
-  };
+  if (COMPONENT_SOURCE_PATH.test(path)) return containsComponentGenericSecret(path, contents);
+  const state = createCodeAnalysisState();
+  analyzeProgramSource(path, contents, state);
+  return state;
 }
 
 function skipNonCodeTrivia(contents, start) {
@@ -1134,7 +1168,10 @@ function containsNonCodeGenericSecret(contents) {
   return false;
 }
 
-function containsGenericSecretLiteral(path, contents) {
+function containsGenericSecretLiteral(path, contents, truncated) {
+  if (CODE_SOURCE_PATH.test(path) && truncated) {
+    return { analysisLimited: true, hasSecret: false, malformed: false };
+  }
   if (CODE_SOURCE_PATH.test(path)) return containsCodeGenericSecret(path, contents);
   return {
     analysisLimited: false,
@@ -1143,7 +1180,7 @@ function containsGenericSecretLiteral(path, contents) {
   };
 }
 
-function contentFindings(path, contents) {
+function contentFindings(path, contents, truncated = false) {
   const findings = [];
   const addIfMatched = (expression, severity, code, ruleName) => {
     if (expression.test(contents)) findings.push(finding(severity, code, path, `${ruleName} detected in "${path}".`));
@@ -1151,7 +1188,7 @@ function contentFindings(path, contents) {
 
   addIfMatched(/AIza[0-9A-Za-z_-]{35}/, "error", "credential.google-api-key", "Google API key-shaped literal");
   addIfMatched(/\bBearer\s+[A-Za-z0-9._~+/-]{20,}={0,2}/i, "error", "credential.bearer-token", "Bearer token-shaped literal");
-  const genericSecretScan = containsGenericSecretLiteral(path, contents);
+  const genericSecretScan = containsGenericSecretLiteral(path, contents, truncated);
   if (genericSecretScan.malformed) {
     findings.push(
       finding(
@@ -1282,7 +1319,9 @@ export async function scanPublication(rootDir, testOperations = {}) {
 
     try {
       const contents = await readTextPrefix(fullPath, stats.size);
-      if (contents !== null) findings.push(...contentFindings(relativePath, contents));
+      if (contents !== null) {
+        findings.push(...contentFindings(relativePath, contents, stats.size > MAX_TEXT_BYTES));
+      }
     } catch {
       findings.push(finding("error", "scan.unreadable-file", relativePath, `Publication file could not be inspected at "${relativePath}".`));
     }

@@ -1,5 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { realpath as realpathPath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -81,6 +82,10 @@ function expectTypeScriptSyntaxValid(source: string): void {
   expect(diagnostics.filter(({ category }) => category === ts.DiagnosticCategory.Error)).toEqual([]);
 }
 
+function sha256(contents: string | Uint8Array): string {
+  return createHash("sha256").update(contents).digest("hex");
+}
+
 function createValidGeneratedProject(root: string): void {
   const files: Record<string, string> = {
     "README.md": "# Trip\n",
@@ -118,6 +123,68 @@ function createValidGeneratedProject(root: string): void {
 
 afterEach(() => {
   for (const root of temporaryRoots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+
+describe("vendored Babel parser", () => {
+  const vendorRoot = join(repoRoot, "plugins/eternal-pose/vendor/@babel/parser");
+  const parserPath = join(vendorRoot, "index.cjs");
+  const licensePath = join(vendorRoot, "LICENSE");
+  const upstreamPath = join(vendorRoot, "UPSTREAM.json");
+
+  test("pins the exact audited runtime, license, and upstream integrity metadata", () => {
+    const parser = readFileSync(parserPath);
+    const license = readFileSync(licensePath);
+    const upstream = JSON.parse(readFileSync(upstreamPath, "utf8")) as Record<string, string>;
+    const notice = readFileSync(join(repoRoot, "plugins/eternal-pose/THIRD_PARTY_NOTICES.md"), "utf8");
+
+    expect(parser.byteLength).toBe(513_214);
+    expect(sha256(parser)).toBe("6969920ae0610df927b6b3e675d1309372c268e36d391652af8e3e0183cbe8f8");
+    expect(license.byteLength).toBe(1_086);
+    expect(sha256(license)).toBe("2e97627cb278aa7556fb9e8817368302301a595b6c7582512b8d74c57b773652");
+    expect(upstream).toEqual({
+      name: "@babel/parser",
+      version: "7.29.8",
+      source: "https://registry.npmjs.org/@babel/parser/-/parser-7.29.8.tgz",
+      integrity: "sha512-E8lTAYNB1KW+FH+VGJuZM1ioAx2E6oVlvQFRrf5P8ZZmsiJXYAD9vTFV7yyEURNzgh1dFqMZuO6tUwcARbqFCA==",
+      vendoredFrom: "lib/index.js",
+      vendoredSha256: "6969920ae0610df927b6b3e675d1309372c268e36d391652af8e3e0183cbe8f8",
+      license: "MIT",
+    });
+    expect(notice).toContain("@babel/parser 7.29.8");
+    expect(notice).toContain("vendor/@babel/parser/LICENSE");
+  });
+
+  test("loads and scans from an isolated plugin copy with no node_modules", () => {
+    const isolatedRoot = createTemporaryRoot();
+    const isolatedPlugin = join(isolatedRoot, "plugin");
+    const isolatedProject = join(isolatedRoot, "project");
+    mkdirSync(join(isolatedPlugin, "lib"), { recursive: true });
+    mkdirSync(join(isolatedPlugin, "vendor/@babel/parser"), { recursive: true });
+    copyFileSync(join(repoRoot, "plugins/eternal-pose/lib/publication-scan.mjs"), join(isolatedPlugin, "lib/publication-scan.mjs"));
+    copyFileSync(parserPath, join(isolatedPlugin, "vendor/@babel/parser/index.cjs"));
+    copyFileSync(licensePath, join(isolatedPlugin, "vendor/@babel/parser/LICENSE"));
+    copyFileSync(upstreamPath, join(isolatedPlugin, "vendor/@babel/parser/UPSTREAM.json"));
+    writeFixture(isolatedProject, "src/config.ts", "const apiKey = runtimeConfig();\n");
+
+    const isolatedModuleUrl = pathToFileURL(join(isolatedPlugin, "lib/publication-scan.mjs")).href;
+    const child = spawnSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "--eval",
+        `const { scanPublication } = await import(${JSON.stringify(isolatedModuleUrl)}); const findings = await scanPublication(${JSON.stringify(isolatedProject)}); process.stdout.write(JSON.stringify(findings));`,
+      ],
+      {
+        cwd: isolatedRoot,
+        encoding: "utf8",
+        env: { ...process.env, NODE_PATH: "" },
+      },
+    );
+
+    expect(readdirSync(isolatedRoot)).not.toContain("node_modules");
+    expect(child.status, child.stderr).toBe(0);
+    expect(JSON.parse(child.stdout)).toEqual([]);
+  });
 });
 
 describe("publication safety findings", () => {
@@ -620,8 +687,10 @@ describe("publication safety findings", () => {
 
   test("fails closed instead of silently bypassing an exhausted syntax-analysis budget", async () => {
     const root = createTemporaryRoot();
-    const ambiguousFields = Array.from({ length: 2_000 }, () => "apiKey: RuntimeType").join(" ");
-    writeFixture(root, "src/adversarial-syntax.ts", `${ambiguousFields}\n`);
+    const elements = Array.from({ length: 120_000 }, () => "0").join(",");
+    const contents = `const values = [${elements}];\n`;
+    expectTypeScriptSyntaxValid(contents);
+    writeFixture(root, "src/adversarial-syntax.ts", contents);
 
     const findings = await scanPublication(root);
 
@@ -640,6 +709,16 @@ describe("publication safety findings", () => {
     const findings = await scanPublication(root);
 
     expect(findingAt(findings, path, "credential.generic-secret")).toBe(false);
+  });
+
+  test("accepts a valid CommonJS source without incompatible parser options", async () => {
+    const root = createTemporaryRoot();
+    writeFixture(root, "src/runtime-config.cjs", "module.exports = { apiKey: runtimeConfig() };\n");
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/runtime-config.cjs", "scan.malformed-code")).toBe(false);
+    expect(findingAt(findings, "src/runtime-config.cjs", "credential.generic-secret")).toBe(false);
   });
 
   test("stops a postfix type at an ASI-delimited member assignment", async () => {
@@ -759,6 +838,212 @@ describe("publication safety findings", () => {
     expect(JSON.stringify(findings)).not.toContain(secret);
   });
 
+  test.each([
+    {
+      name: "newline as type",
+      source: (secret: string) => `const apiKey = "${secret}" as\n string;\n`,
+    },
+    {
+      name: "newline satisfies type",
+      source: (secret: string) => `const apiKey = "${secret}" satisfies\n string;\n`,
+    },
+    {
+      name: "Unicode line-separator ASI",
+      source: (secret: string) =>
+        `const apiKey = "${secret}" as string\u2028config.harmless = runtimeConfig();\n`,
+    },
+    {
+      name: "multiline predicate type",
+      source: (secret: string) =>
+        `const apiKey: ((value: unknown) => value is\n string) = "${secret}" as never;\n`,
+    },
+    {
+      name: "multiline abstract constructor type",
+      source: (secret: string) =>
+        `const apiKey: abstract\n new () => string = "${secret}" as never;\n`,
+    },
+    {
+      name: "asserted parenthesized computed key",
+      source: (secret: string) =>
+        `config[(("apiKey" as const))] = "${secret}";\n`,
+    },
+  ])("rejects a direct literal across the $name grammar boundary", async ({ name, source }) => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", name[0], "N".repeat(27)].join("");
+    const contents = source(secret);
+    expectTypeScriptSyntaxValid(contents);
+    writeFixture(root, "src/round-six-types.ts", contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/round-six-types.ts", "credential.generic-secret")).toBe(true);
+    expect(findingAt(findings, "src/round-six-types.ts", "scan.malformed-code")).toBe(false);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test("keeps a Unicode line-separator boundary after an uninitialized typed declaration", async () => {
+    const root = createTemporaryRoot();
+    const contents = [
+      "let apiKey: string",
+      'config.harmless = "runtime_harmless_literal_value";',
+      "",
+    ].join("\u2028");
+    expectTypeScriptSyntaxValid(contents);
+    writeFixture(root, "src/unicode-typed-boundary.ts", contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/unicode-typed-boundary.ts", "credential.generic-secret")).toBe(false);
+    expect(findingAt(findings, "src/unicode-typed-boundary.ts", "scan.malformed-code")).toBe(false);
+  });
+
+  test.each([
+    {
+      name: "class declaration",
+      source: (secret: string) => `class C {} /apiKey="${secret}";/.test(value);\n`,
+    },
+    {
+      name: "try/catch statement",
+      source: (secret: string) => `try {} catch {} /apiKey="${secret}";/.test(value);\n`,
+    },
+    {
+      name: "labeled block",
+      source: (secret: string) => `label: {} /apiKey="${secret}";/.test(value);\n`,
+    },
+    {
+      name: "function-expression division",
+      source: () => "const ratio = function () {} / divisor;\n",
+    },
+  ])("accepts parser-valid regex/division context after a $name", async ({ name, source }) => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", name[0], "R".repeat(27)].join("");
+    const contents = source(secret);
+    expect(() => new Script(contents)).not.toThrow();
+    writeFixture(root, "src/round-six-regex.js", contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/round-six-regex.js", "credential.generic-secret")).toBe(false);
+    expect(findingAt(findings, "src/round-six-regex.js", "scan.malformed-code")).toBe(false);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test.each([
+    {
+      path: "src/literal-binding.vue",
+      source: (secret: string) => `<Map :api-key="'${secret}'" />\n`,
+    },
+    {
+      path: "src/literal-binding.svelte",
+      source: (secret: string) => `<Map api-key={ "${secret}" } />\n`,
+    },
+    {
+      path: "src/literal-binding.astro",
+      source: (secret: string) => `<Map api-key={ "${secret}" } />\n`,
+    },
+    {
+      path: "src/unquoted-binding.vue",
+      source: (secret: string) => `<Map api-key=${secret} />\n`,
+    },
+    {
+      path: "src/unquoted-binding.svelte",
+      source: (secret: string) => `<Map api-key=${secret} />\n`,
+    },
+    {
+      path: "src/unquoted-binding.astro",
+      source: (secret: string) => `<Map api-key=${secret} />\n`,
+    },
+  ])("rejects a static live-markup credential in $path", async ({ path, source }) => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", basename(path)[0], "M".repeat(27)].join("");
+    writeFixture(root, path, source(secret));
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, path, "credential.generic-secret")).toBe(true);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test.each([
+    {
+      path: "src/script-string.vue",
+      contents: (secret: string) => [
+        '<script setup lang="ts">',
+        `const snippet = '<Map api-key="${secret}" />';`,
+        "const apiKey = runtimeConfig();",
+        "</script>",
+        '<template><Map :api-key="runtimeKey" /></template>',
+        "",
+      ].join("\n"),
+    },
+    {
+      path: "src/script-string.svelte",
+      contents: (secret: string) => [
+        '<script lang="ts">',
+        `const snippet = '<Map api-key="${secret}" />';`,
+        "const apiKey = runtimeConfig();",
+        "</script>",
+        "<Map api-key={runtimeKey} />",
+        "",
+      ].join("\n"),
+    },
+    {
+      path: "src/frontmatter-string.astro",
+      contents: (secret: string) => [
+        "---",
+        `const snippet = '<Map api-key="${secret}" />';`,
+        "const apiKey = runtimeConfig();",
+        "---",
+        "<Map api-key={runtimeKey} />",
+        "",
+      ].join("\n"),
+    },
+    {
+      path: "src/raw-style.vue",
+      contents: (secret: string) => [
+        "<style>",
+        `.example::before { content: '<Map api-key="${secret}" />'; }`,
+        "</style>",
+        '<template><Map :api-key="runtimeKey" /></template>',
+        "",
+      ].join("\n"),
+    },
+  ])("does not scan script/frontmatter/style strings as live markup in $path", async ({ path, contents }) => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", basename(path)[0], "S".repeat(27)].join("");
+    writeFixture(root, path, contents(secret));
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, path, "credential.generic-secret")).toBe(false);
+    expect(findingAt(findings, path, "scan.malformed-code")).toBe(false);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test.each([
+    ["src/unclosed-script.vue", '<script setup lang="ts">\nconst apiKey = runtimeConfig();\n'],
+    ["src/unclosed-frontmatter.astro", "---\nconst apiKey = runtimeConfig();\n"],
+    ["src/unclosed-binding.svelte", '<Map api-key={"runtime_literal_value" />\n'],
+  ])("fails closed for malformed component source in %s", async (path, contents) => {
+    const root = createTemporaryRoot();
+    writeFixture(root, path, contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, path, "scan.malformed-code")).toBe(true);
+  });
+
+  test("fails closed when component expression-boundary analysis is exhausted", async () => {
+    const root = createTemporaryRoot();
+    const adversarialLiteral = "}".repeat(600);
+    writeFixture(root, "src/adversarial-binding.svelte", `<Map api-key={"${adversarialLiteral}"} />\n`);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/adversarial-binding.svelte", "scan.analysis-limit")).toBe(true);
+    expect(findings.find((finding) => finding.code === "scan.analysis-limit")?.severity).toBe("error");
+  });
+
   test.each(["vue", "svelte", "astro"])(
     "detects a static hyphenated markup credential attribute in .%s",
     async (extension) => {
@@ -780,6 +1065,8 @@ describe("publication safety findings", () => {
     ["src/dynamic-attribute.astro", "<Map api-key={runtimeKey} />\n"],
     ["src/escaped-runtime.ts", ["const api", "\\", "u004bey = options.apiKey;\n"].join("")],
     ["src/dynamic-computed.ts", 'config[((runtimeKey))] = "runtime_harmless_literal_value";\n'],
+    ["src/dynamic-computed-name.ts", 'config[apiKey] = "runtime_harmless_literal_value";\n'],
+    ["src/dynamic-object-key.ts", 'const config = { [apiKey]: "runtime_harmless_literal_value" };\n'],
   ])("accepts the dynamic static-key lookalike in %s", async (path, contents) => {
     const root = createTemporaryRoot();
     writeFixture(root, path, contents);
@@ -962,6 +1249,17 @@ describe("publication safety findings", () => {
     expect(findingAt(findings, "binary.dat", "credential.google-api-key")).toBe(false);
     expect(findingAt(findings, "oversized.txt", "credential.google-api-key")).toBe(false);
     expect(findingAt(findings, "private/ticket-qr.bin", "privacy.qr-artifact")).toBe(true);
+  });
+
+  test("fails closed when a code source exceeds the bounded text-read budget", async () => {
+    const root = createTemporaryRoot();
+    const contents = `const apiKey = runtimeConfig();\n${" ".repeat(2 * 1024 * 1024)}\n`;
+    writeFixture(root, "src/oversized-code.ts", contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/oversized-code.ts", "scan.analysis-limit")).toBe(true);
+    expect(findings.find((finding) => finding.code === "scan.analysis-limit")?.severity).toBe("error");
   });
 
   test("fails closed when an incomplete project-creation marker remains even if ignored", async () => {

@@ -13,6 +13,7 @@ export default tseslint.config(
       "node_modules/**",
       "coverage/**",
       ".cc-marketspec/dist/**",
+      "plugins/eternal-pose/vendor/**",
       "plugins/eternal-pose/starter/react/node_modules/**",
       "plugins/eternal-pose/starter/react/dist/**",
       "plugins/eternal-pose/starter/react/test-results/**",

@@ -1,0 +1,9 @@
+{
+  "name": "@babel/parser",
+  "version": "7.29.8",
+  "source": "https://registry.npmjs.org/@babel/parser/-/parser-7.29.8.tgz",
+  "integrity": "sha512-E8lTAYNB1KW+FH+VGJuZM1ioAx2E6oVlvQFRrf5P8ZZmsiJXYAD9vTFV7yyEURNzgh1dFqMZuO6tUwcARbqFCA==",
+  "vendoredFrom": "lib/index.js",
+  "vendoredSha256": "6969920ae0610df927b6b3e675d1309372c268e36d391652af8e3e0183cbe8f8",
+  "license": "MIT"
+}
