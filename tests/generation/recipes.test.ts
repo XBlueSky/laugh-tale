@@ -663,47 +663,52 @@ function pixelLength(value: string): number | undefined {
   return unit === "rem" || unit === "em" ? amount * 16 : amount;
 }
 
+const touchTargetSizeProperties = [
+  { property: "width", axis: "inline", constraint: "size" },
+  { property: "inline-size", axis: "inline", constraint: "size" },
+  { property: "min-width", axis: "inline", constraint: "minimum" },
+  { property: "min-inline-size", axis: "inline", constraint: "minimum" },
+  { property: "max-width", axis: "inline", constraint: "maximum" },
+  { property: "max-inline-size", axis: "inline", constraint: "maximum" },
+  { property: "height", axis: "block", constraint: "size" },
+  { property: "block-size", axis: "block", constraint: "size" },
+  { property: "min-height", axis: "block", constraint: "minimum" },
+  { property: "min-block-size", axis: "block", constraint: "minimum" },
+  { property: "max-height", axis: "block", constraint: "maximum" },
+  { property: "max-block-size", axis: "block", constraint: "maximum" },
+] as const;
+
 function touchTargetContractViolations(css: string): string[] {
   const violations: string[] = [];
-  let protectsMinimumWidth = false;
-  let protectsMinimumHeight = false;
+  const protectedMinimumAxes = new Set<"inline" | "block">();
   for (const rule of parseCssRules(css)) {
     for (const selector of rule.selectors) {
       if (!selectorMayTarget44pxControl(selector)) {
         continue;
       }
-      for (const property of [
-        "width",
-        "height",
-        "min-width",
-        "min-height",
-        "max-width",
-        "max-height",
-      ]) {
+      for (const { property, axis, constraint } of touchTargetSizeProperties) {
         const value = rule.declarations.get(property);
         if (value === undefined) {
           continue;
         }
         const pixels = pixelLength(value);
-        if (property === "min-width" && pixels !== undefined && pixels >= 44) {
-          protectsMinimumWidth = true;
+        if (constraint === "minimum" && pixels !== undefined && pixels >= 44) {
+          protectedMinimumAxes.add(axis);
         }
-        if (property === "min-height" && pixels !== undefined && pixels >= 44) {
-          protectsMinimumHeight = true;
-        }
-        const isMinimum = property === "min-width" || property === "min-height";
-        if ((isMinimum && (pixels === undefined || pixels < 44)) ||
-          (!isMinimum && pixels !== undefined && pixels < 44)) {
+        if (
+          (constraint === "minimum" && (pixels === undefined || pixels < 44)) ||
+          (constraint !== "minimum" && pixels !== undefined && pixels < 44)
+        ) {
           violations.push(`${selector} cannot constrain ${property} to ${value}`);
         }
       }
     }
   }
-  if (!protectsMinimumWidth) {
-    violations.push("missing a 44px minimum touch-target width");
+  if (!protectedMinimumAxes.has("inline")) {
+    violations.push("missing a 44px minimum touch-target inline axis");
   }
-  if (!protectsMinimumHeight) {
-    violations.push("missing a 44px minimum touch-target height");
+  if (!protectedMinimumAxes.has("block")) {
+    violations.push("missing a 44px minimum touch-target block axis");
   }
   return violations;
 }
@@ -1082,6 +1087,35 @@ describe("compile-time design recipe catalog", () => {
         }`,
       ),
       "a full-width candidate trigger with intact minimums is harmless presentation",
+    ).toEqual([]);
+  });
+
+  test("rejects grouped later-media logical-size touch-target mutations", () => {
+    const quietWood = loadRecipes().find(({ directory }) => directory === "quiet-wood");
+    expect(quietWood).toBeDefined();
+    const css = quietWood?.css ?? "";
+
+    expect(
+      touchTargetContractViolations(
+        `${css}\n@media (max-width: 430px) {
+          .unrelated, .candidate-decision__trigger {
+            min-inline-size: 20px;
+            min-block-size: 20px;
+          }
+        }`,
+      ),
+      "logical-size constraints cannot bypass either 44px axis",
+    ).not.toEqual([]);
+
+    expect(
+      touchTargetContractViolations(`
+        [data-touch-target="44"] {
+          inline-size: 100%;
+          min-inline-size: 44px;
+          min-block-size: 44px;
+        }
+      `),
+      "logical minima may satisfy both touch-target axes",
     ).toEqual([]);
   });
 
