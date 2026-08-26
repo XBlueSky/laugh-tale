@@ -1120,5 +1120,12 @@ describe("TripExperience", () => {
     expect(routeControl).toHaveAttribute("aria-pressed", "true");
     expect(routeControl).toHaveAttribute("data-selected", "true");
     expect(mapAdapter.focusCalls).toHaveLength(focusCountBeforeMapSelection);
+
+    const scrollCountAfterFirstMapSelection = scrollIntoView.mock.calls.length;
+    screen.getByRole("button", { name: /Park day/ }).focus();
+    act(() => mapAdapter.emitRouteSelect("route-museum-dinner"));
+    await waitFor(() => expect(routeControl).toHaveFocus());
+    expect(scrollIntoView).toHaveBeenCalledTimes(scrollCountAfterFirstMapSelection + 1);
+    expect(mapAdapter.focusCalls).toHaveLength(focusCountBeforeMapSelection);
   });
 });

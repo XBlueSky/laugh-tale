@@ -423,26 +423,133 @@ function filenameFindings(path) {
   return findings;
 }
 
-function containsGenericSecretLiteral(path, contents) {
-  const isCodeSource = /\.(?:[cm]?[jt]sx?|vue|svelte|astro)$/i.test(path);
-  const assignment =
-    /(?:^|[^A-Za-z0-9])["']?(?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|secret(?:[_-]?key)?|token|password|authorization|cookie)(?:[_-][A-Za-z0-9]+)*["']?\s*[:=]\s*/gim;
-  let match;
-  while ((match = assignment.exec(contents)) !== null) {
-    let remainder = contents.slice(match.index + match[0].length);
-    remainder = remainder.replace(/^[\s{(]+/, "");
-    const quoted = /^(["'`])([A-Za-z0-9_./+~-]{16,}={0,2})\1/.exec(remainder);
-    if (quoted !== null) {
-      const value = quoted[2].toLowerCase();
-      if (!/^(?:<|your\b|replace\b|example\b|set-at-runtime\b)/.test(value)) return true;
+const GENERIC_SECRET_LOOKAHEAD = 512;
+const GENERIC_SECRET_KEY =
+  /(?:^|[^A-Za-z0-9_$])(?:["']?(?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|secret(?:[_-]?key)?|token|password|authorization|cookie)(?:[_-][A-Za-z0-9]+)*["']?)(?![A-Za-z0-9_$])/gim;
+
+function skipSecretTrivia(contents, start, limit) {
+  let cursor = start;
+  while (cursor < limit) {
+    if (/\s/.test(contents[cursor])) {
+      cursor += 1;
       continue;
     }
-    if (isCodeSource) continue;
-    const unquoted = /^([A-Za-z0-9_./+~-]{16,}={0,2})/.exec(remainder);
-    if (unquoted === null) continue;
+    if (contents.startsWith("//", cursor)) {
+      const newline = contents.indexOf("\n", cursor + 2);
+      cursor = newline === -1 || newline >= limit ? limit : newline + 1;
+      continue;
+    }
+    if (contents.startsWith("/*", cursor)) {
+      const close = contents.indexOf("*/", cursor + 2);
+      cursor = close === -1 || close + 2 > limit ? limit : close + 2;
+      continue;
+    }
+    break;
+  }
+  return cursor;
+}
+
+function skipQuotedToken(contents, start, limit) {
+  const quote = contents[start];
+  let cursor = start + 1;
+  while (cursor < limit) {
+    if (contents[cursor] === "\\") {
+      cursor += 2;
+      continue;
+    }
+    cursor += 1;
+    if (contents[cursor - 1] === quote) return cursor;
+  }
+  return limit;
+}
+
+function typedAssignmentValueStarts(contents, start, limit) {
+  const starts = [];
+  const depths = { "(": 0, "[": 0, "{": 0, "<": 0 };
+  const opening = new Set(Object.keys(depths));
+  const closing = { ")": "(", "]": "[", "}": "{", ">": "<" };
+  let cursor = start;
+  while (cursor < limit) {
+    if (contents.startsWith("//", cursor) || contents.startsWith("/*", cursor)) {
+      cursor = skipSecretTrivia(contents, cursor, limit);
+      continue;
+    }
+    const character = contents[cursor];
+    if (character === '"' || character === "'" || character === "`") {
+      cursor = skipQuotedToken(contents, cursor, limit);
+      continue;
+    }
+    if (opening.has(character)) {
+      depths[character] += 1;
+      cursor += 1;
+      continue;
+    }
+    const opener = closing[character];
+    if (opener !== undefined && depths[opener] > 0) {
+      depths[opener] -= 1;
+      cursor += 1;
+      continue;
+    }
+    const topLevel = Object.values(depths).every((depth) => depth === 0);
+    if (topLevel && character === ";") break;
+    if (topLevel && character === "=" && contents[cursor + 1] !== ">") {
+      starts.push(cursor + 1);
+    }
+    cursor += 1;
+  }
+  return starts;
+}
+
+function assignmentValueStarts(contents, start, limit, isCodeSource) {
+  const cursor = skipSecretTrivia(contents, start, limit);
+  if (contents[cursor] === "=") return [cursor + 1];
+  if (contents[cursor] !== ":") return [];
+  const afterColon = cursor + 1;
+  return isCodeSource
+    ? [afterColon, ...typedAssignmentValueStarts(contents, afterColon, limit)]
+    : [afterColon];
+}
+
+function secretLiteralAt(contents, start, limit, isCodeSource) {
+  const closers = [];
+  let cursor = skipSecretTrivia(contents, start, limit);
+  while (cursor < limit && (contents[cursor] === "{" || contents[cursor] === "(")) {
+    closers.push(contents[cursor] === "{" ? "}" : ")");
+    cursor = skipSecretTrivia(contents, cursor + 1, limit);
+  }
+
+  const quote = contents[cursor];
+  if (quote !== '"' && quote !== "'" && quote !== "`") {
+    if (isCodeSource) return false;
+    const unquoted = /^([A-Za-z0-9_./+~-]{16,}={0,2})/.exec(contents.slice(cursor, limit));
+    if (unquoted === null) return false;
     const value = unquoted[1].toLowerCase();
-    if (!/^(?:<|your\b|replace\b|example\b|set-at-runtime\b|process\.env\b|import\.meta\.env\b)/.test(value)) {
-      return true;
+    return !/^(?:<|your\b|replace\b|example\b|set-at-runtime\b|process\.env\b|import\.meta\.env\b)/.test(value);
+  }
+
+  const end = skipQuotedToken(contents, cursor, limit);
+  if (end >= limit || contents[end - 1] !== quote) return false;
+  const value = contents.slice(cursor + 1, end - 1);
+  if (!/^[A-Za-z0-9_./+~-]{16,}={0,2}$/.test(value)) return false;
+  if (/^(?:<|your\b|replace\b|example\b|set-at-runtime\b)/i.test(value)) return false;
+
+  cursor = skipSecretTrivia(contents, end, limit);
+  for (const closer of closers.reverse()) {
+    if (contents[cursor] !== closer) return false;
+    cursor = skipSecretTrivia(contents, cursor + 1, limit);
+  }
+  if (contents.startsWith("/>", cursor)) return true;
+  return !/[A-Za-z0-9_$+.?&|*/%-]/.test(contents[cursor] ?? "");
+}
+
+function containsGenericSecretLiteral(path, contents) {
+  const isCodeSource = /\.(?:[cm]?[jt]sx?|vue|svelte|astro)$/i.test(path);
+  GENERIC_SECRET_KEY.lastIndex = 0;
+  let match;
+  while ((match = GENERIC_SECRET_KEY.exec(contents)) !== null) {
+    const limit = Math.min(contents.length, match.index + match[0].length + GENERIC_SECRET_LOOKAHEAD);
+    for (const valueStart of assignmentValueStarts(contents, GENERIC_SECRET_KEY.lastIndex, limit, isCodeSource)) {
+      if (secretLiteralAt(contents, valueStart, limit, isCodeSource)) return true;
     }
   }
   return false;

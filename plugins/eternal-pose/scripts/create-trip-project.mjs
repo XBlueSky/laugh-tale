@@ -6,14 +6,15 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { validateTargetDirectory } from "../lib/path-safety.mjs";
 
 const OMITTED_NAMES = new Set([
-  ".DS_Store",
+  ".ds_store",
   ".cache",
+  ".eslintcache",
   ".git",
   ".next",
   ".parcel-cache",
   ".turbo",
   ".vite",
-  "Thumbs.db",
+  "thumbs.db",
   "build",
   "cache",
   "coverage",
@@ -23,6 +24,16 @@ const OMITTED_NAMES = new Set([
   "playwright-report",
   "test-results",
 ]);
+const LOCAL_CREDENTIAL_FILENAMES = new Set([
+  "application_default_credentials.json",
+  "google-services.json",
+  "googleservice-info.plist",
+]);
+const LOCAL_CREDENTIAL_PATTERNS = [
+  /^(?:credentials|(?:google[-_])?service[-_]?account(?:[-_]?key)?|client[-_]?secret)(?:[-_.][a-z0-9-]+)*\.json$/i,
+  /^(?:id_rsa|id_ed25519)$/i,
+  /\.(?:key|p12|pem|pfx)$/i,
+];
 
 const DEFAULT_OPERATIONS = { lstat, mkdir, open, readFile, readdir, realpath, rmdir, unlink, writeFile };
 
@@ -39,18 +50,16 @@ function shouldCopyStarterEntry(starterDir, sourcePath) {
   const relativePath = relative(starterDir, sourcePath);
   if (relativePath === "") return true;
   const parts = relativePath.split(sep);
-  if (parts.some((part) => OMITTED_NAMES.has(part))) return false;
+  const normalizedParts = parts.map((part) => part.toLowerCase());
+  if (normalizedParts.some((part) => OMITTED_NAMES.has(part))) return false;
 
-  const filename = parts.at(-1)?.toLowerCase() ?? "";
+  const filename = normalizedParts.at(-1) ?? "";
   if (filename.startsWith(".env") && filename !== ".env.example") return false;
   if (filename.endsWith(".tsbuildinfo")) return false;
-  if (/\.(?:css|js|mjs|cjs)\.map$/i.test(filename)) return false;
+  if (/\.(?:css|[cm]?[jt]sx?)\.map$/i.test(filename)) return false;
   if (
-    /^(?:credentials|(?:google[-_])?service[-_]?account(?:[-_]?key)?|client[-_]?secret)(?:[-_.][a-z0-9-]+)*\.json$/i.test(
-      filename,
-    ) ||
-    /^(?:id_rsa|id_ed25519)$/i.test(filename) ||
-    /\.(?:key|p12|pem|pfx)$/i.test(filename)
+    LOCAL_CREDENTIAL_FILENAMES.has(filename) ||
+    LOCAL_CREDENTIAL_PATTERNS.some((pattern) => pattern.test(filename))
   ) {
     return false;
   }

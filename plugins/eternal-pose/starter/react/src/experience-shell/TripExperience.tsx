@@ -308,6 +308,7 @@ export function TripExperience({
   const [routeSelectionSource, setRouteSelectionSource] = useState<
     "list" | "map" | null
   >(null);
+  const [routeSelectionRequestId, setRouteSelectionRequestId] = useState(0);
   const [fallbackProgress, setFallbackProgress] = useState(emptyTripProgress);
   const progress = progressController?.progress ?? fallbackProgress;
   const fallbackSelectCandidate = useCallback(
@@ -652,6 +653,7 @@ export function TripExperience({
     clearCandidateInteraction();
     setSelectedRouteId(routeId);
     setRouteSelectionSource("map");
+    setRouteSelectionRequestId((current) => current + 1);
   };
 
   const returnToNow = (): void => {
@@ -889,6 +891,7 @@ export function TripExperience({
           routeSelectionSource={
             activeSelectedRouteId === null ? null : routeSelectionSource
           }
+          routeSelectionRequestId={routeSelectionRequestId}
           onRouteSelect={selectRouteFromList}
           onRouteRetry={(routeId) => {
             routeStates.retry(routeId);

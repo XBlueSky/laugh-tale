@@ -32,6 +32,7 @@ export interface ItineraryTimelineProps {
   currentNodeId?: string | null;
   selectedRouteId?: string | null;
   routeSelectionSource?: "list" | "map" | null;
+  routeSelectionRequestId?: number;
 }
 
 function projection(
@@ -104,6 +105,7 @@ export function ItineraryTimeline({
   currentNodeId = null,
   selectedRouteId = null,
   routeSelectionSource = null,
+  routeSelectionRequestId = 0,
 }: ItineraryTimelineProps) {
   const nodeElementsRef = useRef(new Map<string, HTMLLIElement>());
   const routeElementsRef = useRef(new Map<string, HTMLButtonElement>());
@@ -158,7 +160,7 @@ export function ItineraryTimeline({
     const routeElement = routeElementsRef.current.get(selectedRouteId);
     routeElement?.scrollIntoView?.({ block: "nearest" });
     routeElement?.focus({ preventScroll: true });
-  }, [routeSelectionSource, selectedRouteId]);
+  }, [routeSelectionRequestId, routeSelectionSource, selectedRouteId]);
 
   const renderNode = (entry: NodeEntry) => {
     const effective = effectiveNodesById.get(entry.id);

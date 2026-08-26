@@ -128,27 +128,32 @@ async function visibleInteractiveTargetFailures(page: Page): Promise<Array<{
     ].join(",");
     const elements = [...new Set(document.querySelectorAll<HTMLElement>(selector))];
     return elements.flatMap((element) => {
-      if (element.matches(":disabled")) return [];
-      const style = getComputedStyle(element);
-      const ownRect = element.getBoundingClientRect();
-      if (
-        style.display === "none" ||
-        style.visibility === "hidden" ||
-        ownRect.width === 0 ||
-        ownRect.height === 0 ||
-        ownRect.bottom <= 0 ||
-        ownRect.top >= window.innerHeight ||
-        ownRect.right <= 0 ||
-        ownRect.left >= window.innerWidth
-      ) {
-        return [];
-      }
       const input = element instanceof HTMLInputElement ? element : null;
       const target =
         input !== null && ["checkbox", "radio"].includes(input.type) && input.labels?.[0] !== undefined
           ? input.labels[0]
           : element;
+      if (
+        element.matches(":disabled") ||
+        element.getAttribute("aria-disabled") === "true" ||
+        element.closest("[inert]") !== null ||
+        target.closest("[inert], [hidden], [aria-hidden='true']") !== null
+      ) {
+        return [];
+      }
+      const style = getComputedStyle(target);
       const rect = target.getBoundingClientRect();
+      if (
+        style.display === "none" ||
+        style.visibility === "hidden" ||
+        style.visibility === "collapse" ||
+        style.contentVisibility === "hidden" ||
+        target.getClientRects().length === 0 ||
+        rect.width === 0 ||
+        rect.height === 0
+      ) {
+        return [];
+      }
       return rect.width + 0.5 < 44 || rect.height + 0.5 < 44
         ? [{
             name: element.getAttribute("aria-label") ?? element.textContent?.trim().slice(0, 80) ?? element.tagName,
@@ -159,6 +164,19 @@ async function visibleInteractiveTargetFailures(page: Page): Promise<Array<{
     });
   });
 }
+
+test("touch target audit catches offscreen and label-backed undersized controls", async ({ page }) => {
+  await page.setContent(`
+    <button aria-label="Offscreen small control" style="position:absolute;top:2000px;left:0;width:24px;height:24px;padding:0">O</button>
+    <input id="small-choice" type="checkbox" aria-label="Label-backed small control" style="position:absolute;width:0;height:0;opacity:0">
+    <label for="small-choice" style="display:block;width:24px;height:24px">L</label>
+  `);
+
+  expect(await visibleInteractiveTargetFailures(page)).toEqual(expect.arrayContaining([
+    { name: "Offscreen small control", width: 24, height: 24 },
+    { name: "Label-backed small control", width: 24, height: 24 },
+  ]));
+});
 
 test("keeps the persistent map and interruptible three-snap sheet inside every mobile viewport", async ({ page }) => {
   await openTrip(page);
@@ -302,6 +320,7 @@ test("synchronizes dates, live current state, list places, map places, and indep
   await expect(page.locator('[data-route-owner="route-ferry-lookout"]')).toHaveAttribute("data-display", "full");
 
   const transit = page.locator('[data-route-id="route-shuttle-ferry"]');
+  const focusCountBeforeListSelection = Number(await map.getAttribute("data-e2e-focus-count"));
   await transit.click();
   await expect(transit).toHaveAttribute("aria-expanded", "true");
   await expect(transit).toContainText("Transit details");
@@ -313,6 +332,9 @@ test("synchronizes dates, live current state, list places, map places, and indep
   ).toBeVisible();
   await expect(map).toHaveAttribute("data-e2e-focus-kind", "route");
   await expect(map).toHaveAttribute("data-e2e-focus-id", "route-shuttle-ferry");
+  expect(Number(await map.getAttribute("data-e2e-focus-count"))).toBe(
+    focusCountBeforeListSelection + 1,
+  );
 
   const focusCountBeforeMapSelection = Number(await map.getAttribute("data-e2e-focus-count"));
   await map.getByRole("button", { name: "Map route route-ferry-lookout" }).dispatchEvent("click");
@@ -323,7 +345,10 @@ test("synchronizes dates, live current state, list places, map places, and indep
   await expect(selectedListRoute).toBeFocused();
   const focusCountAfterMapSelection = Number(await map.getAttribute("data-e2e-focus-count"));
   expect(focusCountAfterMapSelection).toBe(focusCountBeforeMapSelection);
+  await page.getByRole("button", { name: "Return to lodging" }).focus();
+  await expect(page.getByRole("button", { name: "Return to lodging" })).toBeFocused();
   await map.getByRole("button", { name: "Map route route-ferry-lookout" }).dispatchEvent("click");
+  await expect(selectedListRoute).toBeFocused();
   expect(Number(await map.getAttribute("data-e2e-focus-count"))).toBe(focusCountAfterMapSelection);
 
   const liveDirections = page.getByRole("link", { name: /Open live transit directions from Harbor shuttle stop to Ferry terminal/ });
@@ -345,6 +370,7 @@ test("compares dining and snack candidates together on the persistent map with d
   await canalMarker.dispatchEvent("click");
   await expect(page.getByRole("radio", { name: /5B · Canal counter/ })).toBeChecked();
   await expect(page.getByRole("radio", { name: /5B · Canal counter/ })).toBeFocused();
+  expect(await visibleInteractiveTargetFailures(page)).toEqual([]);
   await page.getByRole("button", { name: "確認選擇 Canal counter" }).click();
   await expect(page.getByText("已選 · Canal counter")).toBeVisible();
   await expect(map.getByRole("button", { name: /Map place 5A · Garden kitchen/ })).toHaveCount(0);
@@ -360,6 +386,7 @@ test("compares dining and snack candidates together on the persistent map with d
   await expect(map.getByRole("button", { name: /Map place 4A · Fruit window/ })).toBeVisible();
   await expect(map.getByRole("button", { name: /Map place 4B · Steam bun cart/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /確認選擇/ })).toHaveCount(0);
+  expect(await visibleInteractiveTargetFailures(page)).toEqual([]);
 });
 
 test("renders all semantics, lodging roles, tasks, dialogs, and trip-scoped progress reload and reset", async ({ page }) => {
@@ -397,6 +424,7 @@ test("renders all semantics, lodging roles, tasks, dialogs, and trip-scoped prog
     element instanceof HTMLDialogElement && element.open,
   )).toBe(true);
   await expect(page.getByText("Use the lobby fountain.")).toBeVisible();
+  expect(await visibleInteractiveTargetFailures(page)).toEqual([]);
   await page.getByRole("button", { name: "關閉當日事項" }).click();
   await expect(taskTrigger).toBeFocused();
 
@@ -408,6 +436,7 @@ test("renders all semantics, lodging roles, tasks, dialogs, and trip-scoped prog
     element instanceof HTMLDialogElement && element.open,
   )).toBe(true);
   await expect(page.getByText("SYNTHETIC-SKY")).toHaveCount(0);
+  expect(await visibleInteractiveTargetFailures(page)).toEqual([]);
   await page.getByRole("button", { name: "顯示 Sky room admission 訂位代碼" }).click();
   await expect(page.getByText("SYNTHETIC-SKY")).toBeVisible();
   await page.getByRole("button", { name: "關閉訂位資訊" }).click();
@@ -463,6 +492,7 @@ test("keeps every semantic renderer visible and exposes absolute cross-midnight 
   await expect(page.getByRole("button", {
     name: /約 23:30 Harbor House night return · Friday, 18 April 2042 · suggested time · ends Saturday, 19 April 2042 at 00:15/,
   })).toBeAttached();
+  expect(await visibleInteractiveTargetFailures(page)).toEqual([]);
 });
 
 test("handles location success, denied retry, stale callbacks, and explicit recenter without camera chasing", async ({ page }) => {

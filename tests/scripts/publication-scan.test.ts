@@ -229,6 +229,34 @@ describe("publication safety findings", () => {
       name: "nested brace and parenthesis",
       source: (secret: string) => `const view = <Map apiKey={(('${secret}'))} />;\n`,
     },
+    {
+      name: "typed const assignment",
+      source: (secret: string) => `const apiKey: string = "${secret}";\n`,
+    },
+    {
+      name: "generic typed assignment with comment",
+      source: (secret: string) => `const apiKey: Readonly<string> = /* release value */ "${secret}";\n`,
+    },
+    {
+      name: "comment-separated assignment",
+      source: (secret: string) => `const apiKey /* release value */ = '${secret}';\n`,
+    },
+    {
+      name: "block comment before literal",
+      source: (secret: string) => `const token = /* release value */ \`${secret}\`;\n`,
+    },
+    {
+      name: "line comment before literal",
+      source: (secret: string) => `const token = // release value\n"${secret}";\n`,
+    },
+    {
+      name: "JSX brace block comment",
+      source: (secret: string) => `const view = <Map apiKey={/* release value */ "${secret}"} />;\n`,
+    },
+    {
+      name: "JSX brace line comment",
+      source: (secret: string) => `const view = <Map apiKey={// release value\n'${secret}'} />;\n`,
+    },
   ])("rejects a $name literal without echoing it", async ({ name, source }) => {
     const root = createTemporaryRoot();
     const secret = ["runtime", "_", name[0], "L".repeat(27)].join("");
@@ -246,6 +274,12 @@ describe("publication safety findings", () => {
     "const view = <Map apiKey={environmentString(runtimeConfig())} />;\n",
     "const view = <Map apiKey={(import.meta.env.VITE_GOOGLE_MAPS_API_KEY)} />;\n",
     "const view = <Map apiKey={process.env.GOOGLE_MAPS_API_KEY} />;\n",
+    "const apiKey: string = options.apiKey;\n",
+    "const apiKey = /* runtime */ runtimeConfig();\n",
+    "const apiKey = runtimePrefix + options.apiKey;\n",
+    "const apiKey = \"runtime_fallback_value\" + options.apiKey;\n",
+    "const view = <Map apiKey={/* runtime */ import.meta.env.VITE_GOOGLE_MAPS_API_KEY} />;\n",
+    "const view = <Map apiKey={// runtime\nruntimeConfig()} />;\n",
   ])("accepts a non-literal JSX runtime expression %#", async (contents) => {
     const root = createTemporaryRoot();
     writeFixture(root, "src/runtime-props.tsx", contents);

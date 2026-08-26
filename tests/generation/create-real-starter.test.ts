@@ -92,6 +92,13 @@ describe("real starter generation", () => {
       ".env.development.local",
       "tsconfig.app.tsbuildinfo",
       "src/generated.js.map",
+      "src/generated.d.ts.map",
+      "src/generated.ts.map",
+      "src/generated.tsx.map",
+      "packages/BUILD/bundle.js",
+      "packages/.CaChE/result.json",
+      "packages/TEST-RESULTS/result.json",
+      "packages/.ESLINTCACHE",
       "dist/bundle.js",
       "coverage/report.json",
       ".cache/result.json",
@@ -99,6 +106,7 @@ describe("real starter generation", () => {
       "playwright-report/index.html",
       "credentials.json",
       "service-account-key.json",
+      "mobile/Google-Services.json",
       "private-key.pem",
     ];
     const preserved = [
@@ -107,6 +115,7 @@ describe("real starter generation", () => {
       "src/cache.ts",
       "src/credential-form.tsx",
       "src/map.ts",
+      "src/atlas.map",
     ];
 
     for (const path of [...excluded, ...preserved]) {
