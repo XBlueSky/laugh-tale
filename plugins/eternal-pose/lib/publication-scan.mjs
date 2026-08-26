@@ -12,6 +12,9 @@ const require = createRequire(import.meta.url);
 const { parse: parseBabelProgram, parseExpression: parseBabelExpression } = require(
   "../vendor/@babel/parser/index.cjs",
 );
+const { decodeHTML, decodeHTMLAttribute } = await import(
+  /* @vite-ignore */ new URL("../vendor/entities/dist/decode.js", import.meta.url).href
+);
 const MAX_TEXT_BYTES = 2 * 1024 * 1024;
 const HARD_SKIPPED_DIRECTORIES = new Set([".git", "coverage", "node_modules"]);
 const BUILD_DIRECTORIES = new Set([".next", ".vite", "build", "coverage", "dist", "out", "playwright-report", "test-results"]);
@@ -375,6 +378,15 @@ function isBinary(buffer) {
   return sampleLength > 0 && controlCharacters / sampleLength > 0.1;
 }
 
+function auditedThirdPartyVendorRelativePath(path) {
+  return /^(?:plugins\/eternal-pose\/)?vendor\/(?:@babel\/parser|entities)\/(.+)$/i.exec(path)?.[1] ?? null;
+}
+
+function isAuditedThirdPartyAttribution(path) {
+  const relativePath = auditedThirdPartyVendorRelativePath(path);
+  return relativePath !== null && /^(?:LICENSE|UPSTREAM\.json|package\.json)$/i.test(relativePath);
+}
+
 async function readTextPrefix(path, size) {
   const byteCount = Math.min(size, MAX_TEXT_BYTES);
   const handle = await open(path, "r");
@@ -419,7 +431,10 @@ function filenameFindings(path) {
   if (/\.(?:css|js|mjs|cjs)\.map$/i.test(lowerBasename)) {
     findings.push(finding("warning", "artifact.source-map", path, `Source map is included in publication inventory at "${path}".`));
   }
-  if (segments.some((segment) => BUILD_DIRECTORIES.has(segment))) {
+  if (
+    auditedThirdPartyVendorRelativePath(path) === null &&
+    segments.some((segment) => BUILD_DIRECTORIES.has(segment))
+  ) {
     findings.push(finding("warning", "artifact.build-output", path, `Build or test output is included in publication inventory at "${path}".`));
   }
   if (segments.some((segment) => CACHE_DIRECTORIES.has(segment))) {
@@ -457,46 +472,29 @@ const GOOGLE_API_KEY_LITERAL = /AIza[0-9A-Za-z_-]{35}/;
 const BEARER_TOKEN_LITERAL = /\bBearer\s+[A-Za-z0-9._~+/-]{20,}={0,2}/i;
 const PRIVATE_URL_LITERAL =
   /https?:\/\/[^\s"']+[?&](?:access_token|api_key|key|signature|token|auth)=[^\s&#"']{8,}/i;
-const DECODED_LIVE_LITERAL_DETECTORS = [
+const DECODED_LITERAL_DETECTORS = [
   [GOOGLE_API_KEY_LITERAL, "credential.google-api-key"],
   [BEARER_TOKEN_LITERAL, "credential.bearer-token"],
   [PRIVATE_URL_LITERAL, "credential.private-url"],
 ];
-const HTML_NAMED_CHARACTER_REFERENCES = new Map([
-  ["AMP", "&"],
-  ["GT", ">"],
-  ["LT", "<"],
-  ["NewLine", "\n"],
-  ["QUOT", '"'],
-  ["Tab", "\t"],
-  ["amp", "&"],
-  ["apos", "'"],
-  ["colon", ":"],
-  ["equals", "="],
-  ["gt", ">"],
-  ["hyphen", "-"],
-  ["lowbar", "_"],
-  ["lt", "<"],
-  ["nbsp", "\u00a0"],
-  ["num", "#"],
-  ["period", "."],
-  ["plus", "+"],
-  ["quest", "?"],
-  ["quot", '"'],
-  ["sol", "/"],
-]);
 
 class CodeAnalysisLimitError extends Error {}
 
-function createCodeAnalysisState() {
+function createLiteralAnalysisState() {
   return {
     analysisLimited: false,
-    astNodes: 0,
-    decodedLiveLiteralCodes: new Set(),
-    expressionAttempts: 0,
-    expressionBytes: 0,
+    decodedLiteralCodes: new Set(),
     hasSecret: false,
     malformed: false,
+  };
+}
+
+function createCodeAnalysisState() {
+  return {
+    ...createLiteralAnalysisState(),
+    astNodes: 0,
+    expressionAttempts: 0,
+    expressionBytes: 0,
   };
 }
 
@@ -512,39 +510,21 @@ function credentialNameTokens(name) {
 
 function isCredentialName(name) {
   const tokens = credentialNameTokens(name);
+  if (tokens.some((token) => token === "apikey" || token === "secretkey")) return true;
   if (tokens.some((token) => ["authorization", "cookie", "password", "secret", "token"].includes(token))) {
     return true;
   }
   return tokens.some((token, index) => token === "api" && tokens[index + 1] === "key");
 }
 
-function decodeHtmlCharacterReferencesOnce(contents) {
-  return contents.replace(
-    /&(?:#([0-9]+);?|#[xX]([0-9A-Fa-f]+);?|([A-Za-z][A-Za-z0-9]+);)/g,
-    (reference, decimal, hexadecimal, named) => {
-      if (named !== undefined) return HTML_NAMED_CHARACTER_REFERENCES.get(named) ?? reference;
-      const codePoint = Number.parseInt(decimal ?? hexadecimal, hexadecimal === undefined ? 10 : 16);
-      if (
-        !Number.isSafeInteger(codePoint) ||
-        codePoint <= 0 ||
-        codePoint > 0x10ffff ||
-        (codePoint >= 0xd800 && codePoint <= 0xdfff)
-      ) {
-        return reference;
-      }
-      return String.fromCodePoint(codePoint);
-    },
-  );
-}
-
 function analyzeDecodedSpecificLiteral(contents, state) {
-  for (const [expression, code] of DECODED_LIVE_LITERAL_DETECTORS) {
-    if (expression.test(contents)) state.decodedLiveLiteralCodes.add(code);
+  for (const [expression, code] of DECODED_LITERAL_DETECTORS) {
+    if (expression.test(contents)) state.decodedLiteralCodes.add(code);
   }
 }
 
 function analyzeEncodedLiveText(contents, state) {
-  const decoded = decodeHtmlCharacterReferencesOnce(contents);
+  const decoded = decodeHTML(contents);
   if (containsNonCodeGenericSecret(decoded)) state.hasSecret = true;
   analyzeDecodedSpecificLiteral(decoded, state);
 }
@@ -662,6 +642,7 @@ function unwrapTransparentExpression(node) {
 function staticLiteralValue(node) {
   const current = unwrapTransparentExpression(node);
   if (current?.type === "StringLiteral") return current.value;
+  if (current?.type === "DirectiveLiteral") return current.extra?.expressionValue ?? current.value;
   if (current?.type !== "TemplateLiteral" || current.expressions?.length !== 0 || current.quasis?.length !== 1) {
     return null;
   }
@@ -768,6 +749,8 @@ function analyzeAst(root, comments, state) {
     state.astNodes += 1;
     if (state.astNodes > MAX_CODE_AST_NODES) throw new CodeAnalysisLimitError();
     if (astNodeHasDirectSecret(node)) state.hasSecret = true;
+    const literal = staticLiteralValue(node);
+    if (typeof literal === "string") analyzeDecodedSpecificLiteral(literal, state);
     stack.push(...astChildren(node));
   }
 }
@@ -1226,7 +1209,7 @@ function parseMarkupStartTag(path, contents, start, componentType, state) {
         state.malformed = true;
         return { attributes, cursor: contents.length, selfClosing: false, tagName };
       }
-      const decodedValue = decodeHtmlCharacterReferencesOnce(literal.value);
+      const decodedValue = decodeHTMLAttribute(literal.value);
       attributes.set(attributeName.toLowerCase(), decodedValue);
       analyzeDecodedSpecificLiteral(decodedValue, state);
       analyzeMarkupAttribute(path, componentType, attributeName, decodedValue, "literal", state);
@@ -1257,7 +1240,7 @@ function parseMarkupStartTag(path, contents, start, componentType, state) {
       state.malformed = true;
       return { attributes, cursor: contents.length, selfClosing: false, tagName };
     }
-    const value = decodeHtmlCharacterReferencesOnce(contents.slice(valueStart, cursor));
+    const value = decodeHTMLAttribute(contents.slice(valueStart, cursor));
     attributes.set(attributeName.toLowerCase(), value);
     analyzeDecodedSpecificLiteral(value, state);
     analyzeMarkupAttribute(path, componentType, attributeName, value, "literal", state);
@@ -1512,21 +1495,306 @@ function containsNonCodeGenericSecret(contents) {
   return false;
 }
 
+function analyzeJsonSource(contents, truncated) {
+  const state = createLiteralAnalysisState();
+  if (truncated) {
+    state.analysisLimited = true;
+    return state;
+  }
+
+  let root;
+  try {
+    root = JSON.parse(contents);
+  } catch {
+    state.hasSecret = containsNonCodeGenericSecret(contents);
+    state.malformed = true;
+    return state;
+  }
+
+  const stack = [root];
+  let visited = 0;
+  while (stack.length > 0) {
+    const value = stack.pop();
+    visited += 1;
+    if (visited > MAX_CODE_AST_NODES) {
+      state.analysisLimited = true;
+      return state;
+    }
+    if (typeof value === "string") {
+      analyzeDecodedSpecificLiteral(value, state);
+      continue;
+    }
+    if (Array.isArray(value)) {
+      for (let index = value.length - 1; index >= 0; index -= 1) stack.push(value[index]);
+      continue;
+    }
+    if (value === null || typeof value !== "object") continue;
+    for (const [key, entryValue] of Object.entries(value)) {
+      analyzeDecodedSpecificLiteral(key, state);
+      if (typeof entryValue === "string" && isCredentialName(key) && isSecretLiteralValue(entryValue)) {
+        state.hasSecret = true;
+      }
+      stack.push(entryValue);
+    }
+  }
+  return state;
+}
+
+const YAML_DOUBLE_QUOTE_ESCAPES = new Map([
+  ['"', '"'],
+  ["/", "/"],
+  ["0", "\0"],
+  ["L", "\u2028"],
+  ["N", "\u0085"],
+  ["P", "\u2029"],
+  ["_", "\u00a0"],
+  ["a", "\x07"],
+  ["b", "\b"],
+  ["e", "\x1b"],
+  ["f", "\f"],
+  ["n", "\n"],
+  ["r", "\r"],
+  ["t", "\t"],
+  ["v", "\v"],
+  ["\\", "\\"],
+  [" ", " "],
+  ["\t", "\t"],
+]);
+
+function yamlUnicodeEscape(contents, start, digits) {
+  const end = start + digits;
+  const encoded = contents.slice(start, end);
+  if (encoded.length !== digits || !/^[0-9A-Fa-f]+$/.test(encoded)) return null;
+  const codePoint = Number.parseInt(encoded, 16);
+  if (codePoint > 0x10ffff || (codePoint >= 0xd800 && codePoint <= 0xdfff)) return null;
+  return { end, value: String.fromCodePoint(codePoint) };
+}
+
+function skipYamlContinuationIndent(contents, start) {
+  let cursor = start;
+  while (contents[cursor] === " " || contents[cursor] === "\t") cursor += 1;
+  return cursor;
+}
+
+function readYamlDoubleQuotedScalar(contents, start) {
+  let cursor = start + 1;
+  let value = "";
+  while (cursor < contents.length) {
+    const character = contents[cursor];
+    if (character === '"') return { end: cursor + 1, malformed: false, value };
+    if (character === "\\") {
+      if (cursor + 1 >= contents.length) return { end: contents.length, malformed: true, value: "" };
+      const continuationWidth = lineTerminatorWidth(contents, cursor + 1, contents.length);
+      if (continuationWidth > 0) {
+        cursor = skipYamlContinuationIndent(contents, cursor + 1 + continuationWidth);
+        continue;
+      }
+      const escape = contents[cursor + 1];
+      const unicodeDigits = escape === "x" ? 2 : escape === "u" ? 4 : escape === "U" ? 8 : 0;
+      if (unicodeDigits > 0) {
+        const decoded = yamlUnicodeEscape(contents, cursor + 2, unicodeDigits);
+        if (decoded === null) return { end: cursor + 2 + unicodeDigits, malformed: true, value: "" };
+        value += decoded.value;
+        cursor = decoded.end;
+        continue;
+      }
+      const decoded = YAML_DOUBLE_QUOTE_ESCAPES.get(escape);
+      if (decoded === undefined) return { end: cursor + 2, malformed: true, value: "" };
+      value += decoded;
+      cursor += 2;
+      continue;
+    }
+    const newlineWidth = lineTerminatorWidth(contents, cursor, contents.length);
+    if (newlineWidth > 0) {
+      value += " ";
+      cursor = skipYamlContinuationIndent(contents, cursor + newlineWidth);
+      continue;
+    }
+    value += character;
+    cursor += 1;
+  }
+  return { end: contents.length, malformed: true, value: "" };
+}
+
+function readYamlSingleQuotedScalar(contents, start) {
+  let cursor = start + 1;
+  let value = "";
+  while (cursor < contents.length) {
+    if (contents[cursor] === "'") {
+      if (contents[cursor + 1] === "'") {
+        value += "'";
+        cursor += 2;
+        continue;
+      }
+      return { end: cursor + 1, malformed: false, value };
+    }
+    const newlineWidth = lineTerminatorWidth(contents, cursor, contents.length);
+    if (newlineWidth > 0) {
+      value += " ";
+      cursor = skipYamlContinuationIndent(contents, cursor + newlineWidth);
+      continue;
+    }
+    value += contents[cursor];
+    cursor += 1;
+  }
+  return { end: contents.length, malformed: true, value: "" };
+}
+
+function skipYamlHorizontalWhitespace(contents, start, end) {
+  let cursor = start;
+  while (cursor < end && (contents[cursor] === " " || contents[cursor] === "\t")) cursor += 1;
+  return cursor;
+}
+
+function yamlPlainValue(contents, start, end) {
+  let valueEnd = end;
+  for (let cursor = start; cursor < end; cursor += 1) {
+    if (contents[cursor] === "#" && (cursor === start || /\s/.test(contents[cursor - 1]))) {
+      valueEnd = cursor;
+      break;
+    }
+  }
+  return contents.slice(start, valueEnd).trim();
+}
+
+function nextYamlLine(contents, start) {
+  const end = lineEnd(contents, start);
+  return end < contents.length ? end + 1 : contents.length;
+}
+
+function yamlLineIndent(contents, start, end) {
+  let cursor = start;
+  while (cursor < end && contents[cursor] === " ") cursor += 1;
+  return cursor - start;
+}
+
+function isYamlBlockScalarHeader(value) {
+  return /^[|>](?:(?:[1-9][+-]?)|(?:[+-][1-9]?))?$/.test(value);
+}
+
+function skipYamlBlockScalar(contents, headerEnd, parentIndent) {
+  let cursor = nextYamlLine(contents, headerEnd);
+  while (cursor < contents.length) {
+    const currentLineEnd = lineEnd(contents, cursor);
+    const contentStart = skipYamlHorizontalWhitespace(contents, cursor, currentLineEnd);
+    if (contentStart >= currentLineEnd) {
+      cursor = nextYamlLine(contents, currentLineEnd);
+      continue;
+    }
+    if (yamlLineIndent(contents, cursor, currentLineEnd) <= parentIndent) break;
+    cursor = nextYamlLine(contents, currentLineEnd);
+  }
+  return cursor;
+}
+
+function analyzeYamlSource(contents, truncated) {
+  const state = createLiteralAnalysisState();
+  if (truncated) {
+    state.analysisLimited = true;
+    return state;
+  }
+  state.hasSecret = containsNonCodeGenericSecret(contents);
+
+  let lineStart = 0;
+  while (lineStart < contents.length && !state.malformed) {
+    const currentLineEnd = lineEnd(contents, lineStart);
+    const parentIndent = yamlLineIndent(contents, lineStart, currentLineEnd);
+    let cursor = skipYamlHorizontalWhitespace(contents, lineStart, currentLineEnd);
+    if (contents[cursor] === "#" || cursor >= currentLineEnd) {
+      lineStart = nextYamlLine(contents, currentLineEnd);
+      continue;
+    }
+    if (contents[cursor] === "-" && /\s/.test(contents[cursor + 1] ?? "")) {
+      cursor = skipYamlHorizontalWhitespace(contents, cursor + 1, currentLineEnd);
+    }
+
+    let key;
+    let keyEnd;
+    if (contents[cursor] === '"') {
+      const scalar = readYamlDoubleQuotedScalar(contents, cursor);
+      if (scalar.malformed) {
+        state.malformed = true;
+        break;
+      }
+      analyzeDecodedSpecificLiteral(scalar.value, state);
+      key = scalar.value;
+      keyEnd = scalar.end;
+    } else if (contents[cursor] === "'") {
+      const scalar = readYamlSingleQuotedScalar(contents, cursor);
+      if (scalar.malformed) {
+        state.malformed = true;
+        break;
+      }
+      key = scalar.value;
+      keyEnd = scalar.end;
+    } else {
+      const colon = contents.indexOf(":", cursor);
+      if (colon === -1 || colon >= currentLineEnd) {
+        lineStart = nextYamlLine(contents, currentLineEnd);
+        continue;
+      }
+      key = contents.slice(cursor, colon).trim();
+      keyEnd = colon;
+    }
+
+    const colon = skipYamlHorizontalWhitespace(contents, keyEnd, currentLineEnd);
+    if (contents[colon] !== ":") {
+      lineStart = nextYamlLine(contents, Math.max(currentLineEnd, keyEnd));
+      continue;
+    }
+    const valueStart = skipYamlHorizontalWhitespace(contents, colon + 1, currentLineEnd);
+    if (valueStart >= currentLineEnd || contents[valueStart] === "#") {
+      lineStart = nextYamlLine(contents, currentLineEnd);
+      continue;
+    }
+
+    let value;
+    let valueEnd = currentLineEnd;
+    if (contents[valueStart] === '"') {
+      const scalar = readYamlDoubleQuotedScalar(contents, valueStart);
+      if (scalar.malformed) {
+        state.malformed = true;
+        break;
+      }
+      analyzeDecodedSpecificLiteral(scalar.value, state);
+      value = scalar.value;
+      valueEnd = scalar.end;
+    } else if (contents[valueStart] === "'") {
+      const scalar = readYamlSingleQuotedScalar(contents, valueStart);
+      if (scalar.malformed) {
+        state.malformed = true;
+        break;
+      }
+      value = scalar.value;
+      valueEnd = scalar.end;
+    } else {
+      value = yamlPlainValue(contents, valueStart, currentLineEnd);
+    }
+    if (isCredentialName(key) && isSecretLiteralValue(value)) state.hasSecret = true;
+    if (isYamlBlockScalarHeader(value)) {
+      lineStart = skipYamlBlockScalar(contents, currentLineEnd, parentIndent);
+      continue;
+    }
+    lineStart = nextYamlLine(contents, Math.max(currentLineEnd, valueEnd));
+  }
+  return state;
+}
+
 function containsGenericSecretLiteral(path, contents, truncated) {
+  if (/\.json$/i.test(path)) return analyzeJsonSource(contents, truncated);
+  if (/\.ya?ml$/i.test(path)) return analyzeYamlSource(contents, truncated);
   if (CODE_SOURCE_PATH.test(path) && truncated) {
     return {
       analysisLimited: true,
-      decodedLiveLiteralCodes: new Set(),
+      decodedLiteralCodes: new Set(),
       hasSecret: false,
       malformed: false,
     };
   }
   if (CODE_SOURCE_PATH.test(path)) return containsCodeGenericSecret(path, contents);
   return {
-    analysisLimited: false,
-    decodedLiveLiteralCodes: new Set(),
+    ...createLiteralAnalysisState(),
     hasSecret: containsNonCodeGenericSecret(contents),
-    malformed: false,
   };
 }
 
@@ -1534,7 +1802,7 @@ function contentFindings(path, contents, truncated = false) {
   const findings = [];
   const genericSecretScan = containsGenericSecretLiteral(path, contents, truncated);
   const addIfMatched = (expression, severity, code, ruleName, includeDecodedLiveText = false) => {
-    if (expression.test(contents) || (includeDecodedLiveText && genericSecretScan.decodedLiveLiteralCodes.has(code))) {
+    if (expression.test(contents) || (includeDecodedLiveText && genericSecretScan.decodedLiteralCodes.has(code))) {
       findings.push(finding(severity, code, path, `${ruleName} detected in "${path}".`));
     }
   };
@@ -1618,6 +1886,7 @@ function contentFindings(path, contents, truncated = false) {
     let match;
     while ((match = emailExpression.exec(line)) !== null) {
       if (reservedEmailDomain(match[1].toLowerCase())) continue;
+      if (isAuditedThirdPartyAttribution(path)) continue;
       if (/\b(?:public|business|support)\s+(?:contact|email)\b/i.test(line)) {
         findings.push(
           finding(

@@ -1,0 +1,49 @@
+{
+  "name": "entities",
+  "version": "8.0.0",
+  "source": "https://registry.npmjs.org/entities/-/entities-8.0.0.tgz",
+  "integrity": "sha512-zwfzJecQ/Uej6tusMqwAqU/6KL2XaB2VZ2Jg54Je6ahNBGNH6Ek6g3jjNCF0fG9EWQKGZNddNjU5F1ZQn/sBnA==",
+  "license": "BSD-2-Clause",
+  "files": [
+    {
+      "path": "package.json",
+      "bytes": 2563,
+      "sha256": "86e28ac6361377a9c0a82dc7ce849b16bfcc6b13d862c563bbf9b3fe9267773a"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 1260,
+      "sha256": "cb992345949ccd6e8394b2cd6c465f7b897c864f845937dbf64e8997f389e164"
+    },
+    {
+      "path": "dist/decode.js",
+      "bytes": 22923,
+      "sha256": "5e3e1c938416abcb354ff4d7808f0a010d27d0e4170195c6f95f2e6895cb081a"
+    },
+    {
+      "path": "dist/decode-codepoint.js",
+      "bytes": 1160,
+      "sha256": "f09dbc23d35abbf96718dfdd04def3c1d3444495541d050c69a12706ee76dbb1"
+    },
+    {
+      "path": "dist/generated/decode-data-html.js",
+      "bytes": 32453,
+      "sha256": "a845d1bb8e661abad2642088c646031523dc58b6e8bd0453308b0d71c01c8b8f"
+    },
+    {
+      "path": "dist/generated/decode-data-xml.js",
+      "bytes": 314,
+      "sha256": "e11599611184b79a44d80cf0c135f4eeaf09e0ccac8845da54333177336a20ed"
+    },
+    {
+      "path": "dist/internal/bin-trie-flags.js",
+      "bytes": 942,
+      "sha256": "4f2d90d78b57cc2549cda4c53c7b5a1ca6176fcf746da1bd4ad4e6e9608ea89d"
+    },
+    {
+      "path": "dist/internal/decode-shared.js",
+      "bytes": 617,
+      "sha256": "51a2120afeae660916954be58f323c718b0415b78e9719c0b0279f49f3cc0d96"
+    }
+  ]
+}
