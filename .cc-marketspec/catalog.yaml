@@ -1,0 +1,8 @@
+# Marketplace-level presentation data. Native identity remains in
+# .claude-plugin/marketplace.json.
+schemaVersion: "1.1"
+lang: en
+groups:
+  - id: trip-sites
+    label: Trip Sites
+    note: Map-first, mobile-first travel website tools

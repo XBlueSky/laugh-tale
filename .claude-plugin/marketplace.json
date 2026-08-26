@@ -10,6 +10,7 @@
       "description": "Build and evolve map-first, mobile-first travel sites from real itinerary material.",
       "version": "0.1.0",
       "source": "./plugins/eternal-pose",
+      "category": "Developer Tools",
       "author": {
         "name": "Laugh Tale contributors"
       }

@@ -13,10 +13,15 @@
     "type-check": "tsc --noEmit",
     "lint": "eslint .",
     "validate:plugins": "node scripts/validate-plugin-contracts.mjs",
-    "check": "npm run validate:plugins && npm test && npm run type-check && npm run lint"
+    "check:marketplace": "cc-marketspec --check",
+    "build:marketplace": "cc-marketspec",
+    "check": "npm run validate:plugins && npm run check:marketplace && npm test && npm run type-check && npm run lint",
+    "test:starter": "npm --prefix plugins/eternal-pose/starter/react run check",
+    "test:e2e": "npm --prefix plugins/eternal-pose/starter/react run test:e2e"
   },
   "devDependencies": {
     "@types/node": "^22.19.19",
+    "@xbluesky/cc-marketspec": "1.0.0",
     "eslint": "^9.39.4",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.59.3",

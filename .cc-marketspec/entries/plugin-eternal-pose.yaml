@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=../../node_modules/@xbluesky/cc-marketspec/schemas/entry.schema.json
+group: trip-sites
+tagline: Turn real itinerary material into a map-first, mobile-first trip site
+intro: >
+  Create, update, enrich, restyle, or audit an independent travel website from
+  prose, CSV, Markdown, documents, links, or an existing project.
+skills:
+  - name: eternal-pose
+    trigger: >
+      When itinerary material should become or improve an independent map-first
+      trip site or travel website.
+    examples:
+      - Build a map-first mobile trip site from these itinerary notes.
+      - Update my existing travel website without replacing its custom UI.
+      - Audit this trip site for map, list, mobile, accessibility, and privacy issues.
