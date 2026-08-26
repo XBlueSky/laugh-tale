@@ -14,6 +14,7 @@ import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FakeMapAdapter } from "../providers/fake/FakeMapAdapter";
+import { FakeRouteAdapter } from "../providers/fake/FakeRouteAdapter";
 import type { Trip } from "../trip-core/model";
 import {
   candidateMapOwnerId,
@@ -1036,5 +1037,61 @@ describe("TripExperience", () => {
     expect(adapter.fitCalls).toHaveLength(1);
     expect(storageWrite).not.toHaveBeenCalled();
     expect(JSON.stringify(trip)).toBe(tripBefore);
+  });
+
+  it("loads current-day routes and gives list and map one independent route owner", async () => {
+    const mapAdapter = new FakeMapAdapter();
+    const routeAdapter = new FakeRouteAdapter({
+      "route-museum-dinner": {
+        status: "ready",
+        durationMinutes: 14,
+        path: [
+          { lat: 35.69, lng: 139.77 },
+          { lat: 35.7, lng: 139.78 },
+        ],
+        steps: ["Board synthetic line", "Exit at dinner"],
+      },
+    });
+    const routeAdapterFactory = vi.fn(() => routeAdapter);
+    const user = userEvent.setup();
+
+    render(
+      <TripExperience
+        trip={createTrip()}
+        adapterFactory={() => mapAdapter}
+        routeAdapterFactory={routeAdapterFactory}
+        clock={() => "2040-06-12T00:30:00Z"}
+      />,
+    );
+
+    const routeControl = await screen.findByRole("button", {
+      name: "transit · 14 min",
+    });
+    expect(routeAdapterFactory).toHaveBeenCalledTimes(1);
+    expect(routeAdapter.loadCalls.map(({ edge }) => edge.id)).toEqual([
+      "route-museum-dinner",
+    ]);
+    await waitFor(() =>
+      expect(mapAdapter.renderCalls.at(-1)?.routes).toEqual([
+        expect.objectContaining({ edgeId: "route-museum-dinner" }),
+      ]),
+    );
+
+    await user.click(routeControl);
+    expect(mapAdapter.focusCalls.at(-1)).toEqual({
+      kind: "route",
+      id: "route-museum-dinner",
+    });
+    await waitFor(() =>
+      expect(mapAdapter.renderCalls.at(-1)?.selectedRouteId).toBe(
+        "route-museum-dinner",
+      ),
+    );
+
+    act(() => mapAdapter.emitRouteSelect("route-museum-dinner"));
+    expect(mapAdapter.focusCalls.at(-1)).toEqual({
+      kind: "route",
+      id: "route-museum-dinner",
+    });
   });
 });

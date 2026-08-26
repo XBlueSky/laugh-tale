@@ -288,15 +288,14 @@ async function assertOwnedParentChain(ownership, destinationPath, operations) {
   }
 }
 
-async function copyFileIntoOwnedDirectory(sourcePath, sourceStats, destinationPath, ownership, context, operations) {
-  const contents = await operations.readFile(sourcePath);
+async function writeBufferIntoOwnedDirectory(contents, mode, destinationPath, ownership, context, operations) {
   await runBeforeMutation(operations, context.phase, destinationPath, context.stageDir, context.targetDir);
   await assertOwnedParentChain(ownership, destinationPath, operations);
   beginOwnedMutation(ownership, destinationPath, "file");
   let handle;
   let primaryError;
   try {
-    handle = await operations.open(destinationPath, "wx", sourceStats.mode & 0o777);
+    handle = await operations.open(destinationPath, "wx", mode & 0o777);
     const handleStats = await handle.stat();
     const pathStats = await operations.lstat(destinationPath);
     if (
@@ -325,6 +324,18 @@ async function copyFileIntoOwnedDirectory(sourcePath, sourceStats, destinationPa
     }
   }
   if (errors.length > 0) throw combinedError(errors);
+}
+
+async function copyFileIntoOwnedDirectory(sourcePath, sourceStats, destinationPath, ownership, context, operations) {
+  const contents = await operations.readFile(sourcePath);
+  await writeBufferIntoOwnedDirectory(
+    contents,
+    sourceStats.mode,
+    destinationPath,
+    ownership,
+    context,
+    operations,
+  );
 }
 
 async function copyTreeIntoOwnedDirectory(sourceRoot, ownership, context, operations, relativeDirectory = "") {
@@ -476,12 +487,12 @@ export async function createTripProject({ pluginRoot, targetDir, recipe, starter
   const targetState = await validateTargetDirectory(targetDir);
   const existingTarget = targetState === "empty" ? await captureExistingEmptyTarget(resolvedTarget, operations) : null;
   const canonicalStarter = await canonicalDirectory(
-    starterDir ?? join(canonicalPluginRoot, "starter/react"),
+    starterDir ?? resolve(canonicalPluginRoot, "starter/react"),
     "starter root",
     operations,
   );
-  const recipeRoot = await canonicalDirectory(join(canonicalPluginRoot, "recipes"), "recipe root", operations);
-  const recipeSource = await canonicalRecipeFile(join(recipeRoot, recipe, "recipe.css"), recipeRoot, operations);
+  const recipeRoot = await canonicalDirectory(resolve(canonicalPluginRoot, "recipes"), "recipe root", operations);
+  const recipeSource = await canonicalRecipeFile(resolve(recipeRoot, recipe, "recipe.css"), recipeRoot, operations);
   const canonicalParent = await operations.realpath(dirname(resolvedTarget));
   const canonicalTarget = join(canonicalParent, basename(resolvedTarget));
   if (canonicalTarget !== resolvedTarget) throw new Error("target ownership changed");
@@ -508,6 +519,14 @@ export async function createTripProject({ pluginRoot, targetDir, recipe, starter
       recipeSource,
       await operations.lstat(recipeSource),
       recipeTarget,
+      stageOwnership,
+      stageContext,
+      operations,
+    );
+    await writeBufferIntoOwnedDirectory(
+      JSON.stringify({ generatorVersion: "0.1.0", recipe }, null, 2),
+      0o644,
+      join(stageOwnership.path, "eternal-pose.json"),
       stageOwnership,
       stageContext,
       operations,

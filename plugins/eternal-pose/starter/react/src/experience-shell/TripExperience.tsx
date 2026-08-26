@@ -49,6 +49,7 @@ import {
   type MapFocusTarget,
   type MapPadding,
   type MapPresentation,
+  type RouteAdapter,
 } from "./provider-contracts";
 import {
   resolveSheetGeometry,
@@ -56,11 +57,13 @@ import {
 } from "./sheet-geometry";
 import { useTripSelection } from "./useTripSelection";
 import type { TripProgressController } from "./useTripProgress";
+import { useRouteStates } from "./useRouteStates";
 import { useUserLocation } from "./useUserLocation";
 
 export interface TripExperienceProps {
   trip: Trip;
   adapterFactory: () => MapAdapter;
+  routeAdapterFactory?: () => RouteAdapter;
   clock?: () => string;
   initialDayId?: string;
   progressController?: TripProgressController;
@@ -264,10 +267,6 @@ function formatLocalClock(instant: string, timezone: string): string {
   }).format(new Date(instant));
 }
 
-function ignoreMapRouteSelection(): void {
-  // Route geometry and route focus enter in the Task 8/11 integration seam.
-}
-
 function locatablePresentationIds(presentation: MapPresentation): string[] {
   const ids = new Set(presentation.places.map(({ ownerId }) => ownerId));
   for (const route of presentation.routes) {
@@ -292,6 +291,7 @@ function presentationHasTarget(
 export function TripExperience({
   trip,
   adapterFactory,
+  routeAdapterFactory,
   clock = systemClock,
   initialDayId: requestedInitialDayId,
   progressController,
@@ -304,6 +304,7 @@ export function TripExperience({
   const [mountedAdapter, setMountedAdapter] = useState<MapAdapter | null>(null);
   const [headerExpanded, setHeaderExpanded] = useState(true);
   const [sheetSnap, setSheetSnap] = useState<SheetSnap>("half");
+  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [fallbackProgress, setFallbackProgress] = useState(emptyTripProgress);
   const progress = progressController?.progress ?? fallbackProgress;
   const fallbackSelectCandidate = useCallback(
@@ -415,6 +416,12 @@ export function TripExperience({
     }
     return [...owners.values()];
   }, [effectiveTrip, selectedEffectiveDay.day.id]);
+  const routeStates = useRouteStates(selectedDayRoutes, routeAdapterFactory);
+  const activeSelectedRouteId = selectedDayRoutes.some(
+    ({ id }) => id === selectedRouteId,
+  )
+    ? selectedRouteId
+    : null;
 
   const selectedSourceNode = sourceNode(trip, selection.selection.nodeId);
   const selectedEffectiveNode = selectedEffectiveDay.nodes.find(
@@ -476,9 +483,15 @@ export function TripExperience({
                       activeCandidateMapOverride.activeOptionId,
                   }),
             }),
+        routeResults: routeStates.mapResults,
+        ...(activeSelectedRouteId === null
+          ? {}
+          : { selectedRouteId: activeSelectedRouteId }),
       }),
     [
       activeCandidateMapOverride,
+      activeSelectedRouteId,
+      routeStates.mapResults,
       selectedEffectiveDay,
       selection.selection.nodeId,
     ],
@@ -569,6 +582,7 @@ export function TripExperience({
       return;
     }
     clearCandidateInteraction();
+    setSelectedRouteId(null);
     selection.selectManual(nodeId);
     const ownerDay = dayForNode(trip, nodeId);
     if (options.synchronizeDay === true) {
@@ -613,8 +627,21 @@ export function TripExperience({
     }
   };
 
+  const selectRoute = (routeId: string): void => {
+    if (!selectedDayRoutes.some(({ id }) => id === routeId)) {
+      return;
+    }
+    clearCandidateInteraction();
+    setSelectedRouteId(routeId);
+    focusMap(
+      { kind: "route", id: routeId },
+      selectedEffectiveDay.day.id,
+    );
+  };
+
   const returnToNow = (): void => {
     clearCandidateInteraction();
+    setSelectedRouteId(null);
     selection.returnToNow();
     const liveDayId = dayForNode(trip, automaticNodeId);
     if (liveDayId !== undefined) {
@@ -657,6 +684,7 @@ export function TripExperience({
       return;
     }
     clearCandidateInteraction();
+    setSelectedRouteId(null);
     markDisplayedDayIntent(dayId);
     setSheetSnap("half");
     const firstNode = day.nodes[0];
@@ -696,7 +724,7 @@ export function TripExperience({
         presentation={presentation}
         padding={mapPadding}
         onPlaceSelect={handleMapPlaceSelect}
-        onRouteSelect={ignoreMapRouteSelection}
+        onRouteSelect={selectRoute}
         onReady={setMountedAdapter}
         onPresentationRendered={handlePresentationRendered}
       />
@@ -839,6 +867,12 @@ export function TripExperience({
           navigationAdapter={DEFAULT_NAVIGATION_ADAPTER}
           completedChecklistIds={completedChecklistIds}
           shoppingStatuses={progress.shoppingStatuses}
+          routeStates={routeStates.states}
+          onRouteSelect={selectRoute}
+          onRouteRetry={(routeId) => {
+            routeStates.retry(routeId);
+          }}
+          reducedMotion={reducedMotion}
         />
       </ItinerarySheet>
     </main>

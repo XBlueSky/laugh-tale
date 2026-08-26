@@ -1,0 +1,356 @@
+import { spawnSync } from "node:child_process";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, isAbsolute, join, relative } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { afterEach, describe, expect, test } from "vitest";
+
+interface ValidationFinding {
+  severity: "error" | "warning";
+  code: string;
+  path: string;
+  message: string;
+}
+
+interface CommandResult {
+  command: string;
+  exitCode: number;
+}
+
+interface ValidationResult {
+  mode: "local" | "deploy" | null;
+  counts: { errors: number; warnings: number };
+  findings: ValidationFinding[];
+  commands: CommandResult[];
+  failedCommand: CommandResult | null;
+}
+
+const RESULT_PREFIX = "ETERNAL_POSE_VALIDATION_RESULT ";
+const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
+const starterRoot = join(repoRoot, "plugins/eternal-pose/starter/react");
+const validator = join(repoRoot, "plugins/eternal-pose/scripts/validate-trip-project.mjs");
+const temporaryRoots: string[] = [];
+
+function temporaryRoot(): string {
+  const root = mkdtempSync(join(realpathSync(tmpdir()), "eternal-pose-validator-test-"));
+  temporaryRoots.push(root);
+  return root;
+}
+
+function write(root: string, relativePath: string, contents: string): void {
+  const path = join(root, relativePath);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, contents);
+}
+
+function createControlledProject(root: string, tripReady: boolean): void {
+  const scripts = {
+    test: "node scripts/gate.mjs test",
+    "type-check": "node scripts/gate.mjs type-check",
+    lint: "node scripts/gate.mjs lint",
+    build: "node scripts/build.mjs",
+  };
+  const packageJson = {
+    name: "synthetic-generated-trip",
+    version: "0.0.0",
+    private: true,
+    type: "module",
+    scripts,
+  };
+  const packageLock = {
+    name: packageJson.name,
+    version: packageJson.version,
+    lockfileVersion: 3,
+    requires: true,
+    packages: {
+      "": {
+        name: packageJson.name,
+        version: packageJson.version,
+      },
+    },
+  };
+
+  for (const directory of [
+    "docs",
+    "src/trip-content",
+    "src/trip-core",
+    "src/experience-shell",
+    "src/providers/google",
+    "src/ui",
+    "tests/e2e",
+  ]) {
+    mkdirSync(join(root, directory), { recursive: true });
+  }
+
+  write(root, "README.md", "# Synthetic generated trip\n");
+  write(root, "AGENTS.md", "Read docs/trip-experience-contract.md.\n");
+  write(root, "CLAUDE.md", "Read docs/trip-experience-contract.md.\n");
+  write(root, ".env.example", "VITE_GOOGLE_MAPS_API_KEY=\n");
+  write(root, ".gitignore", ".env.local\n.cache/\ndist/\ncoverage/\n*.tsbuildinfo\n");
+  write(root, "package.json", `${JSON.stringify(packageJson, null, 2)}\n`);
+  write(root, "package-lock.json", `${JSON.stringify(packageLock, null, 2)}\n`);
+  write(root, "docs/trip-experience-contract.md", "# Synthetic contract\n");
+  write(root, ".cache/pre-existing-cache.txt", "user-owned cache bytes\n");
+  write(root, "dist/pre-existing-output.txt", "user-owned output bytes\n");
+  write(
+    root,
+    "src/trip-content/test-trip.json",
+    `${JSON.stringify({ trip: tripReady ? { id: "synthetic-trip" } : null }, null, 2)}\n`,
+  );
+  write(
+    root,
+    "scripts/gate.mjs",
+    [
+      'const gate = process.argv[2] ?? "unknown";',
+      'console.log(`gate:${gate}`);',
+      'if (process.env.ETERNAL_POSE_TEST_FAIL_GATE === gate) process.exitCode = 7;',
+      "",
+    ].join("\n"),
+  );
+  write(
+    root,
+    "scripts/build.mjs",
+    [
+      'import { mkdir, readFile, writeFile } from "node:fs/promises";',
+      'import { isAbsolute, join } from "node:path";',
+      "const output = process.env.ETERNAL_POSE_VALIDATION_OUT_DIR;",
+      'if (output === undefined || !isAbsolute(output)) throw new Error("owned validation output required");',
+      'const source = JSON.parse(await readFile(join(process.cwd(), "src/trip-content/test-trip.json"), "utf8"));',
+      'await mkdir(join(output, "validation"), { recursive: true });',
+      'await writeFile(join(output, "validation/readiness.mjs"), `export const tripContentReadiness = Object.freeze({ hasTripContent: ${source.trip !== null} });\\n`);',
+      'console.log(`validation-output:${output}`);',
+      'console.log("gate:build");',
+      "",
+    ].join("\n"),
+  );
+}
+
+function childEnvironment(values: Record<string, string | undefined> = {}): NodeJS.ProcessEnv {
+  const environment = { ...process.env };
+  delete environment.VITE_GOOGLE_MAPS_API_KEY;
+  for (const [key, value] of Object.entries(values)) {
+    if (value === undefined) delete environment[key];
+    else environment[key] = value;
+  }
+  return environment;
+}
+
+function runValidator(
+  arguments_: string[],
+  environment: NodeJS.ProcessEnv = childEnvironment(),
+): ReturnType<typeof spawnSync> & { validation: ValidationResult } {
+  const result = spawnSync(process.execPath, [validator, ...arguments_], {
+    encoding: "utf8",
+    env: environment,
+  });
+  const resultLine = result.stdout
+    .split("\n")
+    .findLast((line) => line.startsWith(RESULT_PREFIX));
+  expect(resultLine, `missing stable validation result in stdout:\n${result.stdout}`).toBeDefined();
+  return {
+    ...result,
+    validation: JSON.parse(resultLine!.slice(RESULT_PREFIX.length)) as ValidationResult,
+  };
+}
+
+function snapshotTree(root: string): Record<string, string> {
+  const output: Record<string, string> = {};
+  const visit = (directory: string): void => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      const relativePath = relative(root, path);
+      const stats = lstatSync(path);
+      if (entry.isDirectory()) {
+        output[`${relativePath}/`] = `${stats.mode}:${stats.mtimeMs}`;
+        visit(path);
+      } else {
+        output[relativePath] = `${stats.mode}:${stats.mtimeMs}:${readFileSync(path).toString("base64")}`;
+      }
+    }
+  };
+  visit(root);
+  return output;
+}
+
+afterEach(() => {
+  for (const root of temporaryRoots.splice(0)) {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+describe("generated project validation", () => {
+  test(
+    "builds an importable readiness-only entry at the validator's exact path",
+    async () => {
+      const root = temporaryRoot();
+      const output = join(root, "output");
+      const cache = join(root, "cache");
+      const environmentRoot = join(root, "environment");
+      mkdirSync(environmentRoot);
+      const environment = childEnvironment({
+        ETERNAL_POSE_VALIDATION_OUT_DIR: output,
+        ETERNAL_POSE_VALIDATION_CACHE_DIR: cache,
+        ETERNAL_POSE_VALIDATION_ENV_DIR: environmentRoot,
+      });
+      const executable = process.platform === "win32" ? "npm.cmd" : "npm";
+
+      const result = spawnSync(executable, ["run", "build"], {
+        cwd: starterRoot,
+        encoding: "utf8",
+        env: environment,
+        shell: false,
+      });
+
+      expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+      const entryPath = join(output, "validation/readiness.mjs");
+      const built = (await import(pathToFileURL(entryPath).href)) as Record<
+        string,
+        unknown
+      >;
+      expect(Object.keys(built)).toEqual(["tripContentReadiness"]);
+      expect(built.tripContentReadiness).toEqual({ hasTripContent: false });
+    },
+    15_000,
+  );
+
+  test("local mode runs every gate read-only and reports intentional setup gaps as warnings", () => {
+    const root = temporaryRoot();
+    createControlledProject(root, false);
+    const sourceBefore = snapshotTree(root);
+
+    const result = runValidator([root, "--mode", "local"]);
+
+    expect(result.status).toBe(0);
+    expect(result.validation.mode).toBe("local");
+    expect(result.validation.commands).toEqual([
+      { command: "npm test", exitCode: 0 },
+      { command: "npm run type-check", exitCode: 0 },
+      { command: "npm run lint", exitCode: 0 },
+      { command: "npm run build", exitCode: 0 },
+    ]);
+    expect(result.validation.failedCommand).toBeNull();
+    expect(result.validation.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ severity: "warning", code: "trip-content.missing" }),
+      expect.objectContaining({ severity: "warning", code: "provider.google-key.missing" }),
+    ]));
+    expect(snapshotTree(root)).toEqual(sourceBefore);
+    expect(readFileSync(join(root, ".cache/pre-existing-cache.txt"), "utf8")).toBe(
+      "user-owned cache bytes\n",
+    );
+    expect(readFileSync(join(root, "dist/pre-existing-output.txt"), "utf8")).toBe(
+      "user-owned output bytes\n",
+    );
+    const validatorOutput =
+      typeof result.stdout === "string"
+        ? result.stdout
+        : result.stdout.toString("utf8");
+    const outputLine = validatorOutput
+      .split("\n")
+      .find((line) => line.startsWith("validation-output:"));
+    expect(outputLine).toBeDefined();
+    const ownedOutput = outputLine?.slice("validation-output:".length) ?? "";
+    expect(isAbsolute(ownedOutput)).toBe(true);
+    expect(existsSync(dirname(ownedOutput))).toBe(false);
+  });
+
+  test("deploy mode promotes both readiness gaps to stable release-blocking codes", () => {
+    const root = temporaryRoot();
+    createControlledProject(root, false);
+
+    const result = runValidator(["--mode", "deploy", root]);
+
+    expect(result.status).toBe(1);
+    expect(result.validation.mode).toBe("deploy");
+    expect(result.validation.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ severity: "error", code: "trip-content.missing" }),
+      expect.objectContaining({ severity: "error", code: "provider.google-key.missing" }),
+    ]));
+    expect(result.validation.commands.at(-1)).toEqual({ command: "npm run build", exitCode: 0 });
+  });
+
+  test("a built non-null trip and runtime-only key clear readiness without persisting or printing the key", () => {
+    const root = temporaryRoot();
+    createControlledProject(root, true);
+    const runtimeKey = ["test", "-runtime", "-key"].join("");
+
+    const result = runValidator(
+      [root, "--mode", "deploy"],
+      childEnvironment({ VITE_GOOGLE_MAPS_API_KEY: runtimeKey }),
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.validation.findings.some(({ code }) => code === "trip-content.missing")).toBe(false);
+    expect(result.validation.findings.some(({ code }) => code === "provider.google-key.missing")).toBe(false);
+    expect(result.stdout).not.toContain(runtimeKey);
+    expect(result.stderr).not.toContain(runtimeKey);
+    expect(JSON.stringify(snapshotTree(root))).not.toContain(runtimeKey);
+  });
+
+  test("publication or file-contract errors fail closed before any project command", () => {
+    const root = temporaryRoot();
+    createControlledProject(root, true);
+    write(root, ".env.production", "PUBLIC_DEPLOYMENT=true\n");
+
+    const result = runValidator([root, "--mode", "local"]);
+
+    expect(result.status).toBe(1);
+    expect(result.validation.commands).toEqual([]);
+    expect(result.validation.failedCommand).toBeNull();
+    expect(result.stdout).not.toContain("gate:test");
+    expect(result.validation.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "credential.env-file", severity: "error" }),
+    ]));
+  });
+
+  test("returns the exact failing command and exit code and stops later gates", () => {
+    const root = temporaryRoot();
+    createControlledProject(root, true);
+
+    const result = runValidator(
+      [root, "--mode", "local"],
+      childEnvironment({ ETERNAL_POSE_TEST_FAIL_GATE: "type-check" }),
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.validation.failedCommand).toEqual({ command: "npm run type-check", exitCode: 7 });
+    expect(result.validation.commands).toEqual([
+      { command: "npm test", exitCode: 0 },
+      { command: "npm run type-check", exitCode: 7 },
+    ]);
+    expect(result.stdout).not.toContain("gate:lint");
+    expect(result.stdout).not.toContain("gate:build");
+  });
+
+  test.each([
+    ["missing mode", (root: string) => [root]],
+    ["duplicate mode", (root: string) => [root, "--mode", "local", "--mode", "deploy"]],
+    ["duplicate root", (root: string) => [root, root, "--mode", "local"]],
+    ["unknown option", (root: string) => [root, "--mode", "local", "--other", "value"]],
+    ["relative root", () => ["relative/project", "--mode", "local"]],
+    ["unsupported mode", (root: string) => [root, "--mode", "release"]],
+  ])("rejects %s with a stable argument finding before commands", (_label, argumentsFor) => {
+    const root = temporaryRoot();
+    createControlledProject(root, true);
+    const arguments_ = argumentsFor(root);
+    expect(arguments_.filter((argument) => !argument.startsWith("--") && argument.includes("/")).every((path) => path === "relative/project" || isAbsolute(path))).toBe(true);
+
+    const result = runValidator(arguments_);
+
+    expect(result.status).toBe(1);
+    expect(result.validation.mode).toBeNull();
+    expect(result.validation.commands).toEqual([]);
+    expect(result.validation.findings).toEqual([
+      expect.objectContaining({ severity: "error", code: "project.invalid-arguments" }),
+    ]);
+  });
+});

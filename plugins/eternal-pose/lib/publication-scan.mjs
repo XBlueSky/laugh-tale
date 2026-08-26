@@ -423,6 +423,19 @@ function filenameFindings(path) {
   return findings;
 }
 
+function containsGenericSecretLiteral(path, contents) {
+  const quotedLiteral =
+    /(?:^|[^A-Za-z0-9])["']?(?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|secret(?:[_-]?key)?|token|password|authorization|cookie)(?:[_-][A-Za-z0-9]+)*["']?\s*[:=]\s*(["'`])(?!(?:<|your\b|replace\b|example\b|set-at-runtime\b|process\.env\b|import\.meta\.env\b))[A-Za-z0-9_./+~-]{16,}={0,2}\1/im;
+  if (quotedLiteral.test(contents)) return true;
+
+  const isCodeSource = /\.(?:[cm]?[jt]sx?|vue|svelte|astro)$/i.test(path);
+  if (isCodeSource) return false;
+
+  return /(?:^|[^A-Za-z0-9])["']?(?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|secret(?:[_-]?key)?|token|password|authorization|cookie)(?:[_-][A-Za-z0-9]+)*["']?\s*[:=]\s*(?!["'`])(?!(?:<|your\b|replace\b|example\b|set-at-runtime\b|process\.env\b|import\.meta\.env\b))[A-Za-z0-9_./+~-]{16,}/im.test(
+    contents,
+  );
+}
+
 function contentFindings(path, contents) {
   const findings = [];
   const addIfMatched = (expression, severity, code, ruleName) => {
@@ -431,12 +444,16 @@ function contentFindings(path, contents) {
 
   addIfMatched(/AIza[0-9A-Za-z_-]{35}/, "error", "credential.google-api-key", "Google API key-shaped literal");
   addIfMatched(/\bBearer\s+[A-Za-z0-9._~+/-]{20,}={0,2}/i, "error", "credential.bearer-token", "Bearer token-shaped literal");
-  addIfMatched(
-    /(?:^|[^A-Za-z0-9])["']?(?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|secret(?:[_-]?key)?|token|password|authorization|cookie)(?:[_-][A-Za-z0-9]+)*["']?\s*[:=]\s*["']?(?!(?:<|your\b|replace\b|example\b|set-at-runtime\b|process\.env\b|import\.meta\.env\b))[A-Za-z0-9_./+~-]{16,}/im,
-    "error",
-    "credential.generic-secret",
-    "Generic credential-shaped assignment",
-  );
+  if (containsGenericSecretLiteral(path, contents)) {
+    findings.push(
+      finding(
+        "error",
+        "credential.generic-secret",
+        path,
+        `Generic credential-shaped assignment detected in "${path}".`,
+      ),
+    );
+  }
   addIfMatched(
     /https?:\/\/[^\s"']+[?&](?:access_token|api_key|key|signature|token|auth)=[^\s&#"']{8,}/i,
     "error",

@@ -1,26 +1,34 @@
 import { useState } from "react";
 
 import { TripExperience } from "./experience-shell/TripExperience";
-import type { MapAdapter } from "./experience-shell/provider-contracts";
+import type { MapAdapter, RouteAdapter } from "./experience-shell/provider-contracts";
 import { useTripProgress } from "./experience-shell/useTripProgress";
 import { trip as configuredTrip } from "./trip-content/trip";
 import type { Trip } from "./trip-core/model";
-import { SetupRequired } from "./ui/SetupRequired";
+import { SetupRequired, type SetupIssue } from "./ui/SetupRequired";
 import { TripHome } from "./ui/home/TripHome";
 
 export interface AppProps {
   adapterFactory?: () => MapAdapter;
+  routeAdapterFactory?: () => RouteAdapter;
   tripOverride?: Trip | null;
   clock?: () => string;
+  setupIssue?: SetupIssue;
 }
 
 interface ReadyTripAppProps {
   trip: Trip;
   adapterFactory: () => MapAdapter;
+  routeAdapterFactory?: () => RouteAdapter;
   clock?: () => string;
 }
 
-function ReadyTripApp({ trip, adapterFactory, clock }: ReadyTripAppProps) {
+function ReadyTripApp({
+  trip,
+  adapterFactory,
+  routeAdapterFactory,
+  clock,
+}: ReadyTripAppProps) {
   const progressController = useTripProgress(trip);
   const [activeDayId, setActiveDayId] = useState<string | null>(null);
 
@@ -60,6 +68,7 @@ function ReadyTripApp({ trip, adapterFactory, clock }: ReadyTripAppProps) {
       <TripExperience
         trip={trip}
         adapterFactory={adapterFactory}
+        {...(routeAdapterFactory === undefined ? {} : { routeAdapterFactory })}
         initialDayId={activeDayId}
         progressController={progressController}
         onBackToHome={() => setActiveDayId(null)}
@@ -75,10 +84,22 @@ function ReadyTripApp({ trip, adapterFactory, clock }: ReadyTripAppProps) {
   );
 }
 
-export function App({ adapterFactory, tripOverride, clock }: AppProps = {}) {
+export function App({
+  adapterFactory,
+  routeAdapterFactory,
+  tripOverride,
+  clock,
+  setupIssue,
+}: AppProps = {}) {
   const trip = tripOverride === undefined ? configuredTrip : tripOverride;
-  if (trip === null || adapterFactory === undefined) {
-    return <SetupRequired />;
+  if (trip === null) {
+    return <SetupRequired issue={{ kind: "trip-content" }} />;
+  }
+  if (setupIssue !== undefined) {
+    return <SetupRequired issue={setupIssue} />;
+  }
+  if (adapterFactory === undefined) {
+    return <SetupRequired issue={{ kind: "provider-key" }} />;
   }
 
   return (
@@ -86,6 +107,7 @@ export function App({ adapterFactory, tripOverride, clock }: AppProps = {}) {
       key={trip.id}
       trip={trip}
       adapterFactory={adapterFactory}
+      {...(routeAdapterFactory === undefined ? {} : { routeAdapterFactory })}
       {...(clock === undefined ? {} : { clock })}
     />
   );

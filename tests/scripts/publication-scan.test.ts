@@ -34,6 +34,21 @@ const validateScript = join(repoRoot, "plugins/eternal-pose/scripts/validate-tri
 const validateModuleUrl = pathToFileURL(validateScript).href;
 const { validateTripProject } = (await import(validateModuleUrl)) as { validateTripProject: ValidateTripProject };
 const temporaryRoots: string[] = [];
+const VALIDATION_RESULT_PREFIX = "ETERNAL_POSE_VALIDATION_RESULT ";
+
+function parseValidationResult(stdout: string): {
+  counts: { errors: number; warnings: number };
+  findings: PublicationFinding[];
+} {
+  const line = stdout
+    .split("\n")
+    .findLast((candidate) => candidate.startsWith(VALIDATION_RESULT_PREFIX));
+  if (line === undefined) throw new Error("stable validation result is missing");
+  return JSON.parse(line.slice(VALIDATION_RESULT_PREFIX.length)) as {
+    counts: { errors: number; warnings: number };
+    findings: PublicationFinding[];
+  };
+}
 
 function createTemporaryRoot(): string {
   const root = mkdtempSync(join(tmpdir(), "eternal-pose-publication-"));
@@ -62,9 +77,20 @@ function createValidGeneratedProject(root: string): void {
     "CLAUDE.md": "Read docs/trip-experience-contract.md.\n",
     ".env.example": "GOOGLE_MAPS_API_KEY=\n",
     ".gitignore": ".env.local\ndist/\ncoverage/\n",
-    "package.json": `${JSON.stringify({ scripts: { build: "vite build", lint: "eslint .", test: "vitest run", "type-check": "tsc --noEmit" } }, null, 2)}\n`,
+    "package.json": `${JSON.stringify({ scripts: { build: "node scripts/build.mjs", lint: "node scripts/pass.mjs", test: "node scripts/pass.mjs", "type-check": "node scripts/pass.mjs" } }, null, 2)}\n`,
     "package-lock.json": "{}\n",
     "docs/trip-experience-contract.md": "# Contract\n",
+    "scripts/pass.mjs": "// Synthetic validation fixture command.\n",
+    "scripts/build.mjs": [
+      'import { mkdir, writeFile } from "node:fs/promises";',
+      'import { join } from "node:path";',
+      'const output = process.env.ETERNAL_POSE_VALIDATION_OUT_DIR;',
+      'if (output === undefined) throw new Error("isolated output is required");',
+      'const validation = join(output, "validation");',
+      'await mkdir(validation, { recursive: true });',
+      'await writeFile(join(validation, "readiness.mjs"), "export const tripContentReadiness = Object.freeze({ hasTripContent: false });\\n", { flag: "wx" });',
+      "",
+    ].join("\n"),
   };
   for (const [relativePath, contents] of Object.entries(files)) writeFixture(root, relativePath, contents);
   for (const relativePath of [
@@ -158,6 +184,69 @@ describe("publication safety findings", () => {
 
     expect(findingAt(findings, "quoted-config.ts", "credential.generic-secret")).toBe(true);
     expect(JSON.stringify(findings).includes(value)).toBe(false);
+  });
+
+  test.each([
+    {
+      path: "src/main.tsx",
+      contents: "const apiKey = environmentString(import.meta.env.VITE_GOOGLE_MAPS_API_KEY).trim();\n",
+    },
+    {
+      path: "src/providers/google/GooglePlaceAdapter.ts",
+      contents: "this.apiKey = options.apiKey.trim();\n",
+    },
+    {
+      path: "src/providers/google/GoogleRouteAdapter.ts",
+      contents: "this.apiKey = options.apiKey.trim();\n",
+    },
+  ])("does not treat the generated runtime expression in $path as a literal secret", async ({ path, contents }) => {
+    const root = createTemporaryRoot();
+    writeFixture(root, path, contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, path, "credential.generic-secret")).toBe(false);
+  });
+
+  const quotedSourceSecret = ["runtime_", "Q".repeat(28)].join("");
+  const templateSourceSecret = ["runtime_", "B".repeat(28)].join("");
+  const jsonSecret = ["runtime_", "J".repeat(28)].join("");
+  const yamlSecret = ["runtime_", "Y".repeat(28)].join("");
+  const textSecret = ["runtime_", "U".repeat(28)].join("");
+  test.each([
+    {
+      path: "src/quoted-secret.ts",
+      secret: quotedSourceSecret,
+      assignment: `const apiKey = "${quotedSourceSecret}";\n`,
+    },
+    {
+      path: "src/template-secret.ts",
+      secret: templateSourceSecret,
+      assignment: `const token = \`${templateSourceSecret}\`;\n`,
+    },
+    {
+      path: "config.json",
+      secret: jsonSecret,
+      assignment: `"apiKey": "${jsonSecret}"\n`,
+    },
+    {
+      path: "config.yaml",
+      secret: yamlSecret,
+      assignment: `secret_token: "${yamlSecret}"\n`,
+    },
+    {
+      path: "config.txt",
+      secret: textSecret,
+      assignment: `PRIVATE_TOKEN=${textSecret}\n`,
+    },
+  ])("still rejects a literal generic secret in $path without echoing it", async ({ path, secret, assignment }) => {
+    const root = createTemporaryRoot();
+    writeFixture(root, path, assignment);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, path, "credential.generic-secret")).toBe(true);
+    expect(JSON.stringify(findings)).not.toContain(secret);
   });
 
   test.each(["bookingReference", "booking_reference", "reservationReference"])(
@@ -487,8 +576,8 @@ describe("publication CLIs", () => {
     const root = createTemporaryRoot();
     writeFixture(root, "README.md", "incomplete\n");
 
-    const result = spawnSync(process.execPath, [validateScript, root], { encoding: "utf8" });
-    const payload = JSON.parse(result.stdout) as { findings: PublicationFinding[] };
+    const result = spawnSync(process.execPath, [validateScript, root, "--mode", "local"], { encoding: "utf8" });
+    const payload = parseValidationResult(result.stdout);
 
     expect(result.status).toBe(1);
     expect(findingCodes(payload.findings)).toContain("project.missing-file");
@@ -565,8 +654,8 @@ describe("generated-project validation", () => {
     createValidGeneratedProject(root);
     writeFixture(root, "vercel.json", '{"buildCommand":"npm run build"}\n');
 
-    const result = spawnSync(process.execPath, [validateScript, root], { encoding: "utf8" });
-    const payload = JSON.parse(result.stdout) as { counts: { errors: number; warnings: number }; findings: PublicationFinding[] };
+    const result = spawnSync(process.execPath, [validateScript, root, "--mode", "local"], { encoding: "utf8" });
+    const payload = parseValidationResult(result.stdout);
 
     expect(result.status).toBe(0);
     expect(payload.counts.errors).toBe(0);
@@ -579,8 +668,8 @@ describe("generated-project validation", () => {
     createValidGeneratedProject(root);
     writeFixture(root, ".env.production", "PUBLIC_DEPLOYMENT=true\n");
 
-    const result = spawnSync(process.execPath, [validateScript, root], { encoding: "utf8" });
-    const payload = JSON.parse(result.stdout) as { counts: { errors: number; warnings: number }; findings: PublicationFinding[] };
+    const result = spawnSync(process.execPath, [validateScript, root, "--mode", "local"], { encoding: "utf8" });
+    const payload = parseValidationResult(result.stdout);
 
     expect(result.status).toBe(1);
     expect(payload.counts.errors).toBeGreaterThan(0);
