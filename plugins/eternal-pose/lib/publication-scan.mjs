@@ -431,10 +431,6 @@ function filenameFindings(path) {
 const MAX_CODE_AST_NODES = 100_000;
 const MAX_COMPONENT_EXPRESSION_ATTEMPTS = 512;
 const MAX_COMPONENT_EXPRESSION_BYTES = 4 * 1024 * 1024;
-const GENERIC_SECRET_NAME =
-  /^(?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|secret(?:[_-]?key)?|token|password|authorization|cookie)(?:[_-][A-Za-z0-9]+)*$/i;
-const GENERIC_SECRET_KEY =
-  /(^|[^A-Za-z0-9_$])(["']?(?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|secret(?:[_-]?key)?|token|password|authorization|cookie)(?:[_-][A-Za-z0-9]+)*["']?)(?![A-Za-z0-9_$])/gim;
 const CODE_SOURCE_PATH = /\.(?:[cm]?[jt]sx?|vue|svelte|astro)$/i;
 const COMPONENT_SOURCE_PATH = /\.(?:vue|svelte|astro)$/i;
 const DIRECT_ASSIGNMENT_OPERATORS = new Set(["=", "??=", "||=", "&&="]);
@@ -457,6 +453,38 @@ const AST_TRAVERSAL_IGNORED_KEYS = new Set([
   "trailingComments",
 ]);
 const RUNTIME_REFERENCE_VALUE = /^(?:process\.env|import\.meta\.env)(?:\.|\[)/i;
+const GOOGLE_API_KEY_LITERAL = /AIza[0-9A-Za-z_-]{35}/;
+const BEARER_TOKEN_LITERAL = /\bBearer\s+[A-Za-z0-9._~+/-]{20,}={0,2}/i;
+const PRIVATE_URL_LITERAL =
+  /https?:\/\/[^\s"']+[?&](?:access_token|api_key|key|signature|token|auth)=[^\s&#"']{8,}/i;
+const DECODED_LIVE_LITERAL_DETECTORS = [
+  [GOOGLE_API_KEY_LITERAL, "credential.google-api-key"],
+  [BEARER_TOKEN_LITERAL, "credential.bearer-token"],
+  [PRIVATE_URL_LITERAL, "credential.private-url"],
+];
+const HTML_NAMED_CHARACTER_REFERENCES = new Map([
+  ["AMP", "&"],
+  ["GT", ">"],
+  ["LT", "<"],
+  ["NewLine", "\n"],
+  ["QUOT", '"'],
+  ["Tab", "\t"],
+  ["amp", "&"],
+  ["apos", "'"],
+  ["colon", ":"],
+  ["equals", "="],
+  ["gt", ">"],
+  ["hyphen", "-"],
+  ["lowbar", "_"],
+  ["lt", "<"],
+  ["nbsp", "\u00a0"],
+  ["num", "#"],
+  ["period", "."],
+  ["plus", "+"],
+  ["quest", "?"],
+  ["quot", '"'],
+  ["sol", "/"],
+]);
 
 class CodeAnalysisLimitError extends Error {}
 
@@ -464,11 +492,61 @@ function createCodeAnalysisState() {
   return {
     analysisLimited: false,
     astNodes: 0,
+    decodedLiveLiteralCodes: new Set(),
     expressionAttempts: 0,
     expressionBytes: 0,
     hasSecret: false,
     malformed: false,
   };
+}
+
+function credentialNameTokens(name) {
+  if (typeof name !== "string" || name === "") return [];
+  return name
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map((token) => token.toLowerCase());
+}
+
+function isCredentialName(name) {
+  const tokens = credentialNameTokens(name);
+  if (tokens.some((token) => ["authorization", "cookie", "password", "secret", "token"].includes(token))) {
+    return true;
+  }
+  return tokens.some((token, index) => token === "api" && tokens[index + 1] === "key");
+}
+
+function decodeHtmlCharacterReferencesOnce(contents) {
+  return contents.replace(
+    /&(?:#([0-9]+);?|#[xX]([0-9A-Fa-f]+);?|([A-Za-z][A-Za-z0-9]+);)/g,
+    (reference, decimal, hexadecimal, named) => {
+      if (named !== undefined) return HTML_NAMED_CHARACTER_REFERENCES.get(named) ?? reference;
+      const codePoint = Number.parseInt(decimal ?? hexadecimal, hexadecimal === undefined ? 10 : 16);
+      if (
+        !Number.isSafeInteger(codePoint) ||
+        codePoint <= 0 ||
+        codePoint > 0x10ffff ||
+        (codePoint >= 0xd800 && codePoint <= 0xdfff)
+      ) {
+        return reference;
+      }
+      return String.fromCodePoint(codePoint);
+    },
+  );
+}
+
+function analyzeDecodedSpecificLiteral(contents, state) {
+  for (const [expression, code] of DECODED_LIVE_LITERAL_DETECTORS) {
+    if (expression.test(contents)) state.decodedLiveLiteralCodes.add(code);
+  }
+}
+
+function analyzeEncodedLiveText(contents, state) {
+  const decoded = decodeHtmlCharacterReferencesOnce(contents);
+  if (containsNonCodeGenericSecret(decoded)) state.hasSecret = true;
+  analyzeDecodedSpecificLiteral(decoded, state);
 }
 
 function lineTerminatorWidth(contents, cursor, limit) {
@@ -625,7 +703,7 @@ function valueFromAssignmentPattern(node) {
 }
 
 function directSecretPair(name, valueNode) {
-  if (typeof name !== "string" || !GENERIC_SECRET_NAME.test(name)) return false;
+  if (!isCredentialName(name)) return false;
   const value = staticLiteralValue(valueFromAssignmentPattern(valueNode));
   return typeof value === "string" && isSecretLiteralValue(value);
 }
@@ -931,6 +1009,40 @@ function markupNameCharacter(character) {
   );
 }
 
+function readMarkupAttributeName(contents, start, componentType) {
+  let bracketDepth = 0;
+  let cursor = start;
+  while (cursor < contents.length) {
+    const character = contents[cursor];
+    if (
+      /\s/.test(character) ||
+      character === "=" ||
+      character === ">" ||
+      character === '"' ||
+      character === "'" ||
+      (character === "/" && contents[cursor + 1] === ">")
+    ) {
+      break;
+    }
+    if (character === "[") {
+      bracketDepth += 1;
+    } else if (character === "]") {
+      bracketDepth -= 1;
+      if (bracketDepth < 0) return { cursor, malformed: true, name: contents.slice(start, cursor + 1) };
+    } else if (bracketDepth === 0 && !markupNameCharacter(character)) {
+      return { cursor, malformed: true, name: contents.slice(start, cursor + 1) };
+    } else if (bracketDepth > 0 && componentType !== "vue") {
+      return { cursor, malformed: true, name: contents.slice(start, cursor + 1) };
+    }
+    cursor += 1;
+  }
+  return {
+    cursor,
+    malformed: cursor === start || bracketDepth !== 0,
+    name: contents.slice(start, cursor),
+  };
+}
+
 function skipMarkupWhitespace(contents, start) {
   let cursor = start;
   while (cursor < contents.length && /\s/.test(contents[cursor])) cursor += 1;
@@ -1085,13 +1197,13 @@ function parseMarkupStartTag(path, contents, start, componentType, state) {
       continue;
     }
 
-    const attributeStart = cursor;
-    while (markupNameCharacter(contents[cursor])) cursor += 1;
-    if (cursor === attributeStart) {
+    const attribute = readMarkupAttributeName(contents, cursor, componentType);
+    cursor = attribute.cursor;
+    if (attribute.malformed) {
       state.malformed = true;
       return { attributes, cursor: contents.length, selfClosing: false, tagName };
     }
-    const attributeName = contents.slice(attributeStart, cursor);
+    const attributeName = attribute.name;
     if (!balancedMarkupAttributeName(attributeName)) {
       state.malformed = true;
       return { attributes, cursor: contents.length, selfClosing: false, tagName };
@@ -1114,8 +1226,10 @@ function parseMarkupStartTag(path, contents, start, componentType, state) {
         state.malformed = true;
         return { attributes, cursor: contents.length, selfClosing: false, tagName };
       }
-      attributes.set(attributeName.toLowerCase(), literal.value);
-      analyzeMarkupAttribute(path, componentType, attributeName, literal.value, "literal", state);
+      const decodedValue = decodeHtmlCharacterReferencesOnce(literal.value);
+      attributes.set(attributeName.toLowerCase(), decodedValue);
+      analyzeDecodedSpecificLiteral(decodedValue, state);
+      analyzeMarkupAttribute(path, componentType, attributeName, decodedValue, "literal", state);
       cursor = literal.end;
       continue;
     }
@@ -1143,8 +1257,9 @@ function parseMarkupStartTag(path, contents, start, componentType, state) {
       state.malformed = true;
       return { attributes, cursor: contents.length, selfClosing: false, tagName };
     }
-    const value = contents.slice(valueStart, cursor);
+    const value = decodeHtmlCharacterReferencesOnce(contents.slice(valueStart, cursor));
     attributes.set(attributeName.toLowerCase(), value);
+    analyzeDecodedSpecificLiteral(value, state);
     analyzeMarkupAttribute(path, componentType, attributeName, value, "literal", state);
   }
 
@@ -1247,7 +1362,16 @@ function analyzeMarkupSource(path, contents, start, state) {
       continue;
     }
     if (contents[cursor] !== "<") {
-      cursor += 1;
+      const textStart = cursor;
+      while (
+        cursor < contents.length &&
+        contents[cursor] !== "<" &&
+        !(componentType === "vue" && contents.startsWith("{{", cursor)) &&
+        !((componentType === "svelte" || componentType === "astro") && contents[cursor] === "{")
+      ) {
+        cursor += 1;
+      }
+      analyzeEncodedLiveText(contents.slice(textStart, cursor), state);
       continue;
     }
     if (contents.startsWith("</", cursor)) {
@@ -1369,9 +1493,10 @@ function skipNonCodeTrivia(contents, start) {
 }
 
 function containsNonCodeGenericSecret(contents) {
-  GENERIC_SECRET_KEY.lastIndex = 0;
+  const candidate = /(^|[^A-Za-z0-9_$])(?:(["'])([^"'\\\r\n]{1,128})\2|([A-Za-z_$][A-Za-z0-9_$-]{0,127}))(?=\s*[:=])/gim;
   let match;
-  while ((match = GENERIC_SECRET_KEY.exec(contents)) !== null) {
+  while ((match = candidate.exec(contents)) !== null) {
+    if (!isCredentialName(match[3] ?? match[4])) continue;
     let cursor = skipNonCodeTrivia(contents, match.index + match[0].length);
     if (contents[cursor] !== ":" && contents[cursor] !== "=") continue;
     cursor = skipNonCodeTrivia(contents, cursor + 1);
@@ -1389,11 +1514,17 @@ function containsNonCodeGenericSecret(contents) {
 
 function containsGenericSecretLiteral(path, contents, truncated) {
   if (CODE_SOURCE_PATH.test(path) && truncated) {
-    return { analysisLimited: true, hasSecret: false, malformed: false };
+    return {
+      analysisLimited: true,
+      decodedLiveLiteralCodes: new Set(),
+      hasSecret: false,
+      malformed: false,
+    };
   }
   if (CODE_SOURCE_PATH.test(path)) return containsCodeGenericSecret(path, contents);
   return {
     analysisLimited: false,
+    decodedLiveLiteralCodes: new Set(),
     hasSecret: containsNonCodeGenericSecret(contents),
     malformed: false,
   };
@@ -1401,13 +1532,27 @@ function containsGenericSecretLiteral(path, contents, truncated) {
 
 function contentFindings(path, contents, truncated = false) {
   const findings = [];
-  const addIfMatched = (expression, severity, code, ruleName) => {
-    if (expression.test(contents)) findings.push(finding(severity, code, path, `${ruleName} detected in "${path}".`));
+  const genericSecretScan = containsGenericSecretLiteral(path, contents, truncated);
+  const addIfMatched = (expression, severity, code, ruleName, includeDecodedLiveText = false) => {
+    if (expression.test(contents) || (includeDecodedLiveText && genericSecretScan.decodedLiveLiteralCodes.has(code))) {
+      findings.push(finding(severity, code, path, `${ruleName} detected in "${path}".`));
+    }
   };
 
-  addIfMatched(/AIza[0-9A-Za-z_-]{35}/, "error", "credential.google-api-key", "Google API key-shaped literal");
-  addIfMatched(/\bBearer\s+[A-Za-z0-9._~+/-]{20,}={0,2}/i, "error", "credential.bearer-token", "Bearer token-shaped literal");
-  const genericSecretScan = containsGenericSecretLiteral(path, contents, truncated);
+  addIfMatched(
+    GOOGLE_API_KEY_LITERAL,
+    "error",
+    "credential.google-api-key",
+    "Google API key-shaped literal",
+    true,
+  );
+  addIfMatched(
+    BEARER_TOKEN_LITERAL,
+    "error",
+    "credential.bearer-token",
+    "Bearer token-shaped literal",
+    true,
+  );
   if (genericSecretScan.malformed) {
     findings.push(
       finding(
@@ -1439,10 +1584,11 @@ function contentFindings(path, contents, truncated = false) {
     );
   }
   addIfMatched(
-    /https?:\/\/[^\s"']+[?&](?:access_token|api_key|key|signature|token|auth)=[^\s&#"']{8,}/i,
+    PRIVATE_URL_LITERAL,
     "error",
     "credential.private-url",
     "Credential-bearing private URL",
+    true,
   );
   addIfMatched(/\b(?:set-)?cookie\s*:\s*[^\s;=]+=[^\s;]{12,}/i, "error", "credential.cookie", "Cookie-shaped literal");
   addIfMatched(

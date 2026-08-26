@@ -1334,6 +1334,269 @@ describe("publication safety findings", () => {
     expect(JSON.stringify(findings)).not.toContain(secret);
   });
 
+  test.each([
+    {
+      path: "src/live-entity.vue",
+      source: (secret: string) => `<p>accessToken&#58; runtime&#95;${secret}</p>\n`,
+    },
+    {
+      path: "src/live-entity.svelte",
+      source: (secret: string) => `<p>clientSecret&colon; runtime&lowbar;${secret}</p>\n`,
+    },
+    {
+      path: "src/live-entity.astro",
+      source: (secret: string) => `<p>refreshToken&#x3d;runtime&#x5f;${secret}</p>\n`,
+    },
+  ])("decodes a live-text credential once in $path", async ({ path, source }) => {
+    const root = createTemporaryRoot();
+    const suffix = [basename(path)[0], "E".repeat(27)].join("");
+    const secret = `runtime_${suffix}`;
+    writeFixture(root, path, source(suffix));
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, path, "credential.generic-secret")).toBe(true);
+    expect(findingAt(findings, path, "scan.malformed-code")).toBe(false);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test("decodes an exact Google-key shape split by a numeric entity in live text", async () => {
+    const root = createTemporaryRoot();
+    const googleKey = ["AI", "za", "G".repeat(35)].join("");
+    writeFixture(root, "src/live-google.vue", `<p>AI&#122;a${"G".repeat(35)}</p>\n`);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/live-google.vue", "credential.google-api-key")).toBe(true);
+    expect(JSON.stringify(findings)).not.toContain(googleKey);
+  });
+
+  test.each([
+    {
+      path: "src/live-bearer.svelte",
+      code: "credential.bearer-token",
+      source: (secret: string) => `<p>Bearer&#32;${secret}</p>\n`,
+    },
+    {
+      path: "src/live-private-url.astro",
+      code: "credential.private-url",
+      source: (secret: string) => `<p>https://private.invalid/path?api_key&#61;${secret}</p>\n`,
+    },
+  ])("applies $code detection to decoded ordinary text", async ({ path, code, source }) => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", basename(path)[0], "L".repeat(27)].join("");
+    writeFixture(root, path, source(secret));
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, path, code)).toBe(true);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test("decodes a semicolonless numeric reference in a literal markup attribute", async () => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", "N".repeat(28)].join("");
+    writeFixture(root, "src/entity-attribute.vue", `<Map api-key="runtime&#95${"N".repeat(28)}" />\n`);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/entity-attribute.vue", "credential.generic-secret")).toBe(true);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test("applies exact detectors to an entity-decoded literal markup attribute", async () => {
+    const root = createTemporaryRoot();
+    const googleKey = ["AI", "za", "T".repeat(35)].join("");
+    writeFixture(root, "src/entity-literal.vue", `<Map data-note="AI&#122;a${"T".repeat(35)}" />\n`);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/entity-literal.vue", "credential.google-api-key")).toBe(true);
+    expect(JSON.stringify(findings)).not.toContain(googleKey);
+  });
+
+  test("decodes quoted Vue directive source before parsing it", async () => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", "V".repeat(28)].join("");
+    writeFixture(
+      root,
+      "src/entity-directive.vue",
+      `<button @click="ready &amp;&amp; (apiKey = &quot;${secret}&quot;)" />\n`,
+    );
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/entity-directive.vue", "credential.generic-secret")).toBe(true);
+    expect(findingAt(findings, "src/entity-directive.vue", "scan.malformed-code")).toBe(false);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test("does not recursively decode a doubly encoded live literal", async () => {
+    const root = createTemporaryRoot();
+    const googleKey = ["AI", "za", "D".repeat(35)].join("");
+    writeFixture(root, "src/double-entity.vue", `<p>AI&amp;#122;a${"D".repeat(35)}</p>\n`);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/double-entity.vue", "credential.google-api-key")).toBe(false);
+    expect(findingAt(findings, "src/double-entity.vue", "scan.malformed-code")).toBe(false);
+    expect(JSON.stringify(findings)).not.toContain(googleKey);
+  });
+
+  test.each([
+    ["unknown", "<p>apiKey&unknown;: runtime_UUUUUUUUUUUUUUUUUUUUUUUUUUUU</p>\n"],
+    ["invalid numeric", "<p>apiKey&#x110000;: runtime_IIIIIIIIIIIIIIIIIIIIIIIIIIII</p>\n"],
+  ])("leaves an %s entity literal", async (label, contents) => {
+    const root = createTemporaryRoot();
+    const path = `src/entity-${label.replace(" ", "-")}.vue`;
+    writeFixture(root, path, contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, path, "credential.generic-secret")).toBe(false);
+    expect(findingAt(findings, path, "scan.malformed-code")).toBe(false);
+  });
+
+  test.each([
+    ["src/entity-script.vue", `<script>const note = "AI&#122;a${"R".repeat(35)}";</script>\n`],
+    ["src/entity-style.svelte", `<style>.note::after { content: "AI&#122;a${"R".repeat(35)}"; }</style>\n`],
+    ["src/entity-frontmatter.astro", `---\nconst note = "AI&#122;a${"R".repeat(35)}";\n---\n<p />\n`],
+    ["src/entity-brace.svelte", `<p>{"AI&#122;a${"R".repeat(35)}"}</p>\n`],
+    ["src/entity-comment.vue", `<!-- AI&#122;a${"R".repeat(35)} -->\n`],
+  ])("does not entity-decode raw code, style, frontmatter, brace, or comment content in %s", async (path, contents) => {
+    const root = createTemporaryRoot();
+    writeFixture(root, path, contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, path, "credential.google-api-key")).toBe(false);
+    expect(findingAt(findings, path, "scan.malformed-code")).toBe(false);
+  });
+
+  test.each([
+    ["src/access-token.js", (secret: string) => `const accessToken = "${secret}";\n`],
+    ["src/refresh-token.ts", (secret: string) => `class Config { refreshToken: string = "${secret}"; }\n`],
+    ["src/authorization-token.ts", (secret: string) => `class Config { #authorizationToken = "${secret}"; }\n`],
+    ["src/client-secret.ts", (secret: string) => `config.clientSecret = "${secret}";\n`],
+    ["src/google-maps-key.ts", (secret: string) => `const config = { googleMapsApiKey: "${secret}" };\n`],
+    ["src/bearer-token.ts", (secret: string) => `const bearerToken = "${secret}";\n`],
+    ["src/session-cookie.tsx", (secret: string) => `const view = <Map sessionCookie="${secret}" />;\n`],
+    ["src/user-password.vue", (secret: string) => `<Map user-password="${secret}" />\n`],
+    ["src/pascal-token.ts", (secret: string) => `const AccessToken = "${secret}";\n`],
+    ["src/acronym-key.ts", (secret: string) => `const GoogleMapsAPIKey = "${secret}";\n`],
+  ])("canonicalizes a credential-shaped camel/Pascal/snake/kebab name in %s", async (path, source) => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", basename(path)[0], "C".repeat(27)].join("");
+    writeFixture(root, path, source(secret));
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, path, "credential.generic-secret")).toBe(true);
+    expect(findingAt(findings, path, "scan.malformed-code")).toBe(false);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test.each([
+    ["config.json", (secret: string) => `{"bearerToken":"${secret}"}\n`],
+    ["config.yaml", (secret: string) => `session_cookie: ${secret}\n`],
+    ["config.ini", (secret: string) => `google-maps-api-key=${secret}\n`],
+    ["notes.txt", (secret: string) => `clientSecret = ${secret} trailing prose\n`],
+    ["src/comment-name.ts", (secret: string) => `// userPassword = ${secret} trailing prose\n`],
+  ])("shares credential-name canonicalization with non-code scanning in %s", async (path, source) => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", basename(path)[0], "K".repeat(27)].join("");
+    writeFixture(root, path, source(secret));
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, path, "credential.generic-secret")).toBe(true);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test.each(["monkey", "tokenize", "passwordless", "secretary"])(
+    "does not treat the lookalike name %s as a credential",
+    async (name) => {
+      const root = createTemporaryRoot();
+      const secret = ["runtime_", name[0], "H".repeat(27)].join("");
+      writeFixture(root, "src/name-lookalike.ts", `const ${name} = "${secret}";\n`);
+      writeFixture(root, "name-lookalike.yaml", `${name}: ${secret}\n`);
+
+      const findings = await scanPublication(root);
+
+      expect(findingAt(findings, "src/name-lookalike.ts", "credential.generic-secret")).toBe(false);
+      expect(findingAt(findings, "name-lookalike.yaml", "credential.generic-secret")).toBe(false);
+    },
+  );
+
+  test("accepts runtime-derived values for every canonical credential name", async () => {
+    const root = createTemporaryRoot();
+    writeFixture(
+      root,
+      "src/runtime-names.ts",
+      [
+        "const accessToken = runtimeConfig();",
+        "const refreshToken = options.refreshToken;",
+        "const authorizationToken = process.env.AUTHORIZATION_TOKEN;",
+        "const clientSecret = import.meta.env.CLIENT_SECRET;",
+        "const googleMapsApiKey = resolveKey();",
+        "const bearerToken = prefix + suffix;",
+        "const sessionCookie = `runtime_${value}`;",
+        "const userPassword = tagged`runtime_value`;",
+        "",
+      ].join("\n"),
+    );
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/runtime-names.ts", "credential.generic-secret")).toBe(false);
+    expect(findingAt(findings, "src/runtime-names.ts", "scan.malformed-code")).toBe(false);
+  });
+
+  test.each([
+    ["dollar identifier", (secret: string) => `<Map :[key$]="accessToken = '${secret}'" />\n`],
+    ["call expression", (secret: string) => `<Map v-bind:[resolveKey()]="accessToken = '${secret}'" />\n`],
+    ["optional chain", (secret: string) => `<Map :[config?.field]="accessToken = '${secret}'" />\n`],
+    ["operators", (secret: string) => `<Map :[ready?left:right]="accessToken = '${secret}'" />\n`],
+    ["event expression", (secret: string) => `<Map @[events?.current].once="accessToken = '${secret}'; run()" />\n`],
+  ])("scans a Vue dynamic argument with a %s", async (surface, source) => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", surface[0], "A".repeat(27)].join("");
+    writeFixture(root, "src/vue-dynamic-name.vue", source(secret));
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/vue-dynamic-name.vue", "credential.generic-secret")).toBe(true);
+    expect(findingAt(findings, "src/vue-dynamic-name.vue", "scan.malformed-code")).toBe(false);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test("keeps a Vue dynamic argument key dynamic when its value is a static literal", async () => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", "Y".repeat(28)].join("");
+    writeFixture(root, "src/vue-dynamic-key.vue", `<Map :[googleMapsApiKey]="'${secret}'" />\n`);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/vue-dynamic-key.vue", "credential.generic-secret")).toBe(false);
+    expect(findingAt(findings, "src/vue-dynamic-key.vue", "scan.malformed-code")).toBe(false);
+  });
+
+  test.each([
+    ["empty", '<Map :[]="runtimeKey" />\n'],
+    ["unbalanced", '<Map :[resolveKey()="runtimeKey" />\n'],
+    ["parser-invalid", '<Map :[call(]="runtimeKey" />\n'],
+    ["whitespace boundary", '<Map :[config ?.field]="runtimeKey" />\n'],
+  ])("fails closed for a Vue dynamic argument with an %s form", async (label, contents) => {
+    const root = createTemporaryRoot();
+    const path = `src/vue-dynamic-${label.replace(" ", "-")}.vue`;
+    writeFixture(root, path, contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, path, "scan.malformed-code")).toBe(true);
+    expect(JSON.stringify(findings)).not.toContain(contents);
+  });
+
   const quotedSourceSecret = ["runtime_", "Q".repeat(28)].join("");
   const templateSourceSecret = ["runtime_", "B".repeat(28)].join("");
   const jsonSecret = ["runtime_", "J".repeat(28)].join("");
