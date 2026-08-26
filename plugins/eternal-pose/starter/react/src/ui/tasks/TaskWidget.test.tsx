@@ -145,7 +145,9 @@ describe("TaskWidget", () => {
     const taskList = dialog.querySelector(".task-widget__list");
     expect(getComputedStyle(dialogSurface!).display).toBe("flex");
     expect(getComputedStyle(taskList!).overflowY).toBe("auto");
-    expect(screen.getByLabelText("Refill water")).toBeVisible();
+    const refillTask = screen.getByLabelText("Refill water");
+    expect(refillTask).toBeEnabled();
+    expect(refillTask.closest("label")).toBeVisible();
     expect(screen.getByText("Use the fountain beside the lobby.")).toBeVisible();
     expect(screen.getByText("Use the lobby fountain")).toBeVisible();
     expect(screen.queryByRole("button", { name: /Refill water 子項/ })).not.toBeInTheDocument();
@@ -158,7 +160,9 @@ describe("TaskWidget", () => {
     await user.click(disclosure);
     expect(disclosure).toHaveAttribute("aria-expanded", "true");
     expect(document.getElementById(targetId!)).not.toHaveAttribute("hidden");
-    expect(screen.getByLabelText("Pack passport")).toBeVisible();
+    const passportTask = screen.getByLabelText("Pack passport");
+    expect(passportTask).toBeEnabled();
+    expect(passportTask.closest("label")).toBeVisible();
   });
 
   it("emits namespace-safe root and child completion values", async () => {

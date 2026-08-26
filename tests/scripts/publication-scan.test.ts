@@ -257,6 +257,42 @@ describe("publication safety findings", () => {
       name: "JSX brace line comment",
       source: (secret: string) => `const view = <Map apiKey={// release value\n'${secret}'} />;\n`,
     },
+    {
+      name: "literal with as assertion",
+      source: (secret: string) => `const apiKey = "${secret}" as string;\n`,
+    },
+    {
+      name: "literal with as const assertion",
+      source: (secret: string) => `const apiKey = '${secret}' as const;\n`,
+    },
+    {
+      name: "literal with satisfies assertion",
+      source: (secret: string) => `const token = \`${secret}\` satisfies string;\n`,
+    },
+    {
+      name: "JSX literal with as const assertion",
+      source: (secret: string) => `const view = <Map apiKey={"${secret}" as const} />;\n`,
+    },
+    {
+      name: "JSX literal with satisfies assertion",
+      source: (secret: string) => `const view = <Map apiKey={'${secret}' satisfies string} />;\n`,
+    },
+    {
+      name: "literal after more than 512 whitespace characters",
+      source: (secret: string) => `const apiKey =${" ".repeat(700)}"${secret}";\n`,
+    },
+    {
+      name: "literal after more than 512 comment characters",
+      source: (secret: string) => `const token = /* ${"release-trivia-".repeat(50)} */ '${secret}' as const;\n`,
+    },
+    {
+      name: "literal inside one line comment boundary",
+      source: (secret: string) => `// apiKey: "${secret}"\nconst harmless = runtimeConfig();\n`,
+    },
+    {
+      name: "literal inside one block comment boundary",
+      source: (secret: string) => `/* token = '${secret}' as const */\nconst harmless = runtimeConfig();\n`,
+    },
   ])("rejects a $name literal without echoing it", async ({ name, source }) => {
     const root = createTemporaryRoot();
     const secret = ["runtime", "_", name[0], "L".repeat(27)].join("");
@@ -278,8 +314,35 @@ describe("publication safety findings", () => {
     "const apiKey = /* runtime */ runtimeConfig();\n",
     "const apiKey = runtimePrefix + options.apiKey;\n",
     "const apiKey = \"runtime_fallback_value\" + options.apiKey;\n",
+    "const apiKey = \"runtime_fallback_value\" as string + options.apiKey;\n",
     "const view = <Map apiKey={/* runtime */ import.meta.env.VITE_GOOGLE_MAPS_API_KEY} />;\n",
     "const view = <Map apiKey={// runtime\nruntimeConfig()} />;\n",
+    "const apiKey = runtimeTag`runtime_fallback_value`;\n",
+    "const view = <Map apiKey={runtimeTag`runtime_fallback_value`} />;\n",
+    [
+      "interface RuntimeOptions {",
+      "  apiKey: string",
+      "}",
+      "const harmless = \"runtime_harmless_literal_value\";",
+      "",
+    ].join("\n"),
+    [
+      "// apiKey:",
+      "const harmless = 'runtime_harmless_literal_value';",
+      "",
+    ].join("\n"),
+    [
+      "/* apiKey: */",
+      "const harmless = `runtime_harmless_literal_value`;",
+      "",
+    ].join("\n"),
+    [
+      "const config = {",
+      "  apiKey: runtimeKey,",
+      "  label: \"runtime_harmless_literal_value\",",
+      "};",
+      "",
+    ].join("\n"),
   ])("accepts a non-literal JSX runtime expression %#", async (contents) => {
     const root = createTemporaryRoot();
     writeFixture(root, "src/runtime-props.tsx", contents);

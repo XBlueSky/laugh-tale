@@ -129,38 +129,40 @@ async function visibleInteractiveTargetFailures(page: Page): Promise<Array<{
     const elements = [...new Set(document.querySelectorAll<HTMLElement>(selector))];
     return elements.flatMap((element) => {
       const input = element instanceof HTMLInputElement ? element : null;
-      const target =
-        input !== null && ["checkbox", "radio"].includes(input.type) && input.labels?.[0] !== undefined
-          ? input.labels[0]
-          : element;
       if (
         element.matches(":disabled") ||
         element.getAttribute("aria-disabled") === "true" ||
-        element.closest("[inert]") !== null ||
-        target.closest("[inert], [hidden], [aria-hidden='true']") !== null
+        element.closest("[inert]") !== null
       ) {
         return [];
       }
-      const style = getComputedStyle(target);
-      const rect = target.getBoundingClientRect();
-      if (
-        style.display === "none" ||
-        style.visibility === "hidden" ||
-        style.visibility === "collapse" ||
-        style.contentVisibility === "hidden" ||
-        target.getClientRects().length === 0 ||
-        rect.width === 0 ||
-        rect.height === 0
-      ) {
-        return [];
-      }
-      return rect.width + 0.5 < 44 || rect.height + 0.5 < 44
-        ? [{
-            name: element.getAttribute("aria-label") ?? element.textContent?.trim().slice(0, 80) ?? element.tagName,
-            width: rect.width,
-            height: rect.height,
-          }]
-        : [];
+      const targets: HTMLElement[] =
+        input !== null && ["checkbox", "radio"].includes(input.type)
+          ? [element, ...Array.from(input.labels ?? [])]
+          : [element];
+      return targets.flatMap((target) => {
+        if (target.closest("[inert], [hidden], [aria-hidden='true']") !== null) return [];
+        const style = getComputedStyle(target);
+        const rect = target.getBoundingClientRect();
+        if (
+          style.display === "none" ||
+          style.visibility === "hidden" ||
+          style.visibility === "collapse" ||
+          style.contentVisibility === "hidden" ||
+          target.getClientRects().length === 0 ||
+          rect.width === 0 ||
+          rect.height === 0
+        ) {
+          return [];
+        }
+        return rect.width + 0.5 < 44 || rect.height + 0.5 < 44
+          ? [{
+              name: element.getAttribute("aria-label") ?? element.textContent?.trim().slice(0, 80) ?? element.tagName,
+              width: rect.width,
+              height: rect.height,
+            }]
+          : [];
+      });
     });
   });
 }
@@ -170,11 +172,31 @@ test("touch target audit catches offscreen and label-backed undersized controls"
     <button aria-label="Offscreen small control" style="position:absolute;top:2000px;left:0;width:24px;height:24px;padding:0">O</button>
     <input id="small-choice" type="checkbox" aria-label="Label-backed small control" style="position:absolute;width:0;height:0;opacity:0">
     <label for="small-choice" style="display:block;width:24px;height:24px">L</label>
+    <input id="visible-small-native" type="checkbox" aria-label="Visible native small control" style="display:block;width:24px;height:24px;margin:0">
+    <label for="visible-small-native" hidden>Hidden first native label</label>
+    <input id="second-label-choice" type="radio" aria-label="Visible second label control" style="position:absolute;width:0;height:0;opacity:0">
+    <label for="second-label-choice" hidden>Hidden first choice label</label>
+    <label for="second-label-choice" style="display:block;width:24px;height:24px">Visible second choice label</label>
+    <div hidden>
+      <input id="hidden-only" type="checkbox" aria-label="Hidden small control" style="width:24px;height:24px">
+      <label for="hidden-only" style="display:block;width:24px;height:24px">Hidden small label</label>
+    </div>
+    <div inert>
+      <input id="inert-only" type="radio" aria-label="Inert small control" style="width:24px;height:24px">
+      <label for="inert-only" style="display:block;width:24px;height:24px">Inert small label</label>
+    </div>
   `);
 
-  expect(await visibleInteractiveTargetFailures(page)).toEqual(expect.arrayContaining([
+  const failures = await visibleInteractiveTargetFailures(page);
+  expect(failures).toEqual(expect.arrayContaining([
     { name: "Offscreen small control", width: 24, height: 24 },
     { name: "Label-backed small control", width: 24, height: 24 },
+    { name: "Visible native small control", width: 24, height: 24 },
+    { name: "Visible second label control", width: 24, height: 24 },
+  ]));
+  expect(failures.map(({ name }) => name)).not.toEqual(expect.arrayContaining([
+    "Hidden small control",
+    "Inert small control",
   ]));
 });
 
@@ -368,8 +390,16 @@ test("compares dining and snack candidates together on the persistent map with d
   const canalMarker = map.getByRole("button", { name: /Map place 5B · Canal counter/ });
   await expect(canalMarker).toBeVisible();
   await canalMarker.dispatchEvent("click");
-  await expect(page.getByRole("radio", { name: /5B · Canal counter/ })).toBeChecked();
-  await expect(page.getByRole("radio", { name: /5B · Canal counter/ })).toBeFocused();
+  const canalRadio = page.getByRole("radio", { name: /5B · Canal counter/ });
+  await expect(canalRadio).toBeChecked();
+  await expect(canalRadio).toBeFocused();
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Shift+Tab");
+  await expect(canalRadio).toBeFocused();
+  expect(await canalRadio.evaluate((element) => {
+    const label = element.closest("label");
+    return label === null ? "none" : getComputedStyle(label).outlineStyle;
+  })).not.toBe("none");
   expect(await visibleInteractiveTargetFailures(page)).toEqual([]);
   await page.getByRole("button", { name: "確認選擇 Canal counter" }).click();
   await expect(page.getByText("已選 · Canal counter")).toBeVisible();

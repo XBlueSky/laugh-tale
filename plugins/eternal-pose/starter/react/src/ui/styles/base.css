@@ -285,6 +285,7 @@ button {
 .trip-home__task label,
 .task-widget__item label,
 .task-widget__children label {
+  position: relative;
   display: grid;
   min-width: 0;
   min-height: 44px;
@@ -341,12 +342,71 @@ button {
 }
 
 .candidate-decision__option {
+  position: relative;
   display: grid;
   min-width: 0;
   min-height: 44px;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-2);
+}
+
+.candidate-decision__option > input[type="radio"],
+.trip-home__task label > input[type="checkbox"],
+.task-widget__item label > input[type="checkbox"],
+.task-widget__children label > input[type="checkbox"] {
+  position: absolute;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.candidate-decision__option > input[type="radio"] {
+  inset: calc(0px - var(--border-thin));
+}
+
+.trip-home__task label > input[type="checkbox"],
+.task-widget__item label > input[type="checkbox"],
+.task-widget__children label > input[type="checkbox"] {
+  inset: 0;
+}
+
+.candidate-decision__option::before,
+.trip-home__task label::before,
+.task-widget__item label::before,
+.task-widget__children label::before {
+  width: 18px;
+  height: 18px;
+  border: 2px solid currentColor;
+  background: transparent;
+  content: "";
+}
+
+.candidate-decision__option::before {
+  border-radius: 999px;
+}
+
+.trip-home__task label::before,
+.task-widget__item label::before,
+.task-widget__children label::before {
+  border-radius: 4px;
+}
+
+.candidate-decision__option:has(> input:checked)::before,
+.trip-home__task label:has(> input:checked)::before,
+.task-widget__item label:has(> input:checked)::before,
+.task-widget__children label:has(> input:checked)::before {
+  border-color: var(--color-accent-strong);
+  background: var(--color-accent-strong);
+  box-shadow: inset 0 0 0 3px var(--color-surface);
+}
+
+.candidate-decision__option:has(> input:focus-visible),
+.trip-home__task label:has(> input:focus-visible),
+.task-widget__item label:has(> input:focus-visible),
+.task-widget__children label:has(> input:focus-visible) {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 
 .candidate-decision__location-state {
@@ -818,5 +878,12 @@ button:disabled {
 
   :where(button, a, input, select):focus-visible {
     outline: 2px solid CanvasText;
+  }
+
+  .candidate-decision__option:has(> input:focus-visible),
+  .trip-home__task label:has(> input:focus-visible),
+  .task-widget__item label:has(> input:focus-visible),
+  .task-widget__children label:has(> input:focus-visible) {
+    outline-color: Highlight;
   }
 }
