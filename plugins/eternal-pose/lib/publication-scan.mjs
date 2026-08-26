@@ -1,20 +1,67 @@
 import { Buffer } from "node:buffer";
 import { execFile } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rmdir, unlink } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 const require = createRequire(import.meta.url);
-const { parse: parseBabelProgram, parseExpression: parseBabelExpression } = require(
-  "../vendor/@babel/parser/index.cjs",
-);
-const { decodeHTML, decodeHTMLAttribute } = await import(
-  /* @vite-ignore */ new URL("../vendor/entities/dist/decode.js", import.meta.url).href
-);
+const SCANNER_PLUGIN_ROOT = await realpath(resolve(fileURLToPath(new URL("..", import.meta.url))));
+const AUDITED_VENDOR_FILES = Object.freeze([
+  { path: "vendor/@babel/parser/index.cjs", bytes: 513_214, sha256: "6969920ae0610df927b6b3e675d1309372c268e36d391652af8e3e0183cbe8f8", runtime: true },
+  { path: "vendor/@babel/parser/LICENSE", bytes: 1_086, sha256: "2e97627cb278aa7556fb9e8817368302301a595b6c7582512b8d74c57b773652", attribution: true },
+  { path: "vendor/@babel/parser/UPSTREAM.json", bytes: 385, sha256: "40944e9cadca6d230f6300b8de440baceed6b28674db746b3e6710878ff7242d", attribution: true },
+  { path: "vendor/entities/package.json", bytes: 2_563, sha256: "86e28ac6361377a9c0a82dc7ce849b16bfcc6b13d862c563bbf9b3fe9267773a", attribution: true, runtime: true },
+  { path: "vendor/entities/LICENSE", bytes: 1_260, sha256: "cb992345949ccd6e8394b2cd6c465f7b897c864f845937dbf64e8997f389e164", attribution: true },
+  { path: "vendor/entities/UPSTREAM.json", bytes: 1_543, sha256: "ad5c00541bf118ab35677db49084f27dd3df097d19420869feb5d1d3e1a2e993", attribution: true },
+  { path: "vendor/entities/dist/decode.js", bytes: 22_923, sha256: "5e3e1c938416abcb354ff4d7808f0a010d27d0e4170195c6f95f2e6895cb081a", runtime: true },
+  { path: "vendor/entities/dist/decode-codepoint.js", bytes: 1_160, sha256: "f09dbc23d35abbf96718dfdd04def3c1d3444495541d050c69a12706ee76dbb1", runtime: true },
+  { path: "vendor/entities/dist/generated/decode-data-html.js", bytes: 32_453, sha256: "a845d1bb8e661abad2642088c646031523dc58b6e8bd0453308b0d71c01c8b8f", runtime: true },
+  { path: "vendor/entities/dist/generated/decode-data-xml.js", bytes: 314, sha256: "e11599611184b79a44d80cf0c135f4eeaf09e0ccac8845da54333177336a20ed", runtime: true },
+  { path: "vendor/entities/dist/internal/bin-trie-flags.js", bytes: 942, sha256: "4f2d90d78b57cc2549cda4c53c7b5a1ca6176fcf746da1bd4ad4e6e9608ea89d", runtime: true },
+  { path: "vendor/entities/dist/internal/decode-shared.js", bytes: 617, sha256: "51a2120afeae660916954be58f323c718b0415b78e9719c0b0279f49f3cc0d96", runtime: true },
+  { path: "THIRD_PARTY_NOTICES.md", bytes: 701, sha256: "239c959a453dd994735fa7fb3105c461e64735bf66dba8d259a7f8da98560b45", attribution: true },
+]);
+let parseBabelProgram;
+let parseBabelExpression;
+let decodeHTML;
+let decodeHTMLAttribute;
+
+function sha256(contents) {
+  return createHash("sha256").update(contents).digest("hex");
+}
+
+async function matchesAuditedFile(file) {
+  try {
+    const contents = await readFile(join(SCANNER_PLUGIN_ROOT, file.path));
+    return contents.byteLength === file.bytes && sha256(contents) === file.sha256;
+  } catch {
+    return false;
+  }
+}
+
+async function initializeScannerRuntime() {
+  const runtimeFiles = AUDITED_VENDOR_FILES.filter((file) => file.runtime);
+  if (!(await Promise.all(runtimeFiles.map(matchesAuditedFile))).every(Boolean)) return;
+  try {
+    const parser = require("../vendor/@babel/parser/index.cjs");
+    const entities = await import(
+      /* @vite-ignore */ new URL("../vendor/entities/dist/decode.js", import.meta.url).href
+    );
+    parseBabelProgram = parser.parse;
+    parseBabelExpression = parser.parseExpression;
+    decodeHTML = entities.decodeHTML;
+    decodeHTMLAttribute = entities.decodeHTMLAttribute;
+  } catch {
+    // Scanner analysis fails closed when its audited runtime cannot be loaded.
+  }
+}
+
+await initializeScannerRuntime();
 const MAX_TEXT_BYTES = 2 * 1024 * 1024;
 const HARD_SKIPPED_DIRECTORIES = new Set([".git", "coverage", "node_modules"]);
 const BUILD_DIRECTORIES = new Set([".next", ".vite", "build", "coverage", "dist", "out", "playwright-report", "test-results"]);
@@ -378,13 +425,71 @@ function isBinary(buffer) {
   return sampleLength > 0 && controlCharacters / sampleLength > 0.1;
 }
 
-function auditedThirdPartyVendorRelativePath(path) {
-  return /^(?:plugins\/eternal-pose\/)?vendor\/(?:@babel\/parser|entities)\/(.+)$/i.exec(path)?.[1] ?? null;
+function auditedFilesWithinRoot(canonicalRoot) {
+  const expected = new Map();
+  for (const file of AUDITED_VENDOR_FILES) {
+    const absolutePath = join(SCANNER_PLUGIN_ROOT, file.path);
+    const relativePath = normalizeRelativePath(relative(canonicalRoot, absolutePath));
+    if (isContainedRelativePath(relativePath)) expected.set(relativePath, { ...file, absolutePath });
+  }
+  return expected;
 }
 
-function isAuditedThirdPartyAttribution(path) {
-  const relativePath = auditedThirdPartyVendorRelativePath(path);
-  return relativePath !== null && /^(?:LICENSE|UPSTREAM\.json|package\.json)$/i.test(relativePath);
+function resemblesAuditedVendorPath(path) {
+  return /(?:^|\/)vendor\/(?:@babel\/parser|entities)(?:\/|$)/i.test(path);
+}
+
+async function auditVendorInventory(canonicalRoot, inventory) {
+  const expected = auditedFilesWithinRoot(canonicalRoot);
+  const inventoryPaths = new Set(inventory);
+  const trustedFiles = new Set();
+  const trustedAttribution = new Set();
+  const findings = [];
+
+  for (const [relativePath, file] of expected) {
+    let trusted = false;
+    if (inventoryPaths.has(relativePath)) {
+      try {
+        const stats = await lstat(file.absolutePath);
+        const contents = await readFile(file.absolutePath);
+        trusted =
+          stats.isFile() &&
+          !stats.isSymbolicLink() &&
+          contents.byteLength === file.bytes &&
+          sha256(contents) === file.sha256;
+      } catch {
+        trusted = false;
+      }
+    }
+    if (trusted) {
+      trustedFiles.add(relativePath);
+      if (file.attribution) trustedAttribution.add(relativePath);
+    } else {
+      findings.push(
+        finding(
+          "error",
+          "vendor.integrity",
+          relativePath,
+          `Audited vendor integrity could not be established at "${relativePath}".`,
+        ),
+      );
+    }
+  }
+
+  for (const relativePath of inventory) {
+    if (resemblesAuditedVendorPath(relativePath) && !trustedFiles.has(relativePath)) {
+      findings.push(
+        finding(
+          "error",
+          "artifact.unaudited-vendor",
+          relativePath,
+          `Unaudited vendor artifact detected at "${relativePath}".`,
+        ),
+      );
+    }
+  }
+
+  return { findings, trustedAttribution, trustedFiles };
 }
 
 async function readTextPrefix(path, size) {
@@ -400,7 +505,7 @@ async function readTextPrefix(path, size) {
   }
 }
 
-function filenameFindings(path) {
+function filenameFindings(path, auditedVendorFile = false) {
   const findings = [];
   const lowerPath = path.toLowerCase();
   const lowerBasename = basename(lowerPath);
@@ -431,10 +536,7 @@ function filenameFindings(path) {
   if (/\.(?:css|js|mjs|cjs)\.map$/i.test(lowerBasename)) {
     findings.push(finding("warning", "artifact.source-map", path, `Source map is included in publication inventory at "${path}".`));
   }
-  if (
-    auditedThirdPartyVendorRelativePath(path) === null &&
-    segments.some((segment) => BUILD_DIRECTORIES.has(segment))
-  ) {
+  if (!auditedVendorFile && segments.some((segment) => BUILD_DIRECTORIES.has(segment))) {
     findings.push(finding("warning", "artifact.build-output", path, `Build or test output is included in publication inventory at "${path}".`));
   }
   if (segments.some((segment) => CACHE_DIRECTORIES.has(segment))) {
@@ -469,7 +571,7 @@ const AST_TRAVERSAL_IGNORED_KEYS = new Set([
 ]);
 const RUNTIME_REFERENCE_VALUE = /^(?:process\.env|import\.meta\.env)(?:\.|\[)/i;
 const GOOGLE_API_KEY_LITERAL = /AIza[0-9A-Za-z_-]{35}/;
-const BEARER_TOKEN_LITERAL = /\bBearer\s+[A-Za-z0-9._~+/-]{20,}={0,2}/i;
+const BEARER_TOKEN_LITERAL = /\bBearer[ \t]+[A-Za-z0-9._~+/-]{20,}={0,2}/i;
 const PRIVATE_URL_LITERAL =
   /https?:\/\/[^\s"']+[?&](?:access_token|api_key|key|signature|token|auth)=[^\s&#"']{8,}/i;
 const DECODED_LITERAL_DETECTORS = [
@@ -524,9 +626,21 @@ function analyzeDecodedSpecificLiteral(contents, state) {
 }
 
 function analyzeEncodedLiveText(contents, state) {
+  if (typeof decodeHTML !== "function") {
+    state.analysisLimited = true;
+    return;
+  }
   const decoded = decodeHTML(contents);
   if (containsNonCodeGenericSecret(decoded)) state.hasSecret = true;
   analyzeDecodedSpecificLiteral(decoded, state);
+}
+
+function decodeEncodedAttribute(contents, state) {
+  if (typeof decodeHTMLAttribute !== "function") {
+    state.analysisLimited = true;
+    return contents;
+  }
+  return decodeHTMLAttribute(contents);
 }
 
 function lineTerminatorWidth(contents, cursor, limit) {
@@ -757,6 +871,10 @@ function analyzeAst(root, comments, state) {
 
 function analyzeQuotedPropertyFragment(path, contents, state) {
   if (!/^\s*["']/.test(contents)) return;
+  if (typeof parseBabelExpression !== "function") {
+    state.analysisLimited = true;
+    return;
+  }
   try {
     const expression = parseBabelExpression(`({\n${contents}\n})`, componentExpressionParserOptions(path));
     analyzeAst(expression, expression.comments, state);
@@ -767,6 +885,10 @@ function analyzeQuotedPropertyFragment(path, contents, state) {
 
 function analyzeProgramSource(path, contents, state, languageHint) {
   if (state.analysisLimited || state.malformed) return;
+  if (typeof parseBabelProgram !== "function") {
+    state.analysisLimited = true;
+    return;
+  }
   try {
     const ast = parseBabelProgram(contents, {
       ...babelParserOptions(path, languageHint),
@@ -792,6 +914,7 @@ function componentBindingArrow(contents) {
 }
 
 function componentExpressionParses(path, contents, state) {
+  if (typeof parseBabelExpression !== "function") throw new CodeAnalysisLimitError();
   consumeExpressionProbe(state, contents);
   try {
     parseBabelExpression(contents, componentExpressionParserOptions(path));
@@ -906,6 +1029,7 @@ function consumeExpressionProbe(state, contents) {
 }
 
 function tryParseComponentExpression(path, contents, componentType, state) {
+  if (typeof parseBabelExpression !== "function") throw new CodeAnalysisLimitError();
   const trimmed = contents.trim();
   if (componentType === "astro" && trimmed.startsWith("/*")) {
     const comment = /^\/\*([\s\S]*)\*\/$/.exec(trimmed);
@@ -939,6 +1063,7 @@ function analyzeComponentExpressionSource(path, contents, componentType, state) 
 }
 
 function analyzeComponentStatements(path, contents, state) {
+  if (typeof parseBabelProgram !== "function") throw new CodeAnalysisLimitError();
   consumeExpressionProbe(state, contents);
   try {
     const ast = parseBabelProgram(contents, {
@@ -1209,7 +1334,7 @@ function parseMarkupStartTag(path, contents, start, componentType, state) {
         state.malformed = true;
         return { attributes, cursor: contents.length, selfClosing: false, tagName };
       }
-      const decodedValue = decodeHTMLAttribute(literal.value);
+      const decodedValue = decodeEncodedAttribute(literal.value, state);
       attributes.set(attributeName.toLowerCase(), decodedValue);
       analyzeDecodedSpecificLiteral(decodedValue, state);
       analyzeMarkupAttribute(path, componentType, attributeName, decodedValue, "literal", state);
@@ -1240,7 +1365,7 @@ function parseMarkupStartTag(path, contents, start, componentType, state) {
       state.malformed = true;
       return { attributes, cursor: contents.length, selfClosing: false, tagName };
     }
-    const value = decodeHTMLAttribute(contents.slice(valueStart, cursor));
+    const value = decodeEncodedAttribute(contents.slice(valueStart, cursor), state);
     attributes.set(attributeName.toLowerCase(), value);
     analyzeDecodedSpecificLiteral(value, state);
     analyzeMarkupAttribute(path, componentType, attributeName, value, "literal", state);
@@ -1668,23 +1793,232 @@ function yamlLineIndent(contents, start, end) {
   return cursor - start;
 }
 
-function isYamlBlockScalarHeader(value) {
-  return /^[|>](?:(?:[1-9][+-]?)|(?:[+-][1-9]?))?$/.test(value);
+function yamlPhysicalLineEnd(contents, start, end) {
+  return end > start && contents[end - 1] === "\r" ? end - 1 : end;
 }
 
-function skipYamlBlockScalar(contents, headerEnd, parentIndent) {
+const MAX_YAML_ANALYSIS_UNITS = 100_000;
+
+function consumeYamlUnit(state) {
+  state.yamlUnits += 1;
+  if (state.yamlUnits <= MAX_YAML_ANALYSIS_UNITS) return true;
+  state.analysisLimited = true;
+  return false;
+}
+
+function analyzeYamlScalar(value, state) {
+  analyzeDecodedSpecificLiteral(value, state);
+}
+
+function parseYamlBlockHeader(value) {
+  if (value[0] !== "|" && value[0] !== ">") return null;
+  let chomp = "clip";
+  let indentation = null;
+  for (const character of value.slice(1)) {
+    if (character === "+" || character === "-") {
+      if (chomp !== "clip") return { malformed: true };
+      chomp = character === "+" ? "keep" : "strip";
+    } else if (/^[1-9]$/.test(character)) {
+      if (indentation !== null) return { malformed: true };
+      indentation = Number(character);
+    } else {
+      return { malformed: true };
+    }
+  }
+  return { chomp, indentation, malformed: false, style: value[0] === "|" ? "literal" : "folded" };
+}
+
+function foldYamlBlockLines(lines, style) {
+  let value = "";
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    value += line.text;
+    if (!line.hasBreak) continue;
+    if (style === "literal") {
+      value += "\n";
+      continue;
+    }
+    const next = lines[index + 1];
+    value +=
+      next !== undefined && !line.blank && !next.blank && !line.moreIndented && !next.moreIndented
+        ? " "
+        : "\n";
+  }
+  return value;
+}
+
+function chompYamlBlock(value, chomp) {
+  if (chomp === "keep") return value;
+  const stripped = value.replace(/\n+$/g, "");
+  if (chomp === "strip" || stripped === value) return stripped;
+  return stripped + "\n";
+}
+
+function parseYamlBlockScalar(contents, headerEnd, parentIndent, header, state) {
   let cursor = nextYamlLine(contents, headerEnd);
-  while (cursor < contents.length) {
+  let contentIndent = header.indentation === null ? null : parentIndent + header.indentation;
+  const lines = [];
+
+  while (cursor < contents.length && !state.analysisLimited && !state.malformed) {
+    if (!consumeYamlUnit(state)) break;
     const currentLineEnd = lineEnd(contents, cursor);
-    const contentStart = skipYamlHorizontalWhitespace(contents, cursor, currentLineEnd);
-    if (contentStart >= currentLineEnd) {
+    const physicalLineEnd = yamlPhysicalLineEnd(contents, cursor, currentLineEnd);
+    const contentStart = skipYamlHorizontalWhitespace(contents, cursor, physicalLineEnd);
+    if (contentStart >= physicalLineEnd) {
+      lines.push({ blank: true, hasBreak: currentLineEnd < contents.length, moreIndented: false, text: "" });
       cursor = nextYamlLine(contents, currentLineEnd);
       continue;
     }
-    if (yamlLineIndent(contents, cursor, currentLineEnd) <= parentIndent) break;
+
+    const indent = yamlLineIndent(contents, cursor, physicalLineEnd);
+    if (contents[cursor + indent] === "\t") {
+      state.malformed = true;
+      break;
+    }
+    if (contentIndent === null) {
+      if (indent <= parentIndent) break;
+      contentIndent = indent;
+    }
+    if (indent < contentIndent) {
+      if (indent <= parentIndent) break;
+      state.malformed = true;
+      break;
+    }
+
+    const physicalLine = lineContents(contents, cursor, currentLineEnd);
+    lines.push({
+      blank: false,
+      hasBreak: currentLineEnd < contents.length,
+      moreIndented: indent > contentIndent,
+      text: physicalLine.slice(contentIndent),
+    });
     cursor = nextYamlLine(contents, currentLineEnd);
   }
+
+  const value = chompYamlBlock(foldYamlBlockLines(lines, header.style), header.chomp);
+  analyzeYamlScalar(value, state);
+  return { end: cursor, value };
+}
+
+function skipYamlFlowTrivia(contents, start) {
+  let cursor = start;
+  while (cursor < contents.length) {
+    while (cursor < contents.length && /\s/.test(contents[cursor])) cursor += 1;
+    if (contents[cursor] !== "#") break;
+    cursor = nextYamlLine(contents, cursor);
+  }
   return cursor;
+}
+
+function malformedYamlFlow(contents, state) {
+  if (!state.analysisLimited) state.malformed = true;
+  return { end: contents.length, scalar: null };
+}
+
+function readYamlFlowPlain(contents, start, role) {
+  let cursor = start;
+  while (cursor < contents.length) {
+    const character = contents[cursor];
+    if (character === "," || character === "]" || character === "}" || character === "[" || character === "{") break;
+    if (role === "key" && character === ":") break;
+    if (character === "#" && (cursor === start || /\s/.test(contents[cursor - 1]))) break;
+    cursor += 1;
+  }
+  const scalar = contents.slice(start, cursor).trim();
+  return scalar === "" ? null : { end: cursor, scalar };
+}
+
+function parseYamlFlowNode(contents, start, state, role = "value") {
+  if (!consumeYamlUnit(state)) return { end: contents.length, scalar: null };
+  const cursor = skipYamlFlowTrivia(contents, start);
+  const character = contents[cursor];
+  if (character === "[") return parseYamlFlowSequence(contents, cursor, state);
+  if (character === "{") return parseYamlFlowMapping(contents, cursor, state);
+  if (character === '"') {
+    const scalar = readYamlDoubleQuotedScalar(contents, cursor);
+    if (scalar.malformed) return malformedYamlFlow(contents, state);
+    analyzeYamlScalar(scalar.value, state);
+    return { end: scalar.end, scalar: scalar.value };
+  }
+  if (character === "'") {
+    const scalar = readYamlSingleQuotedScalar(contents, cursor);
+    if (scalar.malformed) return malformedYamlFlow(contents, state);
+    analyzeYamlScalar(scalar.value, state);
+    return { end: scalar.end, scalar: scalar.value };
+  }
+  const plain = readYamlFlowPlain(contents, cursor, role);
+  if (plain === null) return malformedYamlFlow(contents, state);
+  analyzeYamlScalar(plain.scalar, state);
+  return plain;
+}
+
+function associateYamlPair(key, value, state) {
+  if (
+    typeof key === "string" &&
+    typeof value === "string" &&
+    isCredentialName(key) &&
+    isSecretLiteralValue(value.trim())
+  ) {
+    state.hasSecret = true;
+  }
+}
+
+function parseYamlFlowSequence(contents, start, state) {
+  let cursor = skipYamlFlowTrivia(contents, start + 1);
+  if (contents[cursor] === "]") return { end: cursor + 1, scalar: null };
+  while (cursor < contents.length && !state.malformed && !state.analysisLimited) {
+    const entry = parseYamlFlowNode(contents, cursor, state);
+    cursor = skipYamlFlowTrivia(contents, entry.end);
+    if (contents[cursor] === ":") {
+      const value = parseYamlFlowNode(contents, skipYamlFlowTrivia(contents, cursor + 1), state);
+      associateYamlPair(entry.scalar, value.scalar, state);
+      cursor = skipYamlFlowTrivia(contents, value.end);
+    }
+    if (contents[cursor] === "]") return { end: cursor + 1, scalar: null };
+    if (contents[cursor] !== ",") return malformedYamlFlow(contents, state);
+    cursor = skipYamlFlowTrivia(contents, cursor + 1);
+    if (contents[cursor] === "]") return { end: cursor + 1, scalar: null };
+  }
+  return malformedYamlFlow(contents, state);
+}
+
+function parseYamlFlowMapping(contents, start, state) {
+  let cursor = skipYamlFlowTrivia(contents, start + 1);
+  if (contents[cursor] === "}") return { end: cursor + 1, scalar: null };
+  while (cursor < contents.length && !state.malformed && !state.analysisLimited) {
+    const key = parseYamlFlowNode(contents, cursor, state, "key");
+    cursor = skipYamlFlowTrivia(contents, key.end);
+    if (contents[cursor] !== ":") return malformedYamlFlow(contents, state);
+    cursor = skipYamlFlowTrivia(contents, cursor + 1);
+    let value = { end: cursor, scalar: null };
+    if (contents[cursor] !== "," && contents[cursor] !== "}") {
+      value = parseYamlFlowNode(contents, cursor, state);
+      cursor = skipYamlFlowTrivia(contents, value.end);
+    }
+    associateYamlPair(key.scalar, value.scalar, state);
+    if (contents[cursor] === "}") return { end: cursor + 1, scalar: null };
+    if (contents[cursor] !== ",") return malformedYamlFlow(contents, state);
+    cursor = skipYamlFlowTrivia(contents, cursor + 1);
+    if (contents[cursor] === "}") return { end: cursor + 1, scalar: null };
+  }
+  return malformedYamlFlow(contents, state);
+}
+
+function validateYamlFlowLineRemainder(contents, start, state) {
+  if (state.malformed || state.analysisLimited) return;
+  const end = lineEnd(contents, start);
+  const physicalLineEnd = yamlPhysicalLineEnd(contents, start, end);
+  const cursor = skipYamlHorizontalWhitespace(contents, start, physicalLineEnd);
+  if (cursor < physicalLineEnd && contents[cursor] !== "#") state.malformed = true;
+}
+
+function findYamlMappingColon(contents, start, end) {
+  for (let cursor = start; cursor < end; cursor += 1) {
+    if (contents[cursor] !== ":") continue;
+    const following = contents[cursor + 1];
+    if (cursor + 1 >= end || /\s/.test(following ?? "") || "[{".includes(following ?? "")) return cursor;
+  }
+  return -1;
 }
 
 function analyzeYamlSource(contents, truncated) {
@@ -1694,9 +2028,11 @@ function analyzeYamlSource(contents, truncated) {
     return state;
   }
   state.hasSecret = containsNonCodeGenericSecret(contents);
+  state.yamlUnits = 0;
 
   let lineStart = 0;
-  while (lineStart < contents.length && !state.malformed) {
+  while (lineStart < contents.length && !state.malformed && !state.analysisLimited) {
+    if (!consumeYamlUnit(state)) break;
     const currentLineEnd = lineEnd(contents, lineStart);
     const parentIndent = yamlLineIndent(contents, lineStart, currentLineEnd);
     let cursor = skipYamlHorizontalWhitespace(contents, lineStart, currentLineEnd);
@@ -1708,6 +2044,13 @@ function analyzeYamlSource(contents, truncated) {
       cursor = skipYamlHorizontalWhitespace(contents, cursor + 1, currentLineEnd);
     }
 
+    if (contents[cursor] === "[" || contents[cursor] === "{") {
+      const flow = parseYamlFlowNode(contents, cursor, state);
+      validateYamlFlowLineRemainder(contents, flow.end, state);
+      lineStart = nextYamlLine(contents, Math.max(currentLineEnd, flow.end));
+      continue;
+    }
+
     let key;
     let keyEnd;
     if (contents[cursor] === '"') {
@@ -1716,7 +2059,7 @@ function analyzeYamlSource(contents, truncated) {
         state.malformed = true;
         break;
       }
-      analyzeDecodedSpecificLiteral(scalar.value, state);
+      analyzeYamlScalar(scalar.value, state);
       key = scalar.value;
       keyEnd = scalar.end;
     } else if (contents[cursor] === "'") {
@@ -1725,15 +2068,29 @@ function analyzeYamlSource(contents, truncated) {
         state.malformed = true;
         break;
       }
+      analyzeYamlScalar(scalar.value, state);
       key = scalar.value;
       keyEnd = scalar.end;
     } else {
-      const colon = contents.indexOf(":", cursor);
-      if (colon === -1 || colon >= currentLineEnd) {
+      const colon = findYamlMappingColon(contents, cursor, currentLineEnd);
+      if (colon === -1) {
+        const scalar = yamlPlainValue(contents, cursor, currentLineEnd);
+        const blockHeader = parseYamlBlockHeader(scalar);
+        if (blockHeader !== null) {
+          if (blockHeader.malformed) {
+            state.malformed = true;
+            break;
+          }
+          const block = parseYamlBlockScalar(contents, currentLineEnd, parentIndent, blockHeader, state);
+          lineStart = block.end;
+          continue;
+        }
+        analyzeYamlScalar(scalar, state);
         lineStart = nextYamlLine(contents, currentLineEnd);
         continue;
       }
       key = contents.slice(cursor, colon).trim();
+      analyzeYamlScalar(key, state);
       keyEnd = colon;
     }
 
@@ -1748,6 +2105,13 @@ function analyzeYamlSource(contents, truncated) {
       continue;
     }
 
+    if (contents[valueStart] === "[" || contents[valueStart] === "{") {
+      const flow = parseYamlFlowNode(contents, valueStart, state);
+      validateYamlFlowLineRemainder(contents, flow.end, state);
+      lineStart = nextYamlLine(contents, Math.max(currentLineEnd, flow.end));
+      continue;
+    }
+
     let value;
     let valueEnd = currentLineEnd;
     if (contents[valueStart] === '"') {
@@ -1756,7 +2120,7 @@ function analyzeYamlSource(contents, truncated) {
         state.malformed = true;
         break;
       }
-      analyzeDecodedSpecificLiteral(scalar.value, state);
+      analyzeYamlScalar(scalar.value, state);
       value = scalar.value;
       valueEnd = scalar.end;
     } else if (contents[valueStart] === "'") {
@@ -1765,16 +2129,25 @@ function analyzeYamlSource(contents, truncated) {
         state.malformed = true;
         break;
       }
+      analyzeYamlScalar(scalar.value, state);
       value = scalar.value;
       valueEnd = scalar.end;
     } else {
       value = yamlPlainValue(contents, valueStart, currentLineEnd);
+      const blockHeader = parseYamlBlockHeader(value);
+      if (blockHeader !== null) {
+        if (blockHeader.malformed) {
+          state.malformed = true;
+          break;
+        }
+        const block = parseYamlBlockScalar(contents, currentLineEnd, parentIndent, blockHeader, state);
+        associateYamlPair(key, block.value, state);
+        lineStart = block.end;
+        continue;
+      }
+      analyzeYamlScalar(value, state);
     }
-    if (isCredentialName(key) && isSecretLiteralValue(value)) state.hasSecret = true;
-    if (isYamlBlockScalarHeader(value)) {
-      lineStart = skipYamlBlockScalar(contents, currentLineEnd, parentIndent);
-      continue;
-    }
+    associateYamlPair(key, value, state);
     lineStart = nextYamlLine(contents, Math.max(currentLineEnd, valueEnd));
   }
   return state;
@@ -1798,7 +2171,7 @@ function containsGenericSecretLiteral(path, contents, truncated) {
   };
 }
 
-function contentFindings(path, contents, truncated = false) {
+function contentFindings(path, contents, truncated = false, auditedAttribution = false) {
   const findings = [];
   const genericSecretScan = containsGenericSecretLiteral(path, contents, truncated);
   const addIfMatched = (expression, severity, code, ruleName, includeDecodedLiveText = false) => {
@@ -1886,7 +2259,7 @@ function contentFindings(path, contents, truncated = false) {
     let match;
     while ((match = emailExpression.exec(line)) !== null) {
       if (reservedEmailDomain(match[1].toLowerCase())) continue;
-      if (isAuditedThirdPartyAttribution(path)) continue;
+      if (auditedAttribution) continue;
       if (/\b(?:public|business|support)\s+(?:contact|email)\b/i.test(line)) {
         findings.push(
           finding(
@@ -1937,8 +2310,10 @@ export async function scanPublication(rootDir, testOperations = {}) {
     findings.push(...filenameFindings(name));
   }
   const inventory = await publicationInventory(canonicalRoot, operations);
+  const vendorAudit = await auditVendorInventory(canonicalRoot, inventory);
+  findings.push(...vendorAudit.findings);
   for (const relativePath of inventory) {
-    findings.push(...filenameFindings(relativePath));
+    findings.push(...filenameFindings(relativePath, vendorAudit.trustedFiles.has(relativePath)));
     const fullPath = join(canonicalRoot, relativePath);
     let stats;
     try {
@@ -1954,7 +2329,14 @@ export async function scanPublication(rootDir, testOperations = {}) {
     try {
       const contents = await readTextPrefix(fullPath, stats.size);
       if (contents !== null) {
-        findings.push(...contentFindings(relativePath, contents, stats.size > MAX_TEXT_BYTES));
+        findings.push(
+          ...contentFindings(
+            relativePath,
+            contents,
+            stats.size > MAX_TEXT_BYTES,
+            vendorAudit.trustedAttribution.has(relativePath),
+          ),
+        );
       }
     } catch {
       findings.push(finding("error", "scan.unreadable-file", relativePath, `Publication file could not be inspected at "${relativePath}".`));

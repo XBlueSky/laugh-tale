@@ -38,6 +38,11 @@ const validateModuleUrl = pathToFileURL(validateScript).href;
 const { validateTripProject } = (await import(validateModuleUrl)) as { validateTripProject: ValidateTripProject };
 const temporaryRoots: string[] = [];
 const VALIDATION_RESULT_PREFIX = "ETERNAL_POSE_VALIDATION_RESULT ";
+const babelVendorFiles = [
+  { path: "index.cjs", bytes: 513_214, sha256: "6969920ae0610df927b6b3e675d1309372c268e36d391652af8e3e0183cbe8f8" },
+  { path: "LICENSE", bytes: 1_086, sha256: "2e97627cb278aa7556fb9e8817368302301a595b6c7582512b8d74c57b773652" },
+  { path: "UPSTREAM.json", bytes: 385, sha256: "40944e9cadca6d230f6300b8de440baceed6b28674db746b3e6710878ff7242d" },
+] as const;
 const entitiesVendorFiles = [
   { path: "package.json", bytes: 2_563, sha256: "86e28ac6361377a9c0a82dc7ce849b16bfcc6b13d862c563bbf9b3fe9267773a" },
   { path: "LICENSE", bytes: 1_260, sha256: "cb992345949ccd6e8394b2cd6c465f7b897c864f845937dbf64e8997f389e164" },
@@ -49,6 +54,12 @@ const entitiesVendorFiles = [
   { path: "dist/internal/decode-shared.js", bytes: 617, sha256: "51a2120afeae660916954be58f323c718b0415b78e9719c0b0279f49f3cc0d96" },
 ] as const;
 const entitiesVendorRoot = join(repoRoot, "plugins/eternal-pose/vendor/entities");
+const babelVendorRoot = join(repoRoot, "plugins/eternal-pose/vendor/@babel/parser");
+const thirdPartyNotice = {
+  path: "THIRD_PARTY_NOTICES.md",
+  bytes: 701,
+  sha256: "239c959a453dd994735fa7fb3105c461e64735bf66dba8d259a7f8da98560b45",
+} as const;
 
 function parseValidationResult(stdout: string): {
   counts: { errors: number; warnings: number };
@@ -104,6 +115,29 @@ function copyEntitiesVendor(pluginRoot: string): void {
     copyFileSync(join(entitiesVendorRoot, file.path), target);
   }
   copyFileSync(join(entitiesVendorRoot, "UPSTREAM.json"), join(pluginRoot, "vendor/entities/UPSTREAM.json"));
+}
+
+function copyScannerPlugin(pluginRoot: string): void {
+  mkdirSync(join(pluginRoot, "lib"), { recursive: true });
+  copyFileSync(join(repoRoot, "plugins/eternal-pose/lib/publication-scan.mjs"), join(pluginRoot, "lib/publication-scan.mjs"));
+  for (const file of babelVendorFiles) {
+    const target = join(pluginRoot, "vendor/@babel/parser", file.path);
+    mkdirSync(dirname(target), { recursive: true });
+    copyFileSync(join(babelVendorRoot, file.path), target);
+  }
+  copyEntitiesVendor(pluginRoot);
+  copyFileSync(
+    join(repoRoot, "plugins/eternal-pose", thirdPartyNotice.path),
+    join(pluginRoot, thirdPartyNotice.path),
+  );
+}
+
+async function importIsolatedScanner(pluginRoot: string): Promise<ScanPublication> {
+  const scannerUrl = pathToFileURL(join(pluginRoot, "lib/publication-scan.mjs")).href;
+  const module = (await import(`${scannerUrl}?test=${Date.now()}-${Math.random()}`)) as {
+    scanPublication: ScanPublication;
+  };
+  return module.scanPublication;
 }
 
 function fileInventory(root: string, directory = root): string[] {
@@ -313,8 +347,137 @@ describe("vendored WHATWG entity decoder", () => {
   });
 });
 
+describe("audited vendor trust", () => {
+  const auditedFiles = [
+    ...babelVendorFiles.map((file) => ({ ...file, path: `vendor/@babel/parser/${file.path}` })),
+    ...entitiesVendorFiles.map((file) => ({ ...file, path: `vendor/entities/${file.path}` })),
+    {
+      path: "vendor/entities/UPSTREAM.json",
+      bytes: 1_543,
+      sha256: "ad5c00541bf118ab35677db49084f27dd3df097d19420869feb5d1d3e1a2e993",
+    },
+    thirdPartyNotice,
+  ] as const;
+
+  test("keeps the exact scanner-adjacent audited inventory clean", async () => {
+    const findings = await scanPublication(repoRoot);
+
+    expect(findings.filter(({ path }) => path.includes("vendor/") || path === thirdPartyNotice.path)).toEqual([]);
+  });
+
+  test("rejects a byte mutation in every scanner-owned audited file without trusting target metadata", async () => {
+    const root = createTemporaryRoot();
+    const pluginRoot = join(root, "plugin");
+    copyScannerPlugin(pluginRoot);
+    const mutation = Buffer.from("\n/* audited fixture mutation */\n");
+    for (const file of auditedFiles) {
+      const target = join(pluginRoot, file.path);
+      const suffix = file.path.endsWith(".json") ? Buffer.from(" \n") : mutation;
+      writeFileSync(target, Buffer.concat([readFileSync(target), suffix]));
+    }
+
+    const isolatedScan = await importIsolatedScanner(pluginRoot);
+    const findings = await isolatedScan(pluginRoot);
+
+    for (const file of auditedFiles) {
+      expect(findingAt(findings, file.path, "vendor.integrity"), file.path).toBe(true);
+    }
+    expect(JSON.stringify(findings)).not.toContain("audited fixture mutation");
+  });
+
+  test("rejects a truncated audited file and preserves its state", async () => {
+    const root = createTemporaryRoot();
+    const pluginRoot = join(root, "plugin");
+    copyScannerPlugin(pluginRoot);
+    const path = "vendor/entities/LICENSE";
+    writeFileSync(join(pluginRoot, path), readFileSync(join(pluginRoot, path)).subarray(0, 16));
+
+    const isolatedScan = await importIsolatedScanner(pluginRoot);
+    const findings = await isolatedScan(pluginRoot);
+
+    expect(findingAt(findings, path, "vendor.integrity")).toBe(true);
+    expect(readFileSync(join(pluginRoot, path)).byteLength).toBe(16);
+  });
+
+  test("fails closed when a scanner-owned audited identity is missing", async () => {
+    const root = createTemporaryRoot();
+    const pluginRoot = join(root, "plugin");
+    copyScannerPlugin(pluginRoot);
+    const path = "vendor/@babel/parser/LICENSE";
+    rmSync(join(pluginRoot, path));
+
+    const isolatedScan = await importIsolatedScanner(pluginRoot);
+    const findings = await isolatedScan(pluginRoot);
+
+    expect(findingAt(findings, path, "vendor.integrity")).toBe(true);
+  });
+
+  test("revokes the narrow email exception when an attribution identity is mutated", async () => {
+    const root = createTemporaryRoot();
+    const pluginRoot = join(root, "plugin");
+    copyScannerPlugin(pluginRoot);
+    const path = "vendor/@babel/parser/LICENSE";
+    const email = ["private", "@", "traveler", ".tools"].join("");
+    writeFileSync(join(pluginRoot, path), `${readFileSync(join(pluginRoot, path), "utf8")}\n${email}\n`);
+
+    const isolatedScan = await importIsolatedScanner(pluginRoot);
+    const findings = await isolatedScan(pluginRoot);
+
+    expect(findingAt(findings, path, "vendor.integrity")).toBe(true);
+    expect(findingAt(findings, path, "artifact.unaudited-vendor")).toBe(true);
+    expect(findingAt(findings, path, "privacy.email-address")).toBe(true);
+    expect(JSON.stringify(findings)).not.toContain(email);
+  });
+
+  test("scans an added audited-vendor descendant normally and never echoes its value", async () => {
+    const root = createTemporaryRoot();
+    const pluginRoot = join(root, "plugin");
+    copyScannerPlugin(pluginRoot);
+    const email = ["private", "@", "traveler", ".tools"].join("");
+    const path = "vendor/entities/dist/added-contact.txt";
+    writeFixture(pluginRoot, path, `${email}\n`);
+
+    const isolatedScan = await importIsolatedScanner(pluginRoot);
+    const findings = await isolatedScan(pluginRoot);
+
+    expect(findingAt(findings, path, "artifact.unaudited-vendor")).toBe(true);
+    expect(findingAt(findings, path, "artifact.build-output")).toBe(true);
+    expect(findingAt(findings, path, "privacy.email-address")).toBe(true);
+    expect(JSON.stringify(findings)).not.toContain(email);
+  });
+
+  test.each([
+    "Vendor/Entities/dist/case-lookalike.txt",
+    "copied/vendor/entities/dist/path-lookalike.txt",
+    "plugins/eternal-pose/vendor/entities/nested/dist/nested-lookalike.txt",
+  ])("does not grant prefix trust to %s", async (path) => {
+    const root = createTemporaryRoot();
+    const email = ["private", "@", "traveler", ".tools"].join("");
+    writeFixture(root, path, `${email}\n`);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, path, "artifact.unaudited-vendor")).toBe(true);
+    expect(findingAt(findings, path, "artifact.build-output")).toBe(true);
+    expect(findingAt(findings, path, "privacy.email-address")).toBe(true);
+    expect(JSON.stringify(findings)).not.toContain(email);
+  });
+
+  test("does not trust an exact copied vendor package that is not scanner-adjacent", async () => {
+    const root = createTemporaryRoot();
+    const copiedPlugin = join(root, "copied-plugin");
+    copyEntitiesVendor(copiedPlugin);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "copied-plugin/vendor/entities/package.json", "artifact.unaudited-vendor")).toBe(true);
+    expect(findingAt(findings, "copied-plugin/vendor/entities/package.json", "privacy.email-address")).toBe(true);
+    expect(findingAt(findings, "copied-plugin/vendor/entities/dist/decode.js", "artifact.build-output")).toBe(true);
+  });
+});
+
 describe("publication safety findings", () => {
-  test("treats declared third-party vendor output and attribution as audited source inputs", async () => {
+  test("does not trust a copied tree that only resembles an audited vendor prefix", async () => {
     const root = createTemporaryRoot();
     const upstreamEmail = ["author", "@", "upstream", ".tools"].join("");
     writeFixture(
@@ -333,11 +496,13 @@ describe("publication safety findings", () => {
 
     const findings = await scanPublication(root);
 
-    expect(findingAt(findings, "plugins/eternal-pose/vendor/entities/dist/runtime.js", "artifact.build-output")).toBe(false);
-    expect(findingAt(findings, "plugins/eternal-pose/vendor/entities/package.json", "privacy.email-address")).toBe(false);
+    expect(findingAt(findings, "plugins/eternal-pose/vendor/entities/dist/runtime.js", "artifact.build-output")).toBe(true);
+    expect(findingAt(findings, "plugins/eternal-pose/vendor/entities/package.json", "artifact.unaudited-vendor")).toBe(true);
+    expect(findingAt(findings, "plugins/eternal-pose/vendor/entities/package.json", "privacy.email-address")).toBe(true);
     expect(findingAt(findings, "plugins/eternal-pose/vendor/entities/src/contact.txt", "privacy.email-address")).toBe(true);
     expect(findingAt(findings, "plugins/eternal-pose/vendor/example/dist/runtime.js", "artifact.build-output")).toBe(true);
     expect(findingAt(findings, "src/dist/runtime.js", "artifact.build-output")).toBe(true);
+    expect(JSON.stringify(findings)).not.toContain(upstreamEmail);
   });
 
   test("reports credential, privacy, artifact, and public-access risks with stable safe findings", async () => {
@@ -1989,6 +2154,175 @@ describe("publication safety findings", () => {
 
     expect(findingAt(findings, "block.yaml", "credential.google-api-key")).toBe(false);
     expect(findingAt(findings, "block.yaml", "scan.malformed-code")).toBe(false);
+  });
+
+  test.each(["|-", "|+", "|2-", "|-2", "|2+", "|+2", ">2-", ">-2"])(
+    "associates a YAML %s block scalar body with its credential key",
+    async (header) => {
+      const root = createTemporaryRoot();
+      const secret = ["runtime_", "K".repeat(28)].join("");
+      const indentation = /2/.test(header) ? "  " : " ";
+      writeFixture(root, "block-association.yaml", `apiKey: ${header}\n${indentation}${secret}\n`);
+
+      const findings = await scanPublication(root);
+
+      expect(findingAt(findings, "block-association.yaml", "credential.generic-secret")).toBe(true);
+      expect(findingAt(findings, "block-association.yaml", "scan.malformed-code")).toBe(false);
+      expect(JSON.stringify(findings)).not.toContain(secret);
+    },
+  );
+
+  test("auto-detects nested block indentation", async () => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", "N".repeat(28)].join("");
+    writeFixture(root, "nested-block.yaml", `outer:\n  apiKey: >-\n      ${secret}\n`);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "nested-block.yaml", "credential.generic-secret")).toBe(true);
+    expect(findingAt(findings, "nested-block.yaml", "scan.malformed-code")).toBe(false);
+  });
+
+  test("keeps a leading CRLF blank line inside an associated block scalar", async () => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", "R".repeat(28)].join("");
+    writeFixture(root, "crlf-block.yaml", `apiKey: |-\r\n\r\n  ${secret}\r\n`);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "crlf-block.yaml", "credential.generic-secret")).toBe(true);
+    expect(findingAt(findings, "crlf-block.yaml", "scan.malformed-code")).toBe(false);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test("folds a folded block for exact detection but preserves a literal block newline", async () => {
+    const root = createTemporaryRoot();
+    const token = `tok_${"F".repeat(28)}`;
+    writeFixture(root, "folded.yaml", `note: >-\n  Bearer\n  ${token}\n`);
+    writeFixture(root, "literal-block.yaml", `note: |-\n  Bearer\n  ${token}\n`);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "folded.yaml", "credential.bearer-token")).toBe(true);
+    expect(findingAt(findings, "literal-block.yaml", "credential.bearer-token")).toBe(false);
+  });
+
+  test("never interprets escapes inside a YAML block scalar", async () => {
+    const root = createTemporaryRoot();
+    const decodedSecret = ["runtime_", "E".repeat(28)].join("");
+    writeFixture(root, "raw-block.yaml", `apiKey: |-\n  runtime\\u005f${"E".repeat(28)}\n`);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "raw-block.yaml", "credential.generic-secret")).toBe(false);
+    expect(findingAt(findings, "raw-block.yaml", "scan.malformed-code")).toBe(false);
+    expect(JSON.stringify(findings)).not.toContain(decodedSecret);
+  });
+
+  test("decodes double-quoted scalars inside nested flow collections", async () => {
+    const root = createTemporaryRoot();
+    const googleKey = ["AI", "za", "G".repeat(35)].join("");
+    const bearer = ["Bearer", " ", "tok_", "B".repeat(28)].join("");
+    writeFixture(
+      root,
+      "flow-exact.yaml",
+      `values: [["AI\\x7Aa${"G".repeat(35)}"], {note: "Bearer\\u0020tok_${"B".repeat(28)}"}]\n`,
+    );
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "flow-exact.yaml", "credential.google-api-key")).toBe(true);
+    expect(findingAt(findings, "flow-exact.yaml", "credential.bearer-token")).toBe(true);
+    expect(findingAt(findings, "flow-exact.yaml", "scan.malformed-code")).toBe(false);
+    expect(JSON.stringify(findings)).not.toContain(googleKey);
+    expect(JSON.stringify(findings)).not.toContain(bearer);
+  });
+
+  test("associates decoded keys and values inside a flow mapping", async () => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", "M".repeat(28)].join("");
+    writeFixture(
+      root,
+      "flow-pair.yaml",
+      `settings: {"api\\u004bey": "runtime\\u005f${"M".repeat(28)}"}\n`,
+    );
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "flow-pair.yaml", "credential.generic-secret")).toBe(true);
+    expect(findingAt(findings, "flow-pair.yaml", "scan.malformed-code")).toBe(false);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test("accepts a valid flow collection with CRLF termination", async () => {
+    const root = createTemporaryRoot();
+    writeFixture(root, "crlf-flow.yaml", "values: [\"safe\"]\r\nnext: safe\r\n");
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "crlf-flow.yaml", "scan.malformed-code")).toBe(false);
+  });
+
+  test.each(["|0", "|22", "|--", "|++", "|2+3", "|+-", ">x"])(
+    "fails closed for an invalid YAML block header %s",
+    async (header) => {
+      const root = createTemporaryRoot();
+      writeFixture(root, "invalid-block-header.yaml", `note: ${header}\n  harmless\n`);
+
+      const findings = await scanPublication(root);
+
+      expect(findingAt(findings, "invalid-block-header.yaml", "scan.malformed-code")).toBe(true);
+    },
+  );
+
+  test("fails closed when an explicit block indentation level is violated", async () => {
+    const root = createTemporaryRoot();
+    writeFixture(root, "invalid-block-indent.yaml", "note: |2-\n harmless\n");
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "invalid-block-indent.yaml", "scan.malformed-code")).toBe(true);
+  });
+
+  test.each([
+    ["unclosed sequence", "values: [\"safe\"\n"],
+    ["missing separator", "values: [\"safe\" \"next\"]\n"],
+    ["unclosed double quote", "values: [\"safe]\n"],
+    ["mismatched close", "values: [{note: \"safe\"]}\n"],
+    ["trailing flow content", "values: [\"safe\"] invalid\n"],
+  ])("fails closed for an %s in a YAML flow collection", async (label, contents) => {
+    const root = createTemporaryRoot();
+    writeFixture(root, "invalid-flow.yaml", contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "invalid-flow.yaml", "scan.malformed-code")).toBe(true);
+    expect(JSON.stringify(findings)).not.toContain(contents);
+  });
+
+  test("bounds YAML flow analysis work", async () => {
+    const root = createTemporaryRoot();
+    const values = Array.from({ length: 100_001 }, () => "safe").join(",");
+    writeFixture(root, "flow-budget.yaml", `values: [${values}]\n`);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "flow-budget.yaml", "scan.analysis-limit")).toBe(true);
+  });
+
+  test("fails closed when YAML input is truncated at the scanner byte budget", async () => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", "T".repeat(28)].join("");
+    writeFixture(
+      root,
+      "truncated.yaml",
+      `note: ${"x".repeat(2 * 1024 * 1024)}\napiKey: ${secret}\n`,
+    );
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "truncated.yaml", "scan.analysis-limit")).toBe(true);
+    expect(JSON.stringify(findings)).not.toContain(secret);
   });
 
   test.each([
