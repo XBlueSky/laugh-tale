@@ -9,6 +9,7 @@ import {
   type RefObject,
 } from "react";
 
+import { GoogleNavigationAdapter } from "../providers/google/google-maps-url";
 import type { Trip } from "../trip-core/model";
 import { emptyTripProgress, nodeCompletionKey } from "../trip-core/progress";
 import {
@@ -73,6 +74,7 @@ const EXPANDED_HEADER_HEIGHT = 148;
 const COLLAPSED_HEADER_HEIGHT = 72;
 const COLLAPSED_SHEET_HEIGHT = 128;
 const MINUTE_IN_MILLISECONDS = 60_000;
+const DEFAULT_NAVIGATION_ADAPTER = new GoogleNavigationAdapter();
 
 function systemClock(): string {
   return new Date().toISOString();
@@ -581,6 +583,9 @@ export function TripExperience({
           routes={selectedDayRoutes}
           selection={selection.selection}
           onNodeSelect={selectNode}
+          dayDate={selectedEffectiveDay.day.date}
+          currentNodeId={liveState.currentId}
+          navigationAdapter={DEFAULT_NAVIGATION_ADAPTER}
         />
       </ItinerarySheet>
     </main>

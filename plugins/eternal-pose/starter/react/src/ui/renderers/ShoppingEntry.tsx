@@ -1,11 +1,14 @@
 import type { ShoppingStatus } from "../../trip-core/model";
-import type { RendererProps } from "../timeline/TimelineEntry";
+import {
+  ownRecordValue,
+  type RendererProps,
+} from "../timeline/TimelineEntry";
 
 function itemStatus(
   item: Extract<RendererProps["node"], { kind: "shopping" }>["payload"]["items"][number],
   state: RendererProps["state"],
 ): ShoppingStatus {
-  return state.shoppingStatuses[item.id] ?? item.initialStatus ?? "pending";
+  return ownRecordValue(state.shoppingStatuses, item.id) ?? item.initialStatus ?? "pending";
 }
 
 export function ShoppingEntry({ node, state }: RendererProps) {

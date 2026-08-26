@@ -86,6 +86,7 @@ describe("semantic renderer registry", () => {
   it("renders long-distance transfer mode, terminal, confirmed booking, and arrival buffer", () => {
     renderNode(fixture("transfer"));
 
+    const row = screen.getByRole("button", { name: "08:30 Inter-island transfer" });
     expect(screen.getByText("08:30").closest("time")).toHaveAttribute(
       "datetime",
       "08:30",
@@ -93,6 +94,8 @@ describe("semantic renderer registry", () => {
     expect(screen.getByText("rail · Test Terminal")).toBeVisible();
     expect(screen.getByText(/Booking confirmed/)).toBeVisible();
     expect(screen.getByText(/Arrive 30 min early/)).toBeVisible();
+    expect(screen.queryByText(/SYNTHETIC-TRANSFER/)).not.toBeInTheDocument();
+    expect(row).not.toHaveAccessibleDescription(/SYNTHETIC-TRANSFER/);
   });
 
   it.each([
@@ -171,6 +174,46 @@ describe("semantic renderer registry", () => {
     expect(screen.getByText("Nice · Memory card")).toBeVisible();
   });
 
+  it("uses only own shopping status entries while preserving special item IDs", () => {
+    const node: TripNode = {
+      ...fixture("shopping"),
+      payload: {
+        items: ["__proto__", "constructor", "toString"].map((id) => ({
+          id,
+          title: `Item ${id}`,
+        })),
+      },
+    };
+    const inheritedStatuses = Object.create({
+      ["__proto__"]: "purchased",
+      ["constructor"]: "purchased",
+      ["toString"]: "purchased",
+    }) as Record<string, "purchased">;
+    const { rerender } = renderNode(node, {
+      shoppingStatuses: inheritedStatuses,
+    });
+    expect(screen.getByText("0 / 3 complete")).toBeVisible();
+
+    const ownStatuses = Object.create(null) as Record<string, "purchased">;
+    for (const id of ["__proto__", "constructor", "toString"]) {
+      Object.defineProperty(ownStatuses, id, {
+        enumerable: true,
+        value: "purchased",
+      });
+    }
+    const Renderer = rendererFor(node);
+    rerender(
+      <TimelineEntry
+        node={node}
+        state={state({ shoppingStatuses: ownStatuses })}
+        selected={false}
+        onSelect={() => undefined}
+        Renderer={Renderer}
+      />,
+    );
+    expect(screen.getByText("3 / 3 complete")).toBeVisible();
+  });
+
   it("renders sightseeing place, area, and optional state without disclosure", () => {
     const node: TripNode = { ...fixture("sightseeing"), optionality: "optional" };
     const { container } = renderNode(node);
@@ -192,6 +235,7 @@ describe("semantic renderer registry", () => {
     );
     expect(screen.getByText("60 min")).toBeVisible();
     expect(screen.getByText(/Booking confirmed/)).toBeVisible();
+    expect(screen.queryByText(/SYNTHETIC-EXPERIENCE/)).not.toBeInTheDocument();
   });
 
   it("renders root and nested logistics completion without hiding completed work", () => {

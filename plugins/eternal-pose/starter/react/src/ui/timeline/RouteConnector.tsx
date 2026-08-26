@@ -28,15 +28,61 @@ function collapsedSummary(
   route: RoutePresentation,
   readyDurationMinutes: number | undefined,
 ): string {
-  if (route.edge.summary !== undefined) {
-    return route.edge.summary;
+  if (
+    readyDurationMinutes !== undefined &&
+    Number.isFinite(readyDurationMinutes) &&
+    readyDurationMinutes >= 0
+  ) {
+    return `${route.edge.mode} · ${readyDurationMinutes} min`;
   }
-  const durationMinutes = readyDurationMinutes ?? route.edge.durationMinutes;
+  if (route.edge.summary !== undefined) {
+    return route.edge.certainty === "confirmed" ||
+      route.edge.summary.trimStart().startsWith("約 ")
+      ? route.edge.summary
+      : `約 ${route.edge.summary}`;
+  }
+  const durationMinutes = route.edge.durationMinutes;
   if (durationMinutes !== undefined) {
     const certaintyPrefix = route.edge.certainty === "confirmed" ? "" : "約 ";
     return `${route.edge.mode} · ${certaintyPrefix}${durationMinutes} min`;
   }
   return route.edge.mode;
+}
+
+function validRoutePath(
+  result: Extract<RouteResult, { status: "ready" }>,
+): boolean {
+  return (
+    result.path.length >= 2 &&
+    result.path.every(
+      ({ lat, lng }) =>
+        Number.isFinite(lat) &&
+        lat >= -90 &&
+        lat <= 90 &&
+        Number.isFinite(lng) &&
+        lng >= -180 &&
+        lng <= 180,
+    )
+  );
+}
+
+function safeNavigationHref(
+  href: string | undefined,
+  route: RoutePresentation,
+): string | undefined {
+  if (
+    typeof href !== "string" ||
+    route.edge.navigation === undefined ||
+    route.edge.mode === "flight"
+  ) {
+    return undefined;
+  }
+  try {
+    const parsed = new URL(href);
+    return parsed.protocol === "https:" ? parsed.href : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function NavigationIcon() {
@@ -88,12 +134,13 @@ export function RouteConnector({
   const label = collapsedSummary(route, ready?.durationMinutes);
   const focusable =
     ready !== undefined &&
-    ready.path.length > 0 &&
+    validRoutePath(ready) &&
     onRouteSelect !== undefined;
   const canDisclose =
     focusable && route.edge.mode === "transit" && ready.steps.length > 0;
   const duration = (reducedMotion ?? prefersReducedMotion ?? false) ? 0 : 0.2;
   const navigation = route.edge.navigation;
+  const externalNavigationHref = safeNavigationHref(navigationHref, route);
 
   const retryControl = onRetry === undefined ? null : (
     <button
@@ -134,7 +181,11 @@ export function RouteConnector({
         data-state="error"
       >
         <CircleAlert aria-hidden="true" size={17} strokeWidth={1.8} />
-        <span>{state.reason}</span>
+        <span>
+          <span>{label}</span>
+          {" · "}
+          <span>{state.reason}</span>
+        </span>
         {retryControl}
       </div>
     );
@@ -223,25 +274,21 @@ export function RouteConnector({
               </span>
             )}
             <ol style={{ margin: 0, paddingInlineStart: "1.25rem" }}>
-              {ready.steps.map((step) => (
-                <li key={step}>{step}</li>
+              {ready.steps.map((step, index) => (
+                <li key={`${index}:${step}`}>{step}</li>
               ))}
             </ol>
           </div>
         </motion.div>
       ) : null}
 
-      {navigationHref === undefined ? null : (
+      {externalNavigationHref === undefined || navigation === undefined ? null : (
         <a
           className="icon-control route-connector__external"
-          href={navigationHref}
+          href={externalNavigationHref}
           target="_blank"
           rel="noreferrer"
-          aria-label={
-            navigation === undefined
-              ? `Open live ${route.edge.mode} directions`
-              : `Open live ${route.edge.mode} directions from ${navigation.origin} to ${navigation.destination}`
-          }
+          aria-label={`Open live ${route.edge.mode} directions from ${navigation.origin} to ${navigation.destination}`}
           data-touch-target="44"
           style={{ gridColumn: 2, gridRow: 1 }}
         >

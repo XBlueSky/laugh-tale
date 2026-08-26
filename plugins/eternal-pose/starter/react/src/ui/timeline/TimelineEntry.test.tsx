@@ -11,7 +11,10 @@ import {
   type TimelineNodeState,
 } from "./TimelineEntry";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 function sightseeing(overrides: Partial<TripNode> = {}): TripNode {
   return {
@@ -138,6 +141,217 @@ describe("TimelineEntry", () => {
 });
 
 describe("ItineraryTimeline semantic integration", () => {
+  it("keeps node, route, group, and child React sibling identities namespaced", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const nodes: EffectiveNode[] = [
+      {
+        sourceNodeId: "shared-owner",
+        completed: false,
+        node: sightseeing({ id: "shared-owner", title: "Shared node" }),
+      },
+      {
+        sourceNodeId: "destination",
+        completed: false,
+        node: sightseeing({ id: "destination", title: "Destination" }),
+      },
+      {
+        sourceNodeId: "step-a",
+        completed: false,
+        node: {
+          id: "step-a",
+          dayId: "day-1",
+          kind: "logistics",
+          title: "Step A",
+          timing: { certainty: "unknown" },
+          optionality: "core",
+          payload: { checklist: [{ id: "a-check", title: "Check A" }] },
+        },
+      },
+      {
+        sourceNodeId: "step-b",
+        completed: false,
+        node: {
+          id: "step-b",
+          dayId: "day-1",
+          kind: "logistics",
+          title: "Step B",
+          timing: { certainty: "unknown" },
+          optionality: "core",
+          payload: { checklist: [{ id: "b-check", title: "Check B" }] },
+        },
+      },
+      {
+        sourceNodeId: "logistics:step-a--step-b",
+        completed: false,
+        node: sightseeing({
+          id: "logistics:step-a--step-b",
+          title: "Group-ID node",
+        }),
+      },
+    ];
+    const { container } = render(
+      <ItineraryTimeline
+        nodes={nodes}
+        routes={[{
+          id: "shared-owner",
+          dayId: "day-1",
+          fromNodeId: "shared-owner",
+          toNodeId: "destination",
+          mode: "walking",
+          source: "manual",
+          certainty: "confirmed",
+          summary: "Walk to destination",
+        }]}
+        selection={{ nodeId: null, source: "automatic" }}
+        onNodeSelect={() => undefined}
+      />,
+    );
+
+    expect(container.querySelector('[data-route-owner="shared-owner"]')).not.toBeNull();
+    expect(container.querySelector(
+      '[data-logistics-group="logistics:step-a--step-b"]',
+    )).not.toBeNull();
+    expect(screen.getByRole("button", { name: "約 09:00 Group-ID node" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "約 09:00 Shared node" })).toBeVisible();
+    expect(consoleError.mock.calls.flat().join(" ")).not.toMatch(
+      /same key|unique "key"/i,
+    );
+  });
+
+  it("ignores inherited route state while accepting own special route IDs", () => {
+    const ready = {
+      status: "ready" as const,
+      durationMinutes: 4,
+      path: [
+        { lat: 35.7, lng: 139.7 },
+        { lat: 35.71, lng: 139.71 },
+      ],
+      steps: ["Walk to destination"],
+    };
+    const specialIds = ["__proto__", "constructor", "toString"];
+    const inheritedStates = Object.create(
+      Object.fromEntries(specialIds.map((id) => [id, ready])),
+    ) as Record<string, typeof ready>;
+    const nodes: EffectiveNode[] = [
+      { sourceNodeId: "a", completed: false, node: sightseeing({ id: "a", title: "A" }) },
+      { sourceNodeId: "b", completed: false, node: sightseeing({ id: "b", title: "B" }) },
+    ];
+    const routes = specialIds.map((id) => ({
+      id,
+      dayId: "day-1",
+      fromNodeId: "a",
+      toNodeId: "b",
+      mode: "walking" as const,
+      source: "manual" as const,
+      certainty: "confirmed" as const,
+      summary: `Walk to B via ${id}`,
+    }));
+    const { container, rerender } = render(
+      <ItineraryTimeline
+        nodes={nodes}
+        routes={routes}
+        routeStates={inheritedStates}
+        selection={{ nodeId: null, source: "automatic" }}
+        onNodeSelect={() => undefined}
+        onRouteSelect={() => undefined}
+      />,
+    );
+
+    for (const id of specialIds) {
+      expect(container.querySelector(`[data-route-id="${id}"]`)).toBeNull();
+    }
+
+    const ownStates = Object.create(null) as Record<string, typeof ready>;
+    for (const id of specialIds) {
+      Object.defineProperty(ownStates, id, {
+        enumerable: true,
+        value: ready,
+      });
+    }
+    rerender(
+      <ItineraryTimeline
+        nodes={nodes}
+        routes={routes}
+        routeStates={ownStates}
+        selection={{ nodeId: null, source: "automatic" }}
+        onNodeSelect={() => undefined}
+        onRouteSelect={() => undefined}
+      />,
+    );
+    for (const id of specialIds) {
+      expect(container.querySelectorAll(`[data-route-id="${id}"]`)).toHaveLength(1);
+    }
+  });
+
+  it("derives navigation for prototype-named route IDs without object coercion", () => {
+    const nodes: EffectiveNode[] = [
+      { sourceNodeId: "origin", completed: false, node: sightseeing({ id: "origin", title: "Origin" }) },
+      { sourceNodeId: "destination", completed: false, node: sightseeing({ id: "destination", title: "Destination" }) },
+    ];
+    const routes = ["__proto__", "constructor", "toString"].map((id) => ({
+      id,
+      dayId: "day-1",
+      fromNodeId: "origin",
+      toNodeId: "destination",
+      mode: "transit" as const,
+      source: "manual" as const,
+      certainty: "confirmed" as const,
+      summary: `Route ${id}`,
+      navigation: { origin: "Origin", destination: "Destination" },
+    }));
+    render(
+      <ItineraryTimeline
+        nodes={nodes}
+        routes={routes}
+        navigationAdapter={{
+          directions: ({ travelMode }) =>
+            `https://directions.example.test/?mode=${travelMode}`,
+        }}
+        selection={{ nodeId: null, source: "automatic" }}
+        onNodeSelect={() => undefined}
+      />,
+    );
+
+    const links = screen.getAllByRole("link", {
+      name: "Open live transit directions from Origin to Destination",
+    });
+    expect(links).toHaveLength(3);
+    for (const link of links) {
+      expect(link).toHaveAttribute(
+        "href",
+        "https://directions.example.test/?mode=transit",
+      );
+      expect(link.getAttribute("href")).not.toContain("[object Object]");
+    }
+  });
+
+  it("rejects unsafe NavigationAdapter output", () => {
+    const nodes: EffectiveNode[] = [
+      { sourceNodeId: "origin", completed: false, node: sightseeing({ id: "origin", title: "Origin" }) },
+      { sourceNodeId: "destination", completed: false, node: sightseeing({ id: "destination", title: "Destination" }) },
+    ];
+    render(
+      <ItineraryTimeline
+        nodes={nodes}
+        routes={[{
+          id: "unsafe-route",
+          dayId: "day-1",
+          fromNodeId: "origin",
+          toNodeId: "destination",
+          mode: "walking",
+          source: "manual",
+          certainty: "confirmed",
+          navigation: { origin: "Origin", destination: "Destination" },
+        }]}
+        navigationAdapter={{ directions: () => "javascript:alert(1)" }}
+        selection={{ nodeId: null, source: "automatic" }}
+        onNodeSelect={() => undefined}
+      />,
+    );
+
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
   it("retains selected, current, and completed state for children inside a logistics group", () => {
     const logisticsNodes: EffectiveNode[] = [
       {
@@ -266,7 +480,7 @@ describe("ItineraryTimeline semantic integration", () => {
       completed: false,
       node: {
         id: "experience",
-        dayId: "day-one",
+        dayId: "day-2099-99-99",
         kind: "experience",
         title: "Booked experience",
         timing: { start: "14:00", certainty: "fixed" },

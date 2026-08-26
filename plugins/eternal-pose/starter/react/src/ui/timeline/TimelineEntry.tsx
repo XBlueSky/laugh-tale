@@ -53,10 +53,14 @@ export function bookingSummary(booking: Booking | undefined): string | undefined
   if (booking === undefined || booking.status === "none") {
     return undefined;
   }
-  const status = booking.status === "confirmed" ? "Booking confirmed" : "Booking pending";
-  return booking.reference === undefined
-    ? status
-    : `${status} · Ref ${booking.reference}`;
+  return booking.status === "confirmed" ? "Booking confirmed" : "Booking pending";
+}
+
+export function ownRecordValue<T>(
+  record: Readonly<Record<string, T>>,
+  key: string,
+): T | undefined {
+  return Object.hasOwn(record, key) ? record[key] : undefined;
 }
 
 export function arrivalSummary(booking: Booking | undefined): string | undefined {

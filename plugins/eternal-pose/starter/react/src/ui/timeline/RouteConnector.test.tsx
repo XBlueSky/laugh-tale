@@ -38,7 +38,10 @@ const readyState = {
   steps: ["Walk to Ueno", "Take the Ginza line", "Walk to dinner"],
 };
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 beforeEach(() => {
   Object.defineProperty(window, "scrollTo", {
     configurable: true,
@@ -63,8 +66,8 @@ describe("RouteConnector", () => {
   it("keeps a route readable and static until both focusable geometry and a callback exist", () => {
     const { rerender } = render(<RouteConnector route={routePresentation()} />);
 
-    expect(screen.getByText("Ginza line · 18 min")).toBeVisible();
-    expect(screen.getByText("Ginza line · 18 min").closest("[aria-hidden]"))
+    expect(screen.getByText("約 Ginza line · 18 min")).toBeVisible();
+    expect(screen.getByText("約 Ginza line · 18 min").closest("[aria-hidden]"))
       .toBeNull();
     expect(screen.queryByRole("button", { name: /Ginza line/ })).not.toBeInTheDocument();
 
@@ -101,8 +104,11 @@ describe("RouteConnector", () => {
     expect(onRouteSelect).toHaveBeenCalledWith("museum--dinner");
   });
 
-  it("uses ready duration data and marks unconfirmed travel estimates approximate", () => {
-    const route = routePresentation({ summary: undefined, durationMinutes: undefined });
+  it("lets ready provider duration supersede stale authored route context", () => {
+    const route = routePresentation({
+      summary: "Authored train · 18 min",
+      durationMinutes: 18,
+    });
     const { rerender } = render(
       <RouteConnector
         route={route}
@@ -110,7 +116,8 @@ describe("RouteConnector", () => {
         onRouteSelect={() => undefined}
       />,
     );
-    expect(screen.getByRole("button", { name: "transit · 約 12 min" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "transit · 12 min" })).toBeVisible();
+    expect(screen.queryByText("Authored train · 18 min")).not.toBeInTheDocument();
 
     rerender(
       <RouteConnector
@@ -122,6 +129,32 @@ describe("RouteConnector", () => {
     expect(screen.getByRole("button", { name: "transit · 12 min" })).toBeVisible();
   });
 
+  it.each(["suggested", "candidate", "unverified"] as const)(
+    "marks %s authored route summaries approximate without duplicating the marker",
+    (certainty) => {
+      const { rerender } = render(
+        <RouteConnector
+          route={routePresentation({
+            certainty,
+            summary: "Manual station plan",
+          })}
+        />,
+      );
+
+      expect(screen.getByText("約 Manual station plan")).toBeVisible();
+      rerender(
+        <RouteConnector
+          route={routePresentation({
+            certainty,
+            summary: "約 Manual station plan",
+          })}
+        />,
+      );
+      expect(screen.getByText("約 Manual station plan")).toBeVisible();
+      expect(screen.queryByText("約 約 Manual station plan")).not.toBeInTheDocument();
+    },
+  );
+
   it("replaces the collapsed transit summary with compact expanded details", async () => {
     const user = userEvent.setup();
     const { container } = render(
@@ -132,7 +165,7 @@ describe("RouteConnector", () => {
         onRouteSelect={() => undefined}
       />,
     );
-    const disclosure = screen.getByRole("button", { name: /Ginza line · 18 min/ });
+    const disclosure = screen.getByRole("button", { name: "transit · 18 min" });
     const targetId = disclosure.getAttribute("aria-controls");
 
     expect(disclosure).toHaveAttribute("aria-expanded", "false");
@@ -141,7 +174,7 @@ describe("RouteConnector", () => {
     await user.click(disclosure);
 
     expect(disclosure).toHaveAttribute("aria-expanded", "true");
-    expect(screen.queryByText("Ginza line · 18 min")).not.toBeInTheDocument();
+    expect(screen.queryByText("transit · 18 min")).not.toBeInTheDocument();
     expect(screen.getByText("約 18:00").closest("time")).toHaveAttribute(
       "datetime",
       "18:00",
@@ -164,7 +197,7 @@ describe("RouteConnector", () => {
       />,
     );
 
-    const disclosure = screen.getByRole("button", { name: /Ginza line · 18 min/ });
+    const disclosure = screen.getByRole("button", { name: "transit · 18 min" });
     const targetId = disclosure.getAttribute("aria-controls");
     expect(document.getElementById(targetId!)).toHaveAttribute(
       "data-motion-duration",
@@ -194,7 +227,7 @@ describe("RouteConnector", () => {
       />,
     );
 
-    const disclosure = screen.getByRole("button", { name: /Ginza line · 18 min/ });
+    const disclosure = screen.getByRole("button", { name: "transit · 18 min" });
     const targetId = disclosure.getAttribute("aria-controls");
     expect(document.getElementById(targetId!)).toHaveAttribute(
       "data-motion-duration",
@@ -208,17 +241,17 @@ describe("RouteConnector", () => {
         route={routePresentation({ mode: "walking", summary: "Walk 4 min" })}
       />,
     );
-    expect(screen.getByText("Walk 4 min").parentElement?.querySelector(
+    expect(screen.getByText("約 Walk 4 min").parentElement?.querySelector(
       '[data-route-mode-icon="navigation"]',
     )).not.toBeNull();
 
     rerender(<RouteConnector route={routePresentation()} />);
-    expect(screen.getByText("Ginza line · 18 min").parentElement?.querySelector(
+    expect(screen.getByText("約 Ginza line · 18 min").parentElement?.querySelector(
       '[data-route-mode-icon="navigation"]',
     )).not.toBeNull();
   });
 
-  it("keeps external navigation separate, named, and at least a 44px target", () => {
+  it("keeps adapter navigation separate, named, and at least a 44px target", () => {
     render(
       <RouteConnector
         route={routePresentation()}
@@ -232,6 +265,106 @@ describe("RouteConnector", () => {
     expect(link).toHaveAttribute("data-touch-target", "44");
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).not.toHaveAttribute("data-route-id");
+  });
+
+  it.each([
+    "javascript:alert(1)",
+    "http://example.test/directions",
+    "not a URL",
+  ])("rejects unsafe adapter output %s", (navigationHref) => {
+    render(
+      <RouteConnector
+        route={routePresentation()}
+        navigationHref={navigationHref}
+      />,
+    );
+
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it("omits external directions for flight edges", () => {
+    render(
+      <RouteConnector
+        route={routePresentation({ mode: "flight" })}
+        navigationHref="https://example.test/flight"
+      />,
+    );
+
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { name: "one point", path: [{ lat: 35.7, lng: 139.7 }] },
+    {
+      name: "NaN latitude",
+      path: [{ lat: 35.7, lng: 139.7 }, { lat: Number.NaN, lng: 139.71 }],
+    },
+    {
+      name: "infinite latitude",
+      path: [
+        { lat: 35.7, lng: 139.7 },
+        { lat: Number.POSITIVE_INFINITY, lng: 139.71 },
+      ],
+    },
+    {
+      name: "out-of-range latitude",
+      path: [{ lat: 35.7, lng: 139.7 }, { lat: 91, lng: 139.71 }],
+    },
+    {
+      name: "out-of-range longitude",
+      path: [{ lat: 35.7, lng: 139.7 }, { lat: 35.71, lng: 181 }],
+    },
+  ])("keeps $name focus geometry static", ({ path }) => {
+    const onRouteSelect = vi.fn();
+    const { container } = render(
+      <RouteConnector
+        route={routePresentation()}
+        state={{ ...readyState, path }}
+        onRouteSelect={onRouteSelect}
+      />,
+    );
+
+    expect(container.querySelector('[data-route-id="museum--dinner"]')).toBeNull();
+    expect(onRouteSelect).not.toHaveBeenCalled();
+  });
+
+  it("keeps duplicate provider steps as distinct keyed instructions", async () => {
+    const user = userEvent.setup();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    render(
+      <RouteConnector
+        route={routePresentation()}
+        state={{ ...readyState, steps: ["Walk to platform", "Walk to platform"] }}
+        onRouteSelect={() => undefined}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "transit · 18 min" }));
+    expect(screen.getAllByText("Walk to platform")).toHaveLength(2);
+    expect(consoleError.mock.calls.flat().join(" ")).not.toMatch(
+      /same key|unique "key"/i,
+    );
+    consoleError.mockRestore();
+  });
+
+  it("retains authored context, provider reason, retry, and navigation when unavailable", () => {
+    const retry = vi.fn();
+    render(
+      <RouteConnector
+        route={routePresentation({ summary: "Manual station plan" })}
+        state={{ status: "unavailable", reason: "Provider returned no route" }}
+        onRetry={retry}
+        navigationHref="https://www.google.com/maps/dir/?api=1&travelmode=transit"
+      />,
+    );
+
+    expect(screen.getByText("約 Manual station plan")).toBeVisible();
+    expect(screen.getByText("Provider returned no route")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Retry route" }));
+    expect(retry).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("link", {
+      name: "Open live transit directions from Museum to Dinner",
+    })).toBeVisible();
   });
 
   it("keeps loading, ready, and error geometry compact and vertically aligned at 320px", () => {

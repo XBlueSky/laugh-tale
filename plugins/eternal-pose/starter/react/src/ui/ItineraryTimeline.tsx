@@ -7,6 +7,7 @@ import type {
   EffectiveTrip,
 } from "../trip-core/resolve-itinerary";
 import type { TripSelection } from "../experience-shell/useTripSelection";
+import type { NavigationAdapter } from "../experience-shell/provider-contracts";
 import { rendererFor } from "./renderers/CustomEntry";
 import { RouteConnector, type RouteConnectorState } from "./timeline/RouteConnector";
 import { TimelineEntry, type TimelineNodeState } from "./timeline/TimelineEntry";
@@ -21,7 +22,7 @@ export interface ItineraryTimelineProps {
   selection: TripSelection;
   onNodeSelect: (nodeId: string) => void;
   routeStates?: Readonly<Record<string, RouteConnectorState>>;
-  routeNavigationHrefs?: Readonly<Record<string, string>>;
+  navigationAdapter?: NavigationAdapter;
   onRouteSelect?: (routeId: string) => void;
   onRouteRetry?: (routeId: string) => void;
   dayDate?: string;
@@ -29,11 +30,6 @@ export interface ItineraryTimelineProps {
   shoppingStatuses?: Readonly<Record<string, ShoppingStatus>>;
   reducedMotion?: boolean;
   currentNodeId?: string | null;
-}
-
-function inferredDate(dayId: string): string | undefined {
-  const match = dayId.match(/\d{4}-\d{2}-\d{2}/);
-  return match?.[0];
 }
 
 function projection(
@@ -46,7 +42,7 @@ function projection(
     day: {
       day: {
         id: dayId,
-        date: dayDate ?? inferredDate(dayId) ?? "",
+        date: dayDate ?? "",
         title: "Day itinerary",
         nodes: nodes.map(({ node }) => node),
       },
@@ -56,13 +52,42 @@ function projection(
   };
 }
 
+function buildNavigationHrefs(
+  entries: readonly ReturnType<typeof buildTimelineEntries>[number][],
+  adapter: NavigationAdapter | undefined,
+): Map<string, string> {
+  const hrefs = new Map<string, string>();
+  if (adapter === undefined) {
+    return hrefs;
+  }
+  for (const entry of entries) {
+    if (entry.kind !== "route") {
+      continue;
+    }
+    const { mode, navigation } = entry.route.edge;
+    if (navigation === undefined || mode === "flight") {
+      continue;
+    }
+    try {
+      hrefs.set(entry.id, adapter.directions({
+        origin: navigation.origin,
+        destination: navigation.destination,
+        travelMode: mode,
+      }));
+    } catch {
+      // External navigation is optional; a faulty adapter cannot hide the itinerary.
+    }
+  }
+  return hrefs;
+}
+
 export function ItineraryTimeline({
   nodes,
   routes,
   selection,
   onNodeSelect,
   routeStates = {},
-  routeNavigationHrefs = {},
+  navigationAdapter,
   onRouteSelect,
   onRouteRetry,
   dayDate,
@@ -79,6 +104,14 @@ export function ItineraryTimeline({
   const entries = useMemo(
     () => buildTimelineEntries(timelineProjection.day, timelineProjection.trip),
     [timelineProjection],
+  );
+  const routeStatesById = useMemo(
+    () => new Map(Object.entries(routeStates)),
+    [routeStates],
+  );
+  const navigationHrefsById = useMemo(
+    () => buildNavigationHrefs(entries, navigationAdapter),
+    [entries, navigationAdapter],
   );
   const effectiveNodesById = useMemo(
     () => new Map(nodes.map((node) => [node.sourceNodeId, node])),
@@ -113,11 +146,10 @@ export function ItineraryTimeline({
   const renderNode = (entry: NodeEntry) => {
     const effective = effectiveNodesById.get(entry.id);
     const selected = selection.nodeId === entry.id;
-    const effectiveDayDate = dayDate ?? inferredDate(entry.node.dayId);
     const state: TimelineNodeState = {
       completed: effective?.completed ?? false,
       current: entry.id === currentNodeId,
-      ...(effectiveDayDate === undefined ? {} : { dayDate: effectiveDayDate }),
+      ...(dayDate === undefined ? {} : { dayDate }),
       position: positionById.get(entry.id) ?? "middle",
       ...(effective?.selectedCandidateId === undefined
         ? {}
@@ -143,14 +175,14 @@ export function ItineraryTimeline({
         if (entry.kind === "route") {
           const destination = effectiveNodesById.get(entry.route.edge.toNodeId);
           return (
-            <li key={entry.id} className="itinerary-timeline__entry itinerary-timeline__route">
+            <li key={`route:${entry.id}`} className="itinerary-timeline__entry itinerary-timeline__route">
               <RouteConnector
                 route={entry.route}
-                state={routeStates[entry.id]}
+                state={routeStatesById.get(entry.id)}
                 destinationTiming={destination?.node.timing}
                 onRouteSelect={onRouteSelect}
                 onRetry={onRouteRetry}
-                navigationHref={routeNavigationHrefs[entry.id]}
+                navigationHref={navigationHrefsById.get(entry.id)}
                 reducedMotion={reducedMotion}
               />
             </li>
@@ -160,7 +192,7 @@ export function ItineraryTimeline({
         if (entry.kind === "logistics-group") {
           return (
             <li
-              key={entry.id}
+              key={`logistics-group:${entry.id}`}
               className="itinerary-timeline__entry"
               data-logistics-group={entry.id}
             >
@@ -168,7 +200,7 @@ export function ItineraryTimeline({
                 <ol className="itinerary-timeline">
                   {entry.entries.map((child) => (
                     <li
-                      key={child.id}
+                      key={`node:${child.id}`}
                       className="itinerary-timeline__entry"
                       ref={(element) => {
                         if (element === null) {
@@ -189,7 +221,7 @@ export function ItineraryTimeline({
 
         return (
           <li
-            key={entry.id}
+            key={`node:${entry.id}`}
             ref={(element) => {
               if (element === null) {
                 nodeElementsRef.current.delete(entry.id);

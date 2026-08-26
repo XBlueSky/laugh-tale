@@ -249,6 +249,84 @@ describe("TripExperience", () => {
     Object.defineProperty(window, "innerHeight", { configurable: true, value: 500 });
   });
 
+  it("passes the authoritative day date and live current owner into the timeline", () => {
+    const trip = createTrip();
+    trip.days[0] = {
+      ...trip.days[0],
+      id: "day-2099-99-99",
+      nodes: [{
+        id: "timed-exhibit",
+        dayId: "day-2099-99-99",
+        kind: "experience",
+        title: "Timed exhibit",
+        timing: { start: "09:00", end: "11:00", certainty: "fixed" },
+        optionality: "core",
+        booking: { status: "confirmed", reference: "PRIVATE-REF" },
+        payload: { durationMinutes: 120 },
+      }],
+    };
+    trip.routes = [];
+    trip.candidateGroups = [];
+
+    render(
+      <TripExperience
+        trip={trip}
+        adapterFactory={() => new FakeMapAdapter()}
+        clock={() => "2040-06-12T00:30:00Z"}
+      />,
+    );
+
+    const current = screen.getByRole("button", { name: "09:00 Timed exhibit" });
+    expect(current).toHaveAttribute("aria-current", "step");
+    expect(screen.getByText("Tuesday, 12 June 2040").closest("time")).toHaveAttribute(
+      "datetime",
+      "2040-06-12",
+    );
+    expect(screen.queryByText(/2099/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/PRIVATE-REF/)).not.toBeInTheDocument();
+  });
+
+  it("provides keyless Google consumer navigation from explicit route navigation", () => {
+    const trip = createTrip();
+    trip.days[0].nodes[2] = {
+      id: "dinner",
+      dayId: "day-one",
+      kind: "dining",
+      title: "Dinner hall",
+      timing: { start: "12:00", end: "13:00", certainty: "suggested" },
+      optionality: "core",
+      place: {
+        name: "Dinner hall",
+        coordinates: { lat: 35.71, lng: 139.79 },
+        certainty: "confirmed",
+      },
+      payload: {},
+    };
+    trip.candidateGroups = [];
+    trip.routes[0] = {
+      ...trip.routes[0],
+      navigation: {
+        origin: "Synthetic museum entrance",
+        destination: "Synthetic dinner hall",
+      },
+    };
+
+    render(
+      <TripExperience
+        trip={trip}
+        adapterFactory={() => new FakeMapAdapter()}
+        clock={() => "2040-06-12T00:30:00Z"}
+      />,
+    );
+
+    expect(screen.getByRole("link", {
+      name: "Open live transit directions from Synthetic museum entrance to Synthetic dinner hall",
+    })).toHaveAttribute(
+      "href",
+      "https://www.google.com/maps/dir/?api=1&origin=Synthetic%20museum%20entrance&destination=Synthetic%20dinner%20hall&travelmode=transit",
+    );
+  });
+
   it("keeps map and list selection bidirectional without remounting across days", async () => {
     const user = userEvent.setup();
     const adapter = new FakeMapAdapter();
