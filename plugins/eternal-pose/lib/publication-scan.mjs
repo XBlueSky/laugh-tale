@@ -424,298 +424,435 @@ function filenameFindings(path) {
 }
 
 const MAX_SECRET_SYNTAX_TOKENS = 128;
+const GENERIC_SECRET_NAME =
+  /^(?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|secret(?:[_-]?key)?|token|password|authorization|cookie)(?:[_-][A-Za-z0-9]+)*$/i;
 const GENERIC_SECRET_KEY =
   /(^|[^A-Za-z0-9_$])(["']?(?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|secret(?:[_-]?key)?|token|password|authorization|cookie)(?:[_-][A-Za-z0-9]+)*["']?)(?![A-Za-z0-9_$])/gim;
+const CODE_SOURCE_PATH = /\.(?:[cm]?[jt]sx?|vue|svelte|astro)$/i;
+const ASSIGNMENT_OPERATORS = new Set(["=", "??=", "||=", "&&="]);
+const MULTI_CHARACTER_TOKENS = [
+  "??=", "||=", "&&=", "===", "!==", "...", "=>", "/>", "?.", "??", "||", "&&",
+  "==", "!=", "<=", ">=", "++", "--", "**", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=",
+];
+const DECLARATION_BOUNDARIES = new Set([
+  "const", "let", "var", "class", "interface", "type", "function", "import", "export", "return", "throw",
+]);
+const MEMBER_BOUNDARY_MODIFIERS = new Set([
+  "abstract", "accessor", "declare", "override", "private", "protected", "public", "readonly", "static",
+]);
+const POSTFIX_RUNTIME_OPERATORS = new Set([
+  "+", "-", "*", "/", "%", "=", "??=", "||=", "&&=", "??", "||", "&&", "?", "!",
+]);
+const REGEX_PREFIX_KEYWORDS = new Set([
+  "case", "delete", "do", "else", "in", "instanceof", "new", "return", "throw", "typeof", "void", "yield",
+]);
+const REGEX_PREFIX_TOKENS = new Set(["(", "[", "{", ",", ";", ":", "=", "=>", "?", "??", "||", "&&"]);
+const MEMBER_BOUNDARY_TOKENS = new Set(["=", ":", "?", "!", "(", "["]);
+const CODE_VALUE_BOUNDARIES = new Set([";", ",", "}", ")", "]", "/>"]);
 
-function skipSecretTrivia(contents, start, limit) {
-  let cursor = start;
-  while (cursor < limit) {
-    if (/\s/.test(contents[cursor])) {
-      cursor += 1;
-      continue;
-    }
-    if (contents.startsWith("//", cursor)) {
-      const newline = contents.indexOf("\n", cursor + 2);
-      cursor = newline === -1 || newline >= limit ? limit : newline + 1;
-      continue;
-    }
-    if (contents.startsWith("/*", cursor)) {
-      const close = contents.indexOf("*/", cursor + 2);
-      cursor = close === -1 || close + 2 > limit ? limit : close + 2;
-      continue;
-    }
-    break;
-  }
-  return cursor;
-}
-
-function skipQuotedToken(contents, start, limit) {
+function readQuotedLiteral(contents, start, limit) {
   const quote = contents[start];
   let cursor = start + 1;
   while (cursor < limit) {
     if (contents[cursor] === "\\") {
-      cursor += 2;
+      cursor = Math.min(cursor + 2, limit);
       continue;
     }
+    if (contents[cursor] === quote) {
+      return { closed: true, end: cursor + 1, value: contents.slice(start + 1, cursor) };
+    }
     cursor += 1;
-    if (contents[cursor - 1] === quote) return cursor;
   }
-  return limit;
+  return { closed: false, end: limit, value: contents.slice(start + 1, limit) };
 }
 
-function codeOpaqueRanges(contents) {
-  const ranges = [];
-  let cursor = 0;
-  while (cursor < contents.length) {
-    if (contents.startsWith("//", cursor)) {
+function canStartRegex(previousToken) {
+  if (previousToken === undefined) return true;
+  if (previousToken.kind === "identifier" && REGEX_PREFIX_KEYWORDS.has(previousToken.value)) {
+    return true;
+  }
+  return REGEX_PREFIX_TOKENS.has(previousToken.value);
+}
+
+function readRegexLiteral(contents, start, limit) {
+  let cursor = start + 1;
+  let inCharacterClass = false;
+  while (cursor < limit) {
+    if (contents[cursor] === "\\") {
+      cursor = Math.min(cursor + 2, limit);
+      continue;
+    }
+    if (contents[cursor] === "[") inCharacterClass = true;
+    if (contents[cursor] === "]") inCharacterClass = false;
+    if (contents[cursor] === "/" && !inCharacterClass) {
+      cursor += 1;
+      while (cursor < limit && /[A-Za-z]/.test(contents[cursor])) cursor += 1;
+      return cursor;
+    }
+    if (contents[cursor] === "\n" || contents[cursor] === "\r") return start + 1;
+    cursor += 1;
+  }
+  return start + 1;
+}
+
+function scanTemplateLiteral(contents, start, limit) {
+  let cursor = start + 1;
+  let value = "";
+  let hasInterpolation = false;
+  let hasLineBreak = false;
+  const interpolationResults = [];
+  while (cursor < limit) {
+    const character = contents[cursor];
+    if (character === "\\") {
+      if (contents[cursor + 1] === "\n" || contents[cursor + 1] === "\r") hasLineBreak = true;
+      value += contents.slice(cursor, Math.min(cursor + 2, limit));
+      cursor = Math.min(cursor + 2, limit);
+      continue;
+    }
+    if (character === "`") {
+      return {
+        closed: true,
+        end: cursor + 1,
+        hasInterpolation,
+        hasLineBreak,
+        interpolationResults,
+        value,
+      };
+    }
+    if (character === "$" && contents[cursor + 1] === "{") {
+      hasInterpolation = true;
+      const interpolation = tokenizeCodeSegment(contents, cursor + 2, limit, true, true);
+      interpolationResults.push(interpolation);
+      cursor = interpolation.cursor;
+      if (contents[cursor] === "}") cursor += 1;
+      continue;
+    }
+    if (character === "\n" || character === "\r") hasLineBreak = true;
+    value += character;
+    cursor += 1;
+  }
+  return { closed: false, end: limit, hasInterpolation, hasLineBreak, interpolationResults, value };
+}
+
+function tokenizeCodeSegment(contents, start = 0, limit = contents.length, stopOnClosingBrace = false, recognizeComments = true) {
+  const tokens = [];
+  const comments = [];
+  let cursor = start;
+  let braceDepth = 0;
+  let pendingLineBreak = false;
+  let previousSurfaceToken;
+
+  const push = (kind, value, extra = {}) => {
+    const token = { kind, value, lineBreakBefore: pendingLineBreak, ...extra };
+    tokens.push(token);
+    previousSurfaceToken = token;
+    pendingLineBreak = false;
+  };
+
+  while (cursor < limit) {
+    const character = contents[cursor];
+    if (/\s/.test(character)) {
+      if (character === "\n" || character === "\r") {
+        pendingLineBreak = true;
+      }
+      cursor += 1;
+      continue;
+    }
+    if (recognizeComments && contents.startsWith("//", cursor)) {
       const newline = contents.indexOf("\n", cursor + 2);
-      const end = newline === -1 ? contents.length : newline;
-      ranges.push({ start: cursor, end, contentEnd: end, kind: "comment" });
+      const end = newline === -1 || newline >= limit ? limit : newline;
+      comments.push(contents.slice(cursor + 2, end));
       cursor = end;
       continue;
     }
-    if (contents.startsWith("/*", cursor)) {
+    if (recognizeComments && contents.startsWith("/*", cursor)) {
       const close = contents.indexOf("*/", cursor + 2);
-      const end = close === -1 ? contents.length : close + 2;
-      ranges.push({ start: cursor, end, contentEnd: close === -1 ? end : close, kind: "comment" });
+      const contentEnd = close === -1 || close >= limit ? limit : close;
+      const end = close === -1 || close + 2 > limit ? limit : close + 2;
+      const text = contents.slice(cursor + 2, contentEnd);
+      comments.push(text);
+      if (/\r|\n/.test(text)) {
+        pendingLineBreak = true;
+      }
       cursor = end;
       continue;
     }
-    if (contents[cursor] === '"' || contents[cursor] === "'" || contents[cursor] === "`") {
-      const end = skipQuotedToken(contents, cursor, contents.length);
-      ranges.push({ start: cursor, end, kind: "string" });
-      cursor = end;
+    if (character === '"' || character === "'") {
+      const literal = readQuotedLiteral(contents, cursor, limit);
+      push("string", literal.value, { static: literal.closed });
+      cursor = literal.end;
       continue;
     }
+    if (character === "`") {
+      const template = scanTemplateLiteral(contents, cursor, limit);
+      push("template", template.value, { static: template.closed && !template.hasInterpolation });
+      for (const interpolation of template.interpolationResults) {
+        tokens.push({ kind: "punctuation", value: "{", lineBreakBefore: false, virtual: true });
+        tokens.push(...interpolation.tokens);
+        tokens.push({ kind: "punctuation", value: "}", lineBreakBefore: false, virtual: true });
+        comments.push(...interpolation.comments);
+      }
+      if (template.hasLineBreak) {
+        pendingLineBreak = true;
+      }
+      cursor = template.end;
+      continue;
+    }
+    if (character === "{") {
+      braceDepth += 1;
+      push("punctuation", character);
+      cursor += 1;
+      continue;
+    }
+    if (character === "}") {
+      if (stopOnClosingBrace && braceDepth === 0) {
+        return { comments, cursor, tokens };
+      }
+      if (braceDepth > 0) braceDepth -= 1;
+      push("punctuation", character);
+      cursor += 1;
+      continue;
+    }
+    const identifier = /^[A-Za-z_$][A-Za-z0-9_$]*/.exec(contents.slice(cursor, limit));
+    if (identifier !== null) {
+      push("identifier", identifier[0]);
+      cursor += identifier[0].length;
+      continue;
+    }
+    const number = /^(?:\d+(?:\.\d*)?|\.\d+)/.exec(contents.slice(cursor, limit));
+    if (number !== null) {
+      push("number", number[0]);
+      cursor += number[0].length;
+      continue;
+    }
+    if (character === "/" && !contents.startsWith("/>", cursor) && canStartRegex(previousSurfaceToken)) {
+      const end = readRegexLiteral(contents, cursor, limit);
+      if (end > cursor + 1) {
+        push("regex", contents.slice(cursor, end));
+        cursor = end;
+        continue;
+      }
+    }
+    const operator = MULTI_CHARACTER_TOKENS.find((candidate) => contents.startsWith(candidate, cursor));
+    if (operator !== undefined) {
+      push("punctuation", operator);
+      cursor += operator.length;
+      continue;
+    }
+    push("punctuation", character);
     cursor += 1;
   }
-  return ranges;
-}
-
-function codeKeyScanLimit(ranges, rangeIndex, start, end, defaultLimit) {
-  while (rangeIndex.value < ranges.length && ranges[rangeIndex.value].end <= start) {
-    rangeIndex.value += 1;
-  }
-  const range = ranges[rangeIndex.value];
-  if (range === undefined || start < range.start || start >= range.end) return defaultLimit;
-  if (range.kind === "comment") return range.contentEnd;
-  return range.start === start && range.end === end ? defaultLimit : null;
+  return { comments, cursor, tokens };
 }
 
 function depthsAreZero(depths) {
   return Object.values(depths).every((depth) => depth === 0);
 }
 
-function startsDeclarationBoundary(contents, start) {
-  return /^(?:const|let|var|class|interface|type|function|import|export|return|throw)\b/.test(
-    contents.slice(start),
-  );
-}
-
-function typedAssignmentValueStarts(contents, start, limit) {
-  const starts = [];
-  const depths = { "(": 0, "[": 0, "{": 0, "<": 0 };
-  const opening = new Set(Object.keys(depths));
-  const closing = { ")": "(", "]": "[", "}": "{", ">": "<" };
-  let cursor = start;
-  let syntaxTokens = 0;
-  while (cursor < limit && syntaxTokens < MAX_SECRET_SYNTAX_TOKENS) {
-    if (contents.startsWith("//", cursor) || contents.startsWith("/*", cursor)) {
-      const next = skipSecretTrivia(contents, cursor, limit);
-      if (
-        depthsAreZero(depths) &&
-        contents.slice(cursor, next).includes("\n") &&
-        startsDeclarationBoundary(contents, next)
-      ) {
-        break;
-      }
-      cursor = next;
-      continue;
-    }
-    const character = contents[cursor];
-    if (/\s/.test(character)) {
-      if (
-        depthsAreZero(depths) &&
-        (character === "\n" || character === "\r") &&
-        startsDeclarationBoundary(contents, skipSecretTrivia(contents, cursor, limit))
-      ) {
-        break;
-      }
-      cursor += 1;
-      continue;
-    }
-    if (character === '"' || character === "'" || character === "`") {
-      cursor = skipQuotedToken(contents, cursor, limit);
-      syntaxTokens += 1;
-      continue;
-    }
-    if (opening.has(character)) {
-      depths[character] += 1;
-      cursor += 1;
-      syntaxTokens += 1;
-      continue;
-    }
-    const opener = closing[character];
-    if (opener !== undefined && depths[opener] > 0) {
-      depths[opener] -= 1;
-      cursor += 1;
-      syntaxTokens += 1;
-      continue;
-    }
-    const topLevel = depthsAreZero(depths);
-    if (topLevel && (character === ";" || character === "," || opener !== undefined)) break;
-    if (topLevel && character === "=" && contents[cursor + 1] !== ">") {
-      starts.push(cursor + 1);
-      break;
-    }
-    const token = /^[A-Za-z_$][A-Za-z0-9_$]*/.exec(contents.slice(cursor, limit));
-    cursor += token?.[0].length ?? 1;
-    syntaxTokens += 1;
+function looksLikeMemberBoundary(tokens, index) {
+  const token = tokens[index];
+  if (token === undefined) return true;
+  if (token.value === "@" || DECLARATION_BOUNDARIES.has(token.value) || MEMBER_BOUNDARY_MODIFIERS.has(token.value)) {
+    return true;
   }
-  return starts;
+  if (token.kind !== "identifier") return false;
+  return MEMBER_BOUNDARY_TOKENS.has(tokens[index + 1]?.value);
 }
 
-function assignmentValueStarts(contents, start, limit, isCodeSource) {
-  const cursor = skipSecretTrivia(contents, start, limit);
-  if (contents[cursor] === "=") return [cursor + 1];
-  if (contents[cursor] !== ":") return [];
-  const afterColon = cursor + 1;
-  return isCodeSource
-    ? [afterColon, ...typedAssignmentValueStarts(contents, afterColon, limit)]
-    : [afterColon];
-}
-
-function keywordAt(contents, start, keyword) {
-  return (
-    contents.startsWith(keyword, start) &&
-    !/[A-Za-z0-9_$]/.test(contents[start - 1] ?? "") &&
-    !/[A-Za-z0-9_$]/.test(contents[start + keyword.length] ?? "")
-  );
-}
-
-function skipTypeScriptPostfix(contents, start, limit) {
-  let cursor = skipSecretTrivia(contents, start, limit);
-  const keyword = keywordAt(contents, cursor, "as")
-    ? "as"
-    : keywordAt(contents, cursor, "satisfies")
-      ? "satisfies"
-      : null;
-  if (keyword === null) return { cursor: start, found: false, valid: true };
-  cursor = skipSecretTrivia(contents, cursor + keyword.length, limit);
-
+function typedAssignmentValueStart(tokens, start) {
   const depths = { "(": 0, "[": 0, "{": 0, "<": 0 };
   const opening = new Set(Object.keys(depths));
   const closing = { ")": "(", "]": "[", "}": "{", ">": "<" };
-  let syntaxTokens = 0;
   let hasTypeToken = false;
-  while (cursor < limit && syntaxTokens < MAX_SECRET_SYNTAX_TOKENS) {
-    if (contents.startsWith("//", cursor) || contents.startsWith("/*", cursor)) {
-      cursor = skipSecretTrivia(contents, cursor, limit);
-      continue;
-    }
-    const character = contents[cursor];
-    if (/\s/.test(character)) {
-      cursor += 1;
-      continue;
-    }
+  for (let cursor = start, count = 0; cursor < tokens.length && count < MAX_SECRET_SYNTAX_TOKENS; cursor += 1, count += 1) {
+    const token = tokens[cursor];
     const topLevel = depthsAreZero(depths);
-    if (topLevel && (character === ";" || character === "," || character === ")" || character === "}")) {
+    if (topLevel && token.lineBreakBefore && hasTypeToken && looksLikeMemberBoundary(tokens, cursor)) return null;
+    const opener = closing[token.value];
+    if (topLevel && (token.value === ";" || token.value === "," || opener !== undefined)) return null;
+    if (topLevel && token.value === "=") return cursor + 1;
+    if (opening.has(token.value)) {
+      depths[token.value] += 1;
+    } else if (opener !== undefined && depths[opener] > 0) {
+      depths[opener] -= 1;
+    }
+    hasTypeToken = true;
+  }
+  return null;
+}
+
+function assignmentValueStarts(tokens, keyIndex) {
+  const token = tokens[keyIndex];
+  let cursor = keyIndex + 1;
+  if (
+    (token.kind === "string" || (token.kind === "template" && token.static)) &&
+    tokens[keyIndex - 1]?.value === "[" &&
+    tokens[keyIndex + 1]?.value === "]"
+  ) {
+    cursor = keyIndex + 2;
+  }
+  if (tokens[cursor]?.value === "?" || tokens[cursor]?.value === "!") cursor += 1;
+  if (ASSIGNMENT_OPERATORS.has(tokens[cursor]?.value)) return [cursor + 1];
+  if (tokens[cursor]?.value !== ":") return [];
+  const directValue = cursor + 1;
+  const typedValue = typedAssignmentValueStart(tokens, directValue);
+  return typedValue === null ? [directValue] : [directValue, typedValue];
+}
+
+function prefixAssertionEnd(tokens, start) {
+  if (tokens[start]?.value !== "<") return null;
+  let depth = 0;
+  let hasTypeToken = false;
+  for (let cursor = start, count = 0; cursor < tokens.length && count < MAX_SECRET_SYNTAX_TOKENS; cursor += 1, count += 1) {
+    if (tokens[cursor].value === "<") {
+      depth += 1;
+      continue;
+    }
+    if (tokens[cursor].value === ">") {
+      depth -= 1;
+      if (depth === 0) return hasTypeToken ? cursor + 1 : null;
+      continue;
+    }
+    if (depth > 0) hasTypeToken = true;
+  }
+  return null;
+}
+
+function consumeTypeScriptPostfix(tokens, start, closers) {
+  if (tokens[start]?.value !== "as" && tokens[start]?.value !== "satisfies") {
+    return { cursor: start, valid: true };
+  }
+  const depths = { "(": 0, "[": 0, "{": 0, "<": 0 };
+  const opening = new Set(Object.keys(depths));
+  const closing = { ")": "(", "]": "[", "}": "{", ">": "<" };
+  let cursor = start + 1;
+  let hasTypeToken = false;
+  let count = 0;
+  while (cursor < tokens.length && count < MAX_SECRET_SYNTAX_TOKENS) {
+    const token = tokens[cursor];
+    const topLevel = depthsAreZero(depths);
+    if (
+      topLevel &&
+      (token.value === ";" || token.value === "," || token.value === "/>" || closers.includes(token.value))
+    ) {
       break;
     }
-    if (topLevel && contents.startsWith("/>", cursor)) break;
-    if (topLevel && /[+*/%=?!]/.test(character)) {
-      return { cursor, found: true, valid: false };
-    }
-    if (character === '"' || character === "'" || character === "`") {
-      cursor = skipQuotedToken(contents, cursor, limit);
-      hasTypeToken = true;
-      syntaxTokens += 1;
-      continue;
-    }
-    if (opening.has(character)) {
-      depths[character] += 1;
-      cursor += 1;
-      syntaxTokens += 1;
-      continue;
-    }
-    const opener = closing[character];
-    if (opener !== undefined && depths[opener] > 0) {
+    if (topLevel && POSTFIX_RUNTIME_OPERATORS.has(token.value)) return { cursor, valid: false };
+    if (topLevel && token.lineBreakBefore && DECLARATION_BOUNDARIES.has(token.value)) break;
+    const opener = closing[token.value];
+    if (opening.has(token.value)) {
+      depths[token.value] += 1;
+    } else if (opener !== undefined && depths[opener] > 0) {
       depths[opener] -= 1;
-      cursor += 1;
-      syntaxTokens += 1;
-      continue;
     }
-    const token = /^[A-Za-z_$][A-Za-z0-9_$]*/.exec(contents.slice(cursor, limit));
-    if (token !== null) {
-      cursor += token[0].length;
-      hasTypeToken = true;
-      syntaxTokens += 1;
-      continue;
-    }
-    if (topLevel && !/[.&|]/.test(character)) break;
+    hasTypeToken = true;
     cursor += 1;
-    syntaxTokens += 1;
+    count += 1;
   }
-  return { cursor, found: true, valid: hasTypeToken && syntaxTokens < MAX_SECRET_SYNTAX_TOKENS };
+  return { cursor, valid: hasTypeToken && count < MAX_SECRET_SYNTAX_TOKENS };
 }
 
-function secretLiteralAt(contents, start, limit, isCodeSource) {
+function isSecretLiteralValue(value) {
+  return (
+    /^[A-Za-z0-9_./+~-]{16,}={0,2}$/.test(value) &&
+    !/^(?:<|your\b|replace\b|example\b|set-at-runtime\b)/i.test(value)
+  );
+}
+
+function isCodeValueBoundary(tokens, cursor) {
+  const token = tokens[cursor];
+  if (token === undefined) return true;
+  if (CODE_VALUE_BOUNDARIES.has(token.value)) return true;
+  return token.lineBreakBefore && (DECLARATION_BOUNDARIES.has(token.value) || looksLikeMemberBoundary(tokens, cursor));
+}
+
+function secretLiteralAt(tokens, start, allowTrailingProse) {
   const closers = [];
-  let cursor = skipSecretTrivia(contents, start, limit);
-  while (cursor < limit && (contents[cursor] === "{" || contents[cursor] === "(")) {
-    closers.push(contents[cursor] === "{" ? "}" : ")");
-    cursor = skipSecretTrivia(contents, cursor + 1, limit);
+  let cursor = start;
+  while (tokens[cursor]?.value === "{" || tokens[cursor]?.value === "(") {
+    closers.push(tokens[cursor].value === "{" ? "}" : ")");
+    cursor += 1;
   }
-
-  const quote = contents[cursor];
-  if (quote !== '"' && quote !== "'" && quote !== "`") {
-    if (isCodeSource) return false;
-    const unquoted = /^([A-Za-z0-9_./+~-]{16,}={0,2})/.exec(contents.slice(cursor, limit));
-    if (unquoted === null) return false;
-    const value = unquoted[1].toLowerCase();
-    return !/^(?:<|your\b|replace\b|example\b|set-at-runtime\b|process\.env\b|import\.meta\.env\b)/.test(value);
+  while (tokens[cursor]?.value === "<") {
+    const assertionEnd = prefixAssertionEnd(tokens, cursor);
+    if (assertionEnd === null) return false;
+    cursor = assertionEnd;
   }
-
-  const end = skipQuotedToken(contents, cursor, limit);
-  if (end <= cursor + 1 || contents[end - 1] !== quote) return false;
-  const value = contents.slice(cursor + 1, end - 1);
-  if (!/^[A-Za-z0-9_./+~-]{16,}={0,2}$/.test(value)) return false;
-  if (/^(?:<|your\b|replace\b|example\b|set-at-runtime\b)/i.test(value)) return false;
-
-  cursor = end;
-  if (isCodeSource) {
-    const postfix = skipTypeScriptPostfix(contents, cursor, limit);
-    if (!postfix.valid) return false;
-    if (postfix.found) cursor = postfix.cursor;
+  const literal = tokens[cursor];
+  if (
+    literal === undefined ||
+    (literal.kind !== "string" && literal.kind !== "template") ||
+    !literal.static ||
+    !isSecretLiteralValue(literal.value)
+  ) {
+    return false;
   }
-  cursor = skipSecretTrivia(contents, cursor, limit);
+  cursor += 1;
+  const postfix = consumeTypeScriptPostfix(tokens, cursor, closers);
+  if (!postfix.valid) return false;
+  cursor = postfix.cursor;
   for (const closer of closers.reverse()) {
-    if (contents[cursor] !== closer) return false;
-    cursor = skipSecretTrivia(contents, cursor + 1, limit);
+    if (tokens[cursor]?.value !== closer) return false;
+    cursor += 1;
   }
-  if (contents.startsWith("/>", cursor)) return true;
-  const boundaryCharacter = cursor < limit ? contents[cursor] : "";
-  return !/[A-Za-z0-9_$+.?&|*/%-]/.test(boundaryCharacter);
+  return allowTrailingProse || isCodeValueBoundary(tokens, cursor);
 }
 
-function containsGenericSecretLiteral(path, contents) {
-  const isCodeSource = /\.(?:[cm]?[jt]sx?|vue|svelte|astro)$/i.test(path);
-  const opaqueRanges = isCodeSource ? codeOpaqueRanges(contents) : [];
-  const opaqueRangeIndex = { value: 0 };
-  GENERIC_SECRET_KEY.lastIndex = 0;
-  let match;
-  while ((match = GENERIC_SECRET_KEY.exec(contents)) !== null) {
-    const keyStart = match.index + match[1].length;
-    const keyEnd = keyStart + match[2].length;
-    const limit = isCodeSource
-      ? codeKeyScanLimit(opaqueRanges, opaqueRangeIndex, keyStart, keyEnd, contents.length)
-      : contents.length;
-    if (limit === null) continue;
-    for (const valueStart of assignmentValueStarts(contents, keyEnd, limit, isCodeSource)) {
-      if (secretLiteralAt(contents, valueStart, limit, isCodeSource)) return true;
+function containsTokenizedSecret(tokens, allowTrailingProse = false) {
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    const isIdentifierKey = token.kind === "identifier" && GENERIC_SECRET_NAME.test(token.value);
+    const isQuotedKey =
+      (token.kind === "string" || (token.kind === "template" && token.static)) &&
+      GENERIC_SECRET_NAME.test(token.value) &&
+      (tokens[index + 1]?.value === ":" ||
+        (tokens[index - 1]?.value === "[" && tokens[index + 1]?.value === "]"));
+    if (!isIdentifierKey && !isQuotedKey) continue;
+    for (const valueStart of assignmentValueStarts(tokens, index)) {
+      if (secretLiteralAt(tokens, valueStart, allowTrailingProse)) return true;
     }
   }
   return false;
+}
+
+function containsCodeGenericSecret(contents) {
+  const tokenized = tokenizeCodeSegment(contents);
+  if (containsTokenizedSecret(tokenized.tokens)) return true;
+  return tokenized.comments.some((comment) => {
+    const commentTokens = tokenizeCodeSegment(comment, 0, comment.length, false, false).tokens;
+    return containsTokenizedSecret(commentTokens, true);
+  });
+}
+
+function skipNonCodeTrivia(contents, start) {
+  let cursor = start;
+  while (cursor < contents.length && /\s/.test(contents[cursor])) cursor += 1;
+  return cursor;
+}
+
+function containsNonCodeGenericSecret(contents) {
+  GENERIC_SECRET_KEY.lastIndex = 0;
+  let match;
+  while ((match = GENERIC_SECRET_KEY.exec(contents)) !== null) {
+    let cursor = skipNonCodeTrivia(contents, match.index + match[0].length);
+    if (contents[cursor] !== ":" && contents[cursor] !== "=") continue;
+    cursor = skipNonCodeTrivia(contents, cursor + 1);
+    const quote = contents[cursor];
+    if (quote === '"' || quote === "'" || quote === "`") {
+      const literal = readQuotedLiteral(contents, cursor, contents.length);
+      if (literal.closed && isSecretLiteralValue(literal.value)) return true;
+      continue;
+    }
+    const unquoted = /^([A-Za-z0-9_./+~-]{16,}={0,2})/.exec(contents.slice(cursor));
+    if (unquoted !== null && isSecretLiteralValue(unquoted[1])) return true;
+  }
+  return false;
+}
+
+function containsGenericSecretLiteral(path, contents) {
+  return CODE_SOURCE_PATH.test(path)
+    ? containsCodeGenericSecret(contents)
+    : containsNonCodeGenericSecret(contents);
 }
 
 function contentFindings(path, contents) {

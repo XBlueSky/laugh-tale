@@ -293,14 +293,60 @@ describe("publication safety findings", () => {
       name: "literal inside one block comment boundary",
       source: (secret: string) => `/* token = '${secret}' as const */\nconst harmless = runtimeConfig();\n`,
     },
-  ])("rejects a $name literal without echoing it", async ({ name, source }) => {
+    {
+      name: "line-comment literal with trailing prose",
+      source: (secret: string) => `// apiKey: "${secret}" rotate after the release window\nconst harmless = runtimeConfig();\n`,
+    },
+    {
+      name: "block-comment literal with trailing prose",
+      source: (secret: string) => `/* token = '${secret}' keep only for the release window */\nconst harmless = runtimeConfig();\n`,
+    },
+    {
+      name: "assignment inside template interpolation",
+      source: (secret: string) => `const note = \`prefix \${(config.apiKey = "${secret}")} suffix\`;\n`,
+    },
+    {
+      name: "optional class field initializer",
+      source: (secret: string) => `class RuntimeConfig { apiKey?: string = "${secret}"; }\n`,
+    },
+    {
+      name: "definite class field initializer",
+      source: (secret: string) => `class RuntimeConfig { token!: string = '${secret}'; }\n`,
+    },
+    {
+      name: "nullish logical assignment",
+      source: (secret: string) => `config.apiKey ??= "${secret}";\n`,
+    },
+    {
+      name: "or logical assignment",
+      source: (secret: string) => `config.token ||= '${secret}';\n`,
+    },
+    {
+      name: "and logical assignment",
+      source: (secret: string) => `config.secret &&= \`${secret}\`;\n`,
+    },
+    {
+      name: "double-quoted computed key assignment",
+      source: (secret: string) => `config["apiKey"] = "${secret}";\n`,
+    },
+    {
+      name: "single-quoted computed key assignment",
+      source: (secret: string) => `config['token'] = '${secret}';\n`,
+    },
+    {
+      name: "TypeScript prefix assertion",
+      path: "src/prefix-assertion.ts",
+      source: (secret: string) => `const apiKey = <string>"${secret}";\n`,
+    },
+  ])("rejects a $name literal without echoing it", async ({ name, source, path }) => {
     const root = createTemporaryRoot();
     const secret = ["runtime", "_", name[0], "L".repeat(27)].join("");
-    writeFixture(root, "src/literal-props.tsx", source(secret));
+    const fixturePath = path ?? "src/literal-props.tsx";
+    writeFixture(root, fixturePath, source(secret));
 
     const findings = await scanPublication(root);
 
-    expect(findingAt(findings, "src/literal-props.tsx", "credential.generic-secret")).toBe(true);
+    expect(findingAt(findings, fixturePath, "credential.generic-secret")).toBe(true);
     expect(JSON.stringify(findings)).not.toContain(secret);
   });
 
@@ -319,6 +365,20 @@ describe("publication safety findings", () => {
     "const view = <Map apiKey={// runtime\nruntimeConfig()} />;\n",
     "const apiKey = runtimeTag`runtime_fallback_value`;\n",
     "const view = <Map apiKey={runtimeTag`runtime_fallback_value`} />;\n",
+    "const apiKey = runtimeTag`runtime_${runtimeSuffix}`;\n",
+    "const apiKey = `runtime_${runtimeSuffix}`;\n",
+    "const note = `apiKey = \"runtime_harmless_literal_value\"`;\n",
+    "const note = `prefix ${runtimeConfig()} suffix`;\n",
+    "class RuntimeConfig { apiKey?: string = options.apiKey; }\n",
+    "class RuntimeConfig { token!: string = runtimeToken(); }\n",
+    "config.apiKey ??= options.apiKey;\n",
+    "config.token ||= runtimeToken();\n",
+    "config.secret &&= process.env.SECRET;\n",
+    "config[\"apiKey\"] = runtimeConfig();\n",
+    "config['token'] = options.token;\n",
+    "const apiKey = <string>options.apiKey;\n",
+    "const token = <string>runtimeConfig();\n",
+    "const apiKey = <string>import.meta.env.VITE_GOOGLE_MAPS_API_KEY;\n",
     [
       "interface RuntimeOptions {",
       "  apiKey: string",
@@ -341,6 +401,37 @@ describe("publication safety findings", () => {
       "  apiKey: runtimeKey,",
       "  label: \"runtime_harmless_literal_value\",",
       "};",
+      "",
+    ].join("\n"),
+    [
+      "class RuntimeConfig {",
+      "  apiKey: string",
+      "  harmless = \"runtime_harmless_literal_value\"",
+      "}",
+      "",
+    ].join("\n"),
+    [
+      "class RuntimeConfig {",
+      "  apiKey?: string",
+      "  harmless = 'runtime_harmless_literal_value'",
+      "}",
+      "",
+    ].join("\n"),
+    [
+      "class RuntimeConfig {",
+      "  token!: string",
+      "  harmless = `runtime_harmless_literal_value`",
+      "}",
+      "",
+    ].join("\n"),
+    [
+      "// apiKey: configured by the runtime host",
+      "const harmless = \"runtime_harmless_literal_value\";",
+      "",
+    ].join("\n"),
+    [
+      "// apiKey: configured by the runtime host",
+      "// the example text is \"runtime_harmless_literal_value\"",
       "",
     ].join("\n"),
   ])("accepts a non-literal JSX runtime expression %#", async (contents) => {
