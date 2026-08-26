@@ -68,10 +68,15 @@ function buildNavigationHrefs(
     if (navigation === undefined || mode === "flight") {
       continue;
     }
+    const origin = navigation.origin.trim();
+    const destination = navigation.destination.trim();
+    if (origin.length === 0 || destination.length === 0) {
+      continue;
+    }
     try {
       hrefs.set(entry.id, adapter.directions({
-        origin: navigation.origin,
-        destination: navigation.destination,
+        origin,
+        destination,
         travelMode: mode,
       }));
     } catch {

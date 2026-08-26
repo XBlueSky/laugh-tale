@@ -352,6 +352,38 @@ describe("ItineraryTimeline semantic integration", () => {
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
+  it.each([
+    { endpoint: "empty origin", origin: "", destination: "Destination" },
+    { endpoint: "whitespace destination", origin: "Origin", destination: " \t " },
+  ])("does not call the navigation adapter for $endpoint", ({ origin, destination }) => {
+    const directions = vi.fn(() => "https://directions.example.test/");
+    const nodes: EffectiveNode[] = [
+      { sourceNodeId: "origin", completed: false, node: sightseeing({ id: "origin", title: "Origin" }) },
+      { sourceNodeId: "destination", completed: false, node: sightseeing({ id: "destination", title: "Destination" }) },
+    ];
+    render(
+      <ItineraryTimeline
+        nodes={nodes}
+        routes={[{
+          id: `blank-navigation-${origin.length}-${destination.length}`,
+          dayId: "day-1",
+          fromNodeId: "origin",
+          toNodeId: "destination",
+          mode: "walking",
+          source: "manual",
+          certainty: "confirmed",
+          navigation: { origin, destination },
+        }]}
+        navigationAdapter={{ directions }}
+        selection={{ nodeId: null, source: "automatic" }}
+        onNodeSelect={() => undefined}
+      />,
+    );
+
+    expect(directions).not.toHaveBeenCalled();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
   it("retains selected, current, and completed state for children inside a logistics group", () => {
     const logisticsNodes: EffectiveNode[] = [
       {

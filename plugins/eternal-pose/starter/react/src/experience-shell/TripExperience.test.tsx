@@ -226,6 +226,30 @@ function createTrip(): Trip {
   };
 }
 
+function createTripWithRouteNavigation(origin: string, destination: string): Trip {
+  const trip = createTrip();
+  trip.days[0].nodes[2] = {
+    id: "dinner",
+    dayId: "day-one",
+    kind: "dining",
+    title: "Dinner hall",
+    timing: { start: "12:00", end: "13:00", certainty: "suggested" },
+    optionality: "core",
+    place: {
+      name: "Dinner hall",
+      coordinates: { lat: 35.71, lng: 139.79 },
+      certainty: "confirmed",
+    },
+    payload: {},
+  };
+  trip.candidateGroups = [];
+  trip.routes[0] = {
+    ...trip.routes[0],
+    navigation: { origin, destination },
+  };
+  return trip;
+}
+
 function installMatchMedia(matches: boolean): void {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -286,30 +310,11 @@ describe("TripExperience", () => {
     expect(screen.queryByText(/PRIVATE-REF/)).not.toBeInTheDocument();
   });
 
-  it("provides keyless Google consumer navigation from explicit route navigation", () => {
-    const trip = createTrip();
-    trip.days[0].nodes[2] = {
-      id: "dinner",
-      dayId: "day-one",
-      kind: "dining",
-      title: "Dinner hall",
-      timing: { start: "12:00", end: "13:00", certainty: "suggested" },
-      optionality: "core",
-      place: {
-        name: "Dinner hall",
-        coordinates: { lat: 35.71, lng: 139.79 },
-        certainty: "confirmed",
-      },
-      payload: {},
-    };
-    trip.candidateGroups = [];
-    trip.routes[0] = {
-      ...trip.routes[0],
-      navigation: {
-        origin: "Synthetic museum entrance",
-        destination: "Synthetic dinner hall",
-      },
-    };
+  it("trims explicit endpoints for keyless Google consumer navigation", () => {
+    const trip = createTripWithRouteNavigation(
+      "  Synthetic museum entrance ",
+      "\tSynthetic dinner hall  ",
+    );
 
     render(
       <TripExperience
@@ -319,12 +324,33 @@ describe("TripExperience", () => {
       />,
     );
 
-    expect(screen.getByRole("link", {
+    const link = screen.getByRole("link", {
       name: "Open live transit directions from Synthetic museum entrance to Synthetic dinner hall",
-    })).toHaveAttribute(
+    });
+    expect(link).toHaveAttribute(
+      "aria-label",
+      "Open live transit directions from Synthetic museum entrance to Synthetic dinner hall",
+    );
+    expect(link).toHaveAttribute(
       "href",
       "https://www.google.com/maps/dir/?api=1&origin=Synthetic%20museum%20entrance&destination=Synthetic%20dinner%20hall&travelmode=transit",
     );
+  });
+
+  it.each([
+    { endpoint: "empty origin", origin: "", destination: "Synthetic dinner hall" },
+    { endpoint: "whitespace destination", origin: "Synthetic museum entrance", destination: " \t " },
+  ])("omits production navigation for $endpoint", ({ origin, destination }) => {
+    render(
+      <TripExperience
+        trip={createTripWithRouteNavigation(origin, destination)}
+        adapterFactory={() => new FakeMapAdapter()}
+        clock={() => "2040-06-12T00:30:00Z"}
+      />,
+    );
+
+    expect(screen.queryByRole("link", { name: /Open live transit directions/ }))
+      .not.toBeInTheDocument();
   });
 
   it("keeps map and list selection bidirectional without remounting across days", async () => {

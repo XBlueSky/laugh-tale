@@ -139,7 +139,13 @@ export function RouteConnector({
   const canDisclose =
     focusable && route.edge.mode === "transit" && ready.steps.length > 0;
   const duration = (reducedMotion ?? prefersReducedMotion ?? false) ? 0 : 0.2;
-  const navigation = route.edge.navigation;
+  const authoredNavigation = route.edge.navigation;
+  const navigation = authoredNavigation === undefined
+    ? undefined
+    : {
+        origin: authoredNavigation.origin.trim(),
+        destination: authoredNavigation.destination.trim(),
+      };
   const externalNavigationHref = safeNavigationHref(navigationHref, route);
 
   const retryControl = onRetry === undefined ? null : (
@@ -282,7 +288,10 @@ export function RouteConnector({
         </motion.div>
       ) : null}
 
-      {externalNavigationHref === undefined || navigation === undefined ? null : (
+      {externalNavigationHref === undefined ||
+      navigation === undefined ||
+      navigation.origin.length === 0 ||
+      navigation.destination.length === 0 ? null : (
         <a
           className="icon-control route-connector__external"
           href={externalNavigationHref}
