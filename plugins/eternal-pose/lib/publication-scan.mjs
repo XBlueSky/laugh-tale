@@ -1798,6 +1798,9 @@ function yamlPhysicalLineEnd(contents, start, end) {
 }
 
 const MAX_YAML_ANALYSIS_UNITS = 100_000;
+// Each flow collection adds at most two parser frames. This hard ceiling keeps
+// adversarial nesting bounded well below the JavaScript call-stack limit.
+const MAX_YAML_FLOW_NESTING = 128;
 
 function consumeYamlUnit(state) {
   state.yamlUnits += 1;
@@ -1915,12 +1918,18 @@ function malformedYamlFlow(contents, state) {
   return { end: contents.length, scalar: null };
 }
 
-function readYamlFlowPlain(contents, start, role) {
+function isYamlFlowMappingColon(contents, cursor) {
+  if (contents[cursor] !== ":") return false;
+  const following = contents[cursor + 1];
+  return following === undefined || /\s/.test(following) || ",[]{}".includes(following);
+}
+
+function readYamlFlowPlain(contents, start) {
   let cursor = start;
   while (cursor < contents.length) {
     const character = contents[cursor];
     if (character === "," || character === "]" || character === "}" || character === "[" || character === "{") break;
-    if (role === "key" && character === ":") break;
+    if (isYamlFlowMappingColon(contents, cursor)) break;
     if (character === "#" && (cursor === start || /\s/.test(contents[cursor - 1]))) break;
     cursor += 1;
   }
@@ -1928,12 +1937,19 @@ function readYamlFlowPlain(contents, start, role) {
   return scalar === "" ? null : { end: cursor, scalar };
 }
 
-function parseYamlFlowNode(contents, start, state, role = "value") {
+function parseYamlFlowNode(contents, start, state, depth = 0) {
   if (!consumeYamlUnit(state)) return { end: contents.length, scalar: null };
   const cursor = skipYamlFlowTrivia(contents, start);
   const character = contents[cursor];
-  if (character === "[") return parseYamlFlowSequence(contents, cursor, state);
-  if (character === "{") return parseYamlFlowMapping(contents, cursor, state);
+  if (character === "[" || character === "{") {
+    if (depth >= MAX_YAML_FLOW_NESTING) {
+      state.analysisLimited = true;
+      return { end: contents.length, scalar: null };
+    }
+    return character === "["
+      ? parseYamlFlowSequence(contents, cursor, state, depth + 1)
+      : parseYamlFlowMapping(contents, cursor, state, depth + 1);
+  }
   if (character === '"') {
     const scalar = readYamlDoubleQuotedScalar(contents, cursor);
     if (scalar.malformed) return malformedYamlFlow(contents, state);
@@ -1946,7 +1962,7 @@ function parseYamlFlowNode(contents, start, state, role = "value") {
     analyzeYamlScalar(scalar.value, state);
     return { end: scalar.end, scalar: scalar.value };
   }
-  const plain = readYamlFlowPlain(contents, cursor, role);
+  const plain = readYamlFlowPlain(contents, cursor);
   if (plain === null) return malformedYamlFlow(contents, state);
   analyzeYamlScalar(plain.scalar, state);
   return plain;
@@ -1963,14 +1979,18 @@ function associateYamlPair(key, value, state) {
   }
 }
 
-function parseYamlFlowSequence(contents, start, state) {
+function parseYamlFlowSequence(contents, start, state, depth) {
   let cursor = skipYamlFlowTrivia(contents, start + 1);
   if (contents[cursor] === "]") return { end: cursor + 1, scalar: null };
   while (cursor < contents.length && !state.malformed && !state.analysisLimited) {
-    const entry = parseYamlFlowNode(contents, cursor, state);
+    const entry = parseYamlFlowNode(contents, cursor, state, depth);
     cursor = skipYamlFlowTrivia(contents, entry.end);
     if (contents[cursor] === ":") {
-      const value = parseYamlFlowNode(contents, skipYamlFlowTrivia(contents, cursor + 1), state);
+      cursor = skipYamlFlowTrivia(contents, cursor + 1);
+      let value = { end: cursor, scalar: null };
+      if (contents[cursor] !== "," && contents[cursor] !== "]") {
+        value = parseYamlFlowNode(contents, cursor, state, depth);
+      }
       associateYamlPair(entry.scalar, value.scalar, state);
       cursor = skipYamlFlowTrivia(contents, value.end);
     }
@@ -1982,20 +2002,24 @@ function parseYamlFlowSequence(contents, start, state) {
   return malformedYamlFlow(contents, state);
 }
 
-function parseYamlFlowMapping(contents, start, state) {
+function parseYamlFlowMapping(contents, start, state, depth) {
   let cursor = skipYamlFlowTrivia(contents, start + 1);
   if (contents[cursor] === "}") return { end: cursor + 1, scalar: null };
   while (cursor < contents.length && !state.malformed && !state.analysisLimited) {
-    const key = parseYamlFlowNode(contents, cursor, state, "key");
+    const key = parseYamlFlowNode(contents, cursor, state, depth);
     cursor = skipYamlFlowTrivia(contents, key.end);
-    if (contents[cursor] !== ":") return malformedYamlFlow(contents, state);
-    cursor = skipYamlFlowTrivia(contents, cursor + 1);
     let value = { end: cursor, scalar: null };
-    if (contents[cursor] !== "," && contents[cursor] !== "}") {
-      value = parseYamlFlowNode(contents, cursor, state);
-      cursor = skipYamlFlowTrivia(contents, value.end);
+    if (contents[cursor] === ":") {
+      cursor = skipYamlFlowTrivia(contents, cursor + 1);
+      value = { end: cursor, scalar: null };
+      if (contents[cursor] !== "," && contents[cursor] !== "}") {
+        value = parseYamlFlowNode(contents, cursor, state, depth);
+        cursor = skipYamlFlowTrivia(contents, value.end);
+      }
+      associateYamlPair(key.scalar, value.scalar, state);
+    } else if (contents[cursor] !== "," && contents[cursor] !== "}") {
+      return malformedYamlFlow(contents, state);
     }
-    associateYamlPair(key.scalar, value.scalar, state);
     if (contents[cursor] === "}") return { end: cursor + 1, scalar: null };
     if (contents[cursor] !== ",") return malformedYamlFlow(contents, state);
     cursor = skipYamlFlowTrivia(contents, cursor + 1);
@@ -2009,7 +2033,15 @@ function validateYamlFlowLineRemainder(contents, start, state) {
   const end = lineEnd(contents, start);
   const physicalLineEnd = yamlPhysicalLineEnd(contents, start, end);
   const cursor = skipYamlHorizontalWhitespace(contents, start, physicalLineEnd);
-  if (cursor < physicalLineEnd && contents[cursor] !== "#") state.malformed = true;
+  if (cursor < physicalLineEnd && (contents[cursor] !== "#" || cursor === start)) state.malformed = true;
+}
+
+function validateYamlQuotedLineRemainder(contents, start, state) {
+  if (state.malformed || state.analysisLimited) return;
+  const end = lineEnd(contents, start);
+  const physicalLineEnd = yamlPhysicalLineEnd(contents, start, end);
+  const cursor = skipYamlHorizontalWhitespace(contents, start, physicalLineEnd);
+  if (cursor < physicalLineEnd && (contents[cursor] !== "#" || cursor === start)) state.malformed = true;
 }
 
 function findYamlMappingColon(contents, start, end) {
@@ -2121,6 +2153,7 @@ function analyzeYamlSource(contents, truncated) {
         break;
       }
       analyzeYamlScalar(scalar.value, state);
+      validateYamlQuotedLineRemainder(contents, scalar.end, state);
       value = scalar.value;
       valueEnd = scalar.end;
     } else if (contents[valueStart] === "'") {
@@ -2130,6 +2163,7 @@ function analyzeYamlSource(contents, truncated) {
         break;
       }
       analyzeYamlScalar(scalar.value, state);
+      validateYamlQuotedLineRemainder(contents, scalar.end, state);
       value = scalar.value;
       valueEnd = scalar.end;
     } else {

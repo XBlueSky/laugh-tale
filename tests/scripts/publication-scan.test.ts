@@ -2254,6 +2254,105 @@ describe("publication safety findings", () => {
     expect(JSON.stringify(findings)).not.toContain(secret);
   });
 
+  test.each([
+    {
+      label: "plain key",
+      source: (suffix: string) => `values: [apiKey: "runtime\\u005f${suffix}"]\n`,
+    },
+    {
+      label: "decoded quoted key",
+      source: (suffix: string) =>
+        `values: ["api\\u004bey": "runtime\\u005f${suffix}"]\n`,
+    },
+    {
+      label: "single-quoted key and plain value",
+      source: (suffix: string) => `values: ['apiKey': runtime_${suffix}]\n`,
+    },
+  ])("associates a YAML flow-sequence compact mapping with a $label", async ({ label, source }) => {
+    const root = createTemporaryRoot();
+    const suffix = [label[0], "C".repeat(27)].join("");
+    const secret = `runtime_${suffix}`;
+    writeFixture(root, "flow-compact-pair.yaml", source(suffix));
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "flow-compact-pair.yaml", "credential.generic-secret")).toBe(true);
+    expect(findingAt(findings, "flow-compact-pair.yaml", "scan.malformed-code")).toBe(false);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test("supports nested compact mappings and multiple flow-sequence entries", async () => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", "N".repeat(28)].join("");
+    writeFixture(
+      root,
+      "flow-nested-compact.yaml",
+      `values: [harmless: {nested: [safe:colon]}, apiKey: "${secret}", trailing: [safe]]\n`,
+    );
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "flow-nested-compact.yaml", "credential.generic-secret")).toBe(true);
+    expect(findingAt(findings, "flow-nested-compact.yaml", "scan.malformed-code")).toBe(false);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test.each([
+    "values: [https://example.invalid/path, 12:34, foo:bar, urn:example:test]\n",
+    "values: {https://example.invalid/path: safe, clock: 12:34, label: foo:bar}\n",
+  ])("accepts YAML flow plain scalars whose colons are not mapping separators", async (contents) => {
+    const root = createTemporaryRoot();
+    writeFixture(root, "flow-colons.yaml", contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "flow-colons.yaml", "scan.malformed-code")).toBe(false);
+    expect(findingAt(findings, "flow-colons.yaml", "credential.generic-secret")).toBe(false);
+  });
+
+  test.each([
+    'note: "safe" trailing\n',
+    "note: 'safe' trailing\n",
+    'note: "safe"#comment\n',
+    "note: 'safe'#comment\n",
+  ])("fails closed for trailing content after a quoted YAML block value", async (contents) => {
+    const root = createTemporaryRoot();
+    writeFixture(root, "quoted-trailing.yaml", contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "quoted-trailing.yaml", "scan.malformed-code")).toBe(true);
+    expect(JSON.stringify(findings)).not.toContain(contents);
+  });
+
+  test.each([
+    'note: "safe" # comment\n',
+    "note: 'safe'\n",
+  ])("accepts an allowed remainder after a quoted YAML block value", async (contents) => {
+    const root = createTemporaryRoot();
+    writeFixture(root, "quoted-remainder.yaml", contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "quoted-remainder.yaml", "scan.malformed-code")).toBe(false);
+  });
+
+  test("fails closed with an analysis limit before deeply nested YAML flow exhausts the stack", async () => {
+    const root = createTemporaryRoot();
+    const marker = ["deep_", "D".repeat(28)].join("");
+    const depth = 12_000;
+    const contents = `values: ${"[".repeat(depth)}${marker}${"]".repeat(depth)}\n`;
+    writeFixture(root, "deep-flow.yaml", contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "deep-flow.yaml", "scan.analysis-limit")).toBe(true);
+    expect(findingAt(findings, "deep-flow.yaml", "scan.unreadable-file")).toBe(false);
+    expect(findingAt(findings, "deep-flow.yaml", "scan.malformed-code")).toBe(false);
+    expect(JSON.stringify(findings)).not.toContain(marker);
+    expect(JSON.stringify(findings)).not.toContain(contents);
+  });
+
   test("accepts a valid flow collection with CRLF termination", async () => {
     const root = createTemporaryRoot();
     writeFixture(root, "crlf-flow.yaml", "values: [\"safe\"]\r\nnext: safe\r\n");
@@ -2290,6 +2389,7 @@ describe("publication safety findings", () => {
     ["unclosed double quote", "values: [\"safe]\n"],
     ["mismatched close", "values: [{note: \"safe\"]}\n"],
     ["trailing flow content", "values: [\"safe\"] invalid\n"],
+    ["unseparated flow comment", "values: [\"safe\"]#comment\n"],
   ])("fails closed for an %s in a YAML flow collection", async (label, contents) => {
     const root = createTemporaryRoot();
     writeFixture(root, "invalid-flow.yaml", contents);
