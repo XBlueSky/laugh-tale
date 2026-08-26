@@ -94,6 +94,7 @@ export async function validatePluginContracts(repoRoot) {
   const codexEntry = codexMarketplace?.plugins?.[0];
   errorFor(errors, codexMarketplace?.name === "laugh-tale", "Codex marketplace name must be laugh-tale");
   errorFor(errors, codexEntry?.name === PLUGIN_NAME && codexEntry?.version === VERSION, "Codex marketplace must expose eternal-pose@0.1.0");
+  errorFor(errors, codexEntry?.category === "Developer Tools", "Codex marketplace category must be Developer Tools");
   errorFor(errors, codexEntry?.source?.source === "local" && codexEntry?.source?.path === "./plugins/eternal-pose" && isRealRelativePath(rootUrl, codexEntry?.source?.path), "Codex marketplace source must be a real relative Eternal Pose path");
   errorFor(errors, codexEntry?.policy?.installation === "AVAILABLE", "Codex marketplace policy.installation must be AVAILABLE");
   errorFor(errors, codexEntry?.policy?.authentication === "ON_INSTALL", "Codex marketplace policy.authentication must be ON_INSTALL");

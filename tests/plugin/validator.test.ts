@@ -68,6 +68,19 @@ describe("plugin contract validator", () => {
     await expect(validateFixture(createValidFixture())).resolves.toEqual([]);
   });
 
+  test("rejects a Codex marketplace entry outside Developer Tools", async () => {
+    const fixtureRoot = createValidFixture();
+    const marketplace = readJson(".agents/plugins/marketplace.json") as {
+      plugins?: Array<Record<string, unknown>>;
+    };
+    expect(marketplace.plugins?.[0]).toBeDefined();
+    marketplace.plugins![0].category = "Travel";
+    writeJson(fixtureRoot, ".agents/plugins/marketplace.json", marketplace);
+
+    const errors = await validateFixture(fixtureRoot);
+    expect(errors).toContain("Codex marketplace category must be Developer Tools");
+  });
+
   test.each(["commands", "agents", "hooks", "apps", "mcpServers", "mcp"])("rejects prohibited %s manifest declarations", async (component) => {
     const fixtureRoot = createValidFixture();
     const manifest = readJson("plugins/eternal-pose/.codex-plugin/plugin.json");

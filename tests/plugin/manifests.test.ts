@@ -19,6 +19,7 @@ describe("Eternal Pose distribution manifests", () => {
     const codexMarketplace = readJson(".agents/plugins/marketplace.json") as {
       plugins?: Array<{
         name?: string;
+        category?: string;
         source?: { source?: string; path?: string };
         policy?: Record<string, unknown>;
       }>;
@@ -37,6 +38,7 @@ describe("Eternal Pose distribution manifests", () => {
     expect(codexMarketplace.plugins).toEqual([
       expect.objectContaining({
         name: "eternal-pose",
+        category: "Developer Tools",
         source: { source: "local", path: "./plugins/eternal-pose" },
         policy: { installation: "AVAILABLE", authentication: "ON_INSTALL" },
       }),
