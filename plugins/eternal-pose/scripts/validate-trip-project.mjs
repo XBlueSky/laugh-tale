@@ -1,7 +1,26 @@
 import { spawnSync } from "node:child_process";
-import { lstat, mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  open,
+  readFile,
+  readdir,
+  realpath,
+  rmdir,
+  unlink,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { scanPublication } from "../lib/publication-scan.mjs";
@@ -32,6 +51,19 @@ const COMMANDS = [
   { command: "npm run lint", arguments: ["run", "lint"] },
   { command: "npm run build", arguments: ["run", "build"] },
 ];
+const DEFAULT_VALIDATION_OPERATIONS = {
+  lstat,
+  mkdir,
+  mkdtemp,
+  open,
+  readFile,
+  readdir,
+  realpath,
+  rmdir,
+  spawnSync,
+  unlink,
+  importModule: (url) => import(url),
+};
 
 function finding(severity, code, path, message) {
   return { severity, code, path, message };
@@ -178,36 +210,263 @@ function sameIdentity(left, right) {
   return left.dev === right.dev && left.ino === right.ino;
 }
 
-async function createOwnedValidationDirectory() {
-  const parentPath = await realpath(tmpdir());
-  const parentStats = await lstat(parentPath);
-  if (!parentStats.isDirectory() || parentStats.isSymbolicLink()) {
-    throw new Error("validation temp parent is unavailable");
-  }
-  const path = await mkdtemp(join(parentPath, "eternal-pose-validation-"));
-  const stats = await lstat(path);
-  if (!stats.isDirectory() || stats.isSymbolicLink() || (await realpath(path)) !== path) {
-    throw new Error("validation temp ownership could not be established");
-  }
-  return { path, parentPath, parentStats, stats };
+function normalizeError(error) {
+  return error instanceof Error ? error : new Error("validation temp operation failed");
 }
 
-async function cleanOwnedValidationDirectory(ownership) {
-  const currentParentPath = await realpath(dirname(ownership.path));
-  const currentParentStats = await lstat(currentParentPath);
-  const currentStats = await lstat(ownership.path);
-  if (
-    currentParentPath !== ownership.parentPath ||
-    !sameIdentity(currentParentStats, ownership.parentStats) ||
-    !currentStats.isDirectory() ||
-    currentStats.isSymbolicLink() ||
-    !sameIdentity(currentStats, ownership.stats) ||
-    (await realpath(ownership.path)) !== ownership.path ||
-    basename(ownership.path).startsWith("eternal-pose-validation-") === false
-  ) {
-    throw new Error("validation temp ownership changed; cleanup refused");
+async function captureValidationParent(operations) {
+  const path = await operations.realpath(tmpdir());
+  const stats = await operations.lstat(path);
+  if (!stats.isDirectory() || stats.isSymbolicLink()) {
+    throw new Error("validation temp parent is unavailable");
   }
-  await rm(ownership.path, { recursive: true, force: false });
+  return { path, stats };
+}
+
+async function assertValidationRootIdentity(ownership, operations) {
+  if (ownership.stats === null) {
+    throw new Error("validation temp ownership is uncertain");
+  }
+  try {
+    const parentPath = await operations.realpath(dirname(ownership.path));
+    const parentStats = await operations.lstat(parentPath);
+    const beforeStats = await operations.lstat(ownership.path);
+    const canonicalPath = await operations.realpath(ownership.path);
+    const afterStats = await operations.lstat(ownership.path);
+    if (
+      parentPath !== ownership.parent.path ||
+      !sameIdentity(parentStats, ownership.parent.stats) ||
+      canonicalPath !== ownership.path ||
+      basename(ownership.path).startsWith("eternal-pose-validation-") === false ||
+      !beforeStats.isDirectory() ||
+      beforeStats.isSymbolicLink() ||
+      !afterStats.isDirectory() ||
+      afterStats.isSymbolicLink() ||
+      !sameIdentity(beforeStats, afterStats) ||
+      !sameIdentity(afterStats, ownership.stats)
+    ) {
+      throw new Error("validation temp ownership changed");
+    }
+  } catch {
+    throw new Error("validation temp ownership changed");
+  }
+}
+
+async function assertValidationOwnership(ownership, operations) {
+  await assertValidationRootIdentity(ownership, operations);
+  if (ownership.marker.stats === null) {
+    throw new Error("validation temp ownership is uncertain");
+  }
+  try {
+    const stats = await operations.lstat(ownership.marker.path);
+    const contents = await operations.readFile(ownership.marker.path, "utf8");
+    if (
+      !stats.isFile() ||
+      stats.isSymbolicLink() ||
+      !sameIdentity(stats, ownership.marker.stats) ||
+      contents !== ownership.marker.token
+    ) {
+      throw new Error("validation temp ownership changed");
+    }
+  } catch {
+    throw new Error("validation temp ownership changed");
+  }
+}
+
+async function verifyValidationEntry(entry, operations) {
+  const stats = await operations.lstat(entry.path);
+  const expectedType = entry.type === "directory" ? stats.isDirectory() : stats.isFile();
+  if (!expectedType || stats.isSymbolicLink() || !sameIdentity(stats, entry.stats)) {
+    throw new Error("validation temp entry ownership changed");
+  }
+}
+
+async function assertValidationParentChain(ownership, destinationPath, operations) {
+  await assertValidationOwnership(ownership, operations);
+  const relativeParent = relative(ownership.path, dirname(destinationPath));
+  if (relativeParent === ".." || relativeParent.startsWith(`..${sep}`) || isAbsolute(relativeParent)) {
+    throw new Error("validation temp ownership changed");
+  }
+  let currentPath = ownership.path;
+  for (const part of relativeParent.split(sep).filter(Boolean)) {
+    currentPath = join(currentPath, part);
+    const entry = ownership.entries.find(
+      (candidate) => !candidate.removed && candidate.type === "directory" && candidate.path === currentPath,
+    );
+    if (entry === undefined) throw new Error("validation temp ownership changed");
+    await verifyValidationEntry(entry, operations);
+  }
+}
+
+async function acquireValidationDirectory(acquisition, operations) {
+  const parent = await captureValidationParent(operations);
+  const createdPath = resolve(await operations.mkdtemp(join(parent.path, "eternal-pose-validation-")));
+  const path = join(parent.path, basename(createdPath));
+  const ownership = {
+    path,
+    parent,
+    stats: null,
+    marker: {
+      path: join(path, `.laugh-tale-incomplete-${randomUUID()}`),
+      token: randomUUID(),
+      stats: null,
+    },
+    protectedEntries: [],
+    entries: [],
+    tainted: { path, type: "root" },
+  };
+  acquisition.ownership = ownership;
+  if (createdPath !== path) throw new Error("validation temp ownership changed");
+
+  const beforeStats = await operations.lstat(path);
+  const canonicalPath = await operations.realpath(path);
+  const afterStats = await operations.lstat(path);
+  if (
+    canonicalPath !== path ||
+    !beforeStats.isDirectory() ||
+    beforeStats.isSymbolicLink() ||
+    !afterStats.isDirectory() ||
+    afterStats.isSymbolicLink() ||
+    !sameIdentity(beforeStats, afterStats)
+  ) {
+    throw new Error("validation temp ownership changed");
+  }
+  ownership.stats = afterStats;
+  ownership.tainted = null;
+
+  await assertValidationRootIdentity(ownership, operations);
+  ownership.tainted = { path: ownership.marker.path, type: "marker" };
+  const handle = await operations.open(ownership.marker.path, "wx", 0o600);
+  let primaryError;
+  try {
+    const handleStats = await handle.stat();
+    const pathStats = await operations.lstat(ownership.marker.path);
+    if (
+      !handleStats.isFile() ||
+      !pathStats.isFile() ||
+      pathStats.isSymbolicLink() ||
+      !sameIdentity(handleStats, pathStats)
+    ) {
+      throw new Error("validation temp ownership changed");
+    }
+    ownership.marker.stats = pathStats;
+    await handle.writeFile(ownership.marker.token);
+    ownership.tainted = null;
+  } catch (error) {
+    primaryError = normalizeError(error);
+  }
+  try {
+    await handle.close();
+  } catch (error) {
+    primaryError ??= normalizeError(error);
+  }
+  if (primaryError !== undefined) throw primaryError;
+  await assertValidationOwnership(ownership, operations);
+  return ownership;
+}
+
+async function createValidationDirectoryEntry(ownership, name, operations) {
+  const path = join(ownership.path, name);
+  await assertValidationParentChain(ownership, path, operations);
+  if (ownership.tainted !== null) throw new Error("validation temp ownership is uncertain");
+  ownership.tainted = { path, type: "directory" };
+  await operations.mkdir(path);
+  const stats = await operations.lstat(path);
+  if (!stats.isDirectory() || stats.isSymbolicLink()) {
+    throw new Error("validation temp ownership changed");
+  }
+  const entry = { path, type: "directory", stats, removed: false };
+  ownership.entries.push(entry);
+  ownership.protectedEntries.push(entry);
+  ownership.tainted = null;
+}
+
+async function captureValidationInventory(ownership, operations) {
+  if (ownership.tainted !== null) throw new Error("validation temp ownership is uncertain");
+  await assertValidationOwnership(ownership, operations);
+  for (const entry of ownership.protectedEntries) await verifyValidationEntry(entry, operations);
+  const captured = [];
+
+  async function walk(directory) {
+    const namesBefore = (await operations.readdir(directory)).sort();
+    for (const name of namesBefore) {
+      const path = join(directory, name);
+      if (path === ownership.marker.path) {
+        if (directory !== ownership.path) throw new Error("validation temp inventory changed");
+        continue;
+      }
+      const beforeStats = await operations.lstat(path);
+      const type = beforeStats.isDirectory() ? "directory" : beforeStats.isFile() ? "file" : null;
+      if (type === null || beforeStats.isSymbolicLink()) {
+        throw new Error("validation temp inventory changed");
+      }
+      captured.push({ path, type, stats: beforeStats, removed: false });
+      if (type === "directory") await walk(path);
+      const afterStats = await operations.lstat(path);
+      if (!sameIdentity(beforeStats, afterStats)) throw new Error("validation temp inventory changed");
+    }
+    const namesAfter = (await operations.readdir(directory)).sort();
+    if (JSON.stringify(namesAfter) !== JSON.stringify(namesBefore)) {
+      throw new Error("validation temp inventory changed");
+    }
+  }
+
+  await walk(ownership.path);
+  ownership.entries = captured;
+  await verifyValidationInventory(ownership, operations);
+}
+
+async function verifyValidationInventory(ownership, operations) {
+  if (ownership.tainted !== null) throw new Error("validation temp ownership is uncertain");
+  await assertValidationOwnership(ownership, operations);
+  const expected = new Map(
+    ownership.entries.filter((entry) => !entry.removed).map((entry) => [entry.path, entry]),
+  );
+  const seen = new Set();
+
+  async function walk(directory) {
+    for (const name of await operations.readdir(directory)) {
+      const path = join(directory, name);
+      if (path === ownership.marker.path) continue;
+      const entry = expected.get(path);
+      if (entry === undefined) throw new Error("validation temp inventory changed");
+      await verifyValidationEntry(entry, operations);
+      seen.add(path);
+      if (entry.type === "directory") await walk(path);
+    }
+  }
+
+  await walk(ownership.path);
+  if (seen.size !== expected.size) throw new Error("validation temp inventory changed");
+}
+
+async function runBeforeTempMutation(operations, phase, path, validationDir) {
+  await operations.beforeTempMutation?.({ phase, path, validationDir });
+}
+
+async function cleanOwnedValidationDirectory(ownership, operations) {
+  try {
+    await verifyValidationInventory(ownership, operations);
+    for (const entry of [...ownership.entries].reverse()) {
+      if (entry.removed) continue;
+      await runBeforeTempMutation(operations, "validation-cleanup", entry.path, ownership.path);
+      await assertValidationParentChain(ownership, entry.path, operations);
+      await verifyValidationEntry(entry, operations);
+      if (entry.type === "directory") await operations.rmdir(entry.path);
+      else await operations.unlink(entry.path);
+      entry.removed = true;
+    }
+    await verifyValidationInventory(ownership, operations);
+    await runBeforeTempMutation(operations, "validation-cleanup", ownership.marker.path, ownership.path);
+    await assertValidationOwnership(ownership, operations);
+    await operations.unlink(ownership.marker.path);
+    await runBeforeTempMutation(operations, "validation-cleanup", ownership.path, ownership.path);
+    await assertValidationRootIdentity(ownership, operations);
+    await operations.rmdir(ownership.path);
+    return [];
+  } catch (error) {
+    return [normalizeError(error)];
+  }
 }
 
 function commandEnvironment(ownership) {
@@ -220,20 +479,29 @@ function commandEnvironment(ownership) {
   return environment;
 }
 
-function runProjectCommand(root, command, environment) {
+async function runProjectCommand(root, command, environment, ownership, operations) {
+  await verifyValidationInventory(ownership, operations);
   const executable = process.platform === "win32" ? "npm.cmd" : "npm";
-  const result = spawnSync(executable, command.arguments, {
+  const result = operations.spawnSync(executable, command.arguments, {
     cwd: root,
     shell: false,
     stdio: "inherit",
     env: environment,
   });
+  await captureValidationInventory(ownership, operations);
   return result.status ?? 1;
 }
 
-async function readTripReadiness(ownership) {
+async function readTripReadiness(ownership, operations) {
+  await verifyValidationInventory(ownership, operations);
   const entryPath = join(ownership.path, "output", "validation", "readiness.mjs");
-  const module = await import(pathToFileURL(entryPath).href);
+  const entry = ownership.entries.find(
+    (candidate) => !candidate.removed && candidate.path === entryPath && candidate.type === "file",
+  );
+  if (entry === undefined) throw new Error("built readiness entry is not owned");
+  await verifyValidationEntry(entry, operations);
+  const module = await operations.importModule(pathToFileURL(entryPath).href);
+  await captureValidationInventory(ownership, operations);
   const readiness = module.tripContentReadiness;
   if (
     !isPlainObject(readiness) ||
@@ -245,21 +513,28 @@ async function readTripReadiness(ownership) {
   return readiness.hasTripContent;
 }
 
-async function runValidation(root, mode) {
+export async function runValidation(root, mode, testOperations = {}) {
+  const operations = { ...DEFAULT_VALIDATION_OPERATIONS, ...testOperations };
   const findings = await validateTripProject(root);
   if (findings.some(({ severity }) => severity === "error")) {
     return summarize(mode, findings);
   }
 
+  const acquisition = { ownership: null };
   let ownership;
   const commands = [];
   let failedCommand = null;
+  let phase = "ownership";
   try {
-    ownership = await createOwnedValidationDirectory();
-    await mkdir(join(ownership.path, "environment"));
+    ownership = await acquireValidationDirectory(acquisition, operations);
+    phase = "validation";
+    for (const name of ["output", "cache", "environment"]) {
+      await createValidationDirectoryEntry(ownership, name, operations);
+    }
+    await captureValidationInventory(ownership, operations);
     const environment = commandEnvironment(ownership);
     for (const command of COMMANDS) {
-      const exitCode = runProjectCommand(root, command, environment);
+      const exitCode = await runProjectCommand(root, command, environment, ownership, operations);
       const commandResult = { command: command.command, exitCode };
       commands.push(commandResult);
       if (exitCode !== 0) {
@@ -274,7 +549,7 @@ async function runValidation(root, mode) {
     }
 
     if (failedCommand === null) {
-      const hasTripContent = await readTripReadiness(ownership);
+      const hasTripContent = await readTripReadiness(ownership, operations);
       const hasGoogleKey = (process.env.VITE_GOOGLE_MAPS_API_KEY?.trim().length ?? 0) > 0;
       const severity = mode === "deploy" ? "error" : "warning";
       if (!hasTripContent) {
@@ -295,20 +570,22 @@ async function runValidation(root, mode) {
       }
     }
   } catch {
+    ownership = acquisition.ownership;
     findings.push(projectFinding(
-      "project.validation-failure",
+      phase === "ownership" ? "project.validation-ownership-failed" : "project.validation-failure",
       ".",
-      "Trip project validation could not complete its isolated checks.",
+      phase === "ownership"
+        ? "Validation temp ownership could not be established safely."
+        : "Trip project validation could not complete its isolated checks.",
     ));
   } finally {
-    if (ownership !== undefined) {
-      try {
-        await cleanOwnedValidationDirectory(ownership);
-      } catch {
+    if (ownership !== undefined && ownership !== null) {
+      const cleanupErrors = await cleanOwnedValidationDirectory(ownership, operations);
+      if (cleanupErrors.length > 0) {
         findings.push(projectFinding(
           "project.validation-cleanup-failed",
           ".",
-          "Owned validation output could not be cleaned safely.",
+          "Owned validation output could not be cleaned safely because its identity or inventory changed.",
         ));
       }
     }

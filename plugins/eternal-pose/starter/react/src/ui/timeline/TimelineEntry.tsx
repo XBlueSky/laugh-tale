@@ -49,6 +49,47 @@ export function TimingLabel({ timing }: { timing: Timing }): ReactElement {
   );
 }
 
+function absoluteDateLabel(date: string): string | undefined {
+  const parsed = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(parsed.valueOf())) return undefined;
+  return new Intl.DateTimeFormat("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(parsed);
+}
+
+function shiftedDate(date: string, days: number): string | undefined {
+  const parsed = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(parsed.valueOf())) return undefined;
+  parsed.setUTCDate(parsed.getUTCDate() + days);
+  return parsed.toISOString().slice(0, 10);
+}
+
+function accessibleOwnerName(node: TripNode, state: TimelineNodeState): string {
+  const base = `${formatTimingLabel(node.timing)} ${node.title}`;
+  const startDate = state.dayDate;
+  const startDateLabel = startDate === undefined ? undefined : absoluteDateLabel(startDate);
+  const { start, end, certainty, dayOffset } = node.timing;
+  const crossesMidnight =
+    start !== undefined &&
+    end !== undefined &&
+    ((dayOffset ?? 0) > 0 || end < start);
+  if (startDateLabel === undefined || (node.kind !== "experience" && !crossesMidnight)) {
+    return base;
+  }
+  const parts = [base, startDateLabel, `${certainty} time`];
+  if (crossesMidnight && end !== undefined && startDate !== undefined) {
+    const endOffset = (dayOffset ?? 0) > 0 ? (dayOffset ?? 0) : 1;
+    const endDate = shiftedDate(startDate, endOffset);
+    const endDateLabel = endDate === undefined ? undefined : absoluteDateLabel(endDate);
+    if (endDateLabel !== undefined) parts.push(`ends ${endDateLabel} at ${end}`);
+  }
+  return parts.join(" · ");
+}
+
 export function bookingSummary(booking: Booking | undefined): string | undefined {
   if (booking === undefined || booking.status === "none") {
     return undefined;
@@ -112,7 +153,7 @@ export function TimelineEntry({
       <button
         type="button"
         className="itinerary-row"
-        aria-label={`${formatTimingLabel(node.timing)} ${node.title}`}
+        aria-label={accessibleOwnerName(node, state)}
         aria-describedby={descriptionId}
         aria-pressed={selected}
         aria-current={state.current ? "step" : undefined}

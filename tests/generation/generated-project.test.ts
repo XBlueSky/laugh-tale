@@ -7,13 +7,20 @@ import {
   readFileSync,
   readdirSync,
   realpathSync,
+  renameSync,
   rmSync,
   writeFileSync,
+  type Stats,
 } from "node:fs";
+import {
+  lstat as lstatPath,
+  mkdtemp as mkdtempPath,
+  realpath as realpathPath,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join, relative } from "node:path";
+import { basename, dirname, isAbsolute, join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 interface ValidationFinding {
   severity: "error" | "warning";
@@ -39,6 +46,27 @@ const RESULT_PREFIX = "ETERNAL_POSE_VALIDATION_RESULT ";
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 const starterRoot = join(repoRoot, "plugins/eternal-pose/starter/react");
 const validator = join(repoRoot, "plugins/eternal-pose/scripts/validate-trip-project.mjs");
+interface ValidationTestOperations {
+  lstat?: (path: string) => Promise<Stats>;
+  mkdtemp?: (prefix: string) => Promise<string>;
+  realpath?: (path: string) => Promise<string>;
+  spawnSync?: ValidationSpawn;
+  importModule?: (url: string) => Promise<Record<string, unknown>>;
+  beforeTempMutation?: (event: { phase: string; path: string; validationDir: string }) => void;
+}
+type ValidationSpawn = (
+  command: string,
+  arguments_: readonly string[],
+  options?: { env?: NodeJS.ProcessEnv },
+) => { status: number | null };
+type RunValidation = (
+  root: string,
+  mode: "local" | "deploy",
+  testOperations?: ValidationTestOperations,
+) => Promise<ValidationResult>;
+const { runValidation } = (await import(pathToFileURL(validator).href)) as {
+  runValidation: RunValidation;
+};
 const temporaryRoots: string[] = [];
 
 function temporaryRoot(): string {
@@ -182,6 +210,21 @@ function snapshotTree(root: string): Record<string, string> {
   return output;
 }
 
+function successfulValidationSpawn(): ValidationSpawn {
+  return ((_command, arguments_, options) => {
+    if (arguments_.at(-1) === "build") {
+      const environment = options?.env as NodeJS.ProcessEnv;
+      const output = environment.ETERNAL_POSE_VALIDATION_OUT_DIR!;
+      mkdirSync(join(output, "validation"), { recursive: true });
+      writeFileSync(
+        join(output, "validation/readiness.mjs"),
+        "export const tripContentReadiness = { hasTripContent: true };\n",
+      );
+    }
+    return { status: 0 };
+  });
+}
+
 afterEach(() => {
   for (const root of temporaryRoots.splice(0)) {
     rmSync(root, { recursive: true, force: true });
@@ -189,6 +232,197 @@ afterEach(() => {
 });
 
 describe("generated project validation", () => {
+  test("provisionally owns a new temp root before the first identity read and preserves uncertainty", async () => {
+    const root = temporaryRoot();
+    createControlledProject(root, true);
+    let validationDir: string | undefined;
+    let failed = false;
+
+    const result = await runValidation(root, "local", {
+      mkdtemp: async (prefix) => {
+        validationDir = await mkdtempPath(prefix);
+        temporaryRoots.push(validationDir);
+        return validationDir;
+      },
+      lstat: async (path) => {
+        if (!failed && basename(path).startsWith("eternal-pose-validation-")) {
+          failed = true;
+          throw new Error("injected first identity read failure");
+        }
+        return lstatPath(path);
+      },
+    });
+
+    expect(result.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "project.validation-ownership-failed" }),
+      expect.objectContaining({ code: "project.validation-cleanup-failed" }),
+    ]));
+    expect(validationDir).toBeDefined();
+    expect(readdirSync(validationDir!)).toEqual([]);
+  });
+
+  test("preserves both paths when acquisition races with a replacement", async () => {
+    const root = temporaryRoot();
+    createControlledProject(root, true);
+    let replacementDir: string | undefined;
+    let displacedDir: string | undefined;
+
+    const result = await runValidation(root, "local", {
+      realpath: async (path) => {
+        if (replacementDir === undefined && basename(path).startsWith("eternal-pose-validation-")) {
+          replacementDir = path;
+          displacedDir = `${path}-displaced`;
+          temporaryRoots.push(replacementDir, displacedDir);
+          renameSync(path, displacedDir);
+          mkdirSync(path);
+          writeFileSync(join(path, "foreign.txt"), "preserve\n");
+        }
+        return realpathPath(path);
+      },
+    });
+
+    expect(result.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "project.validation-ownership-failed" }),
+      expect.objectContaining({ code: "project.validation-cleanup-failed" }),
+    ]));
+    expect(readFileSync(join(replacementDir!, "foreign.txt"), "utf8")).toBe("preserve\n");
+    expect(readdirSync(displacedDir!)).toEqual([]);
+  });
+
+  test("refuses recursive cleanup when an owned validation root is replaced", async () => {
+    const root = temporaryRoot();
+    createControlledProject(root, true);
+    let replacementDir: string | undefined;
+    let displacedDir: string | undefined;
+
+    const result = await runValidation(root, "local", {
+      spawnSync: successfulValidationSpawn(),
+      importModule: () => Promise.resolve({ tripContentReadiness: { hasTripContent: true } }),
+      beforeTempMutation: ({ phase, validationDir }) => {
+        if (phase !== "validation-cleanup" || replacementDir !== undefined) return;
+        replacementDir = validationDir;
+        displacedDir = `${validationDir}-displaced`;
+        temporaryRoots.push(replacementDir, displacedDir);
+        renameSync(validationDir, displacedDir);
+        mkdirSync(validationDir);
+        writeFileSync(join(validationDir, "foreign.txt"), "preserve\n");
+      },
+    });
+
+    expect(result.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "project.validation-cleanup-failed" }),
+    ]));
+    expect(readFileSync(join(replacementDir!, "foreign.txt"), "utf8")).toBe("preserve\n");
+    expect(readdirSync(displacedDir!).some((name) => name.startsWith(".laugh-tale-incomplete-"))).toBe(true);
+  });
+
+  test("detects a child-command replacement race and preserves foreign state", async () => {
+    const root = temporaryRoot();
+    createControlledProject(root, true);
+    let replacementDir: string | undefined;
+    let displacedDir: string | undefined;
+
+    const result = await runValidation(root, "local", {
+      spawnSync: ((_command, _arguments, options) => {
+        if (replacementDir === undefined) {
+          const environment = options?.env as NodeJS.ProcessEnv;
+          replacementDir = dirname(environment.ETERNAL_POSE_VALIDATION_OUT_DIR!);
+          displacedDir = `${replacementDir}-displaced`;
+          temporaryRoots.push(replacementDir, displacedDir);
+          renameSync(replacementDir, displacedDir);
+          mkdirSync(replacementDir);
+          writeFileSync(join(replacementDir, "foreign.txt"), "preserve\n");
+        }
+        return { status: 0 };
+      }),
+    });
+
+    expect(result.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "project.validation-failure" }),
+      expect.objectContaining({ code: "project.validation-cleanup-failed" }),
+    ]));
+    expect(readFileSync(join(replacementDir!, "foreign.txt"), "utf8")).toBe("preserve\n");
+  });
+
+  test.each([
+    {
+      name: "spawn failure",
+      operations: {
+        spawnSync: () => {
+          throw new Error("injected spawn failure");
+        },
+      },
+      expectedCode: "project.validation-failure",
+    },
+    {
+      name: "build failure",
+      operations: (() => {
+        let call = 0;
+        return {
+          spawnSync: () => ({ status: ++call === 4 ? 7 : 0 }),
+        };
+      })(),
+      expectedCode: "project.command-failed",
+    },
+    {
+      name: "readiness import failure",
+      operations: {
+        spawnSync: successfulValidationSpawn(),
+        importModule: vi.fn(() => Promise.reject(new Error("injected import failure"))),
+      },
+      expectedCode: "project.validation-failure",
+    },
+    {
+      name: "malformed readiness",
+      operations: {
+        spawnSync: successfulValidationSpawn(),
+        importModule: vi.fn(() =>
+          Promise.resolve({ tripContentReadiness: { hasTripContent: "yes" } })),
+      },
+      expectedCode: "project.validation-failure",
+    },
+  ])("cleans its exact owned temp root after $name", async ({ operations, expectedCode }) => {
+    const root = temporaryRoot();
+    createControlledProject(root, true);
+    let validationDir: string | undefined;
+
+    const result = await runValidation(root, "local", {
+      ...operations,
+      mkdtemp: async (prefix) => {
+        validationDir = await mkdtempPath(prefix);
+        return validationDir;
+      },
+    });
+
+    expect(result.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: expectedCode }),
+    ]));
+    if ("importModule" in operations) {
+      expect(operations.importModule).toHaveBeenCalledTimes(1);
+    }
+    expect(validationDir).toBeDefined();
+    expect(existsSync(validationDir!)).toBe(false);
+  });
+
+  test("removes the normal external validation tree after deterministic readiness import", async () => {
+    const root = temporaryRoot();
+    createControlledProject(root, true);
+    let validationDir: string | undefined;
+
+    const result = await runValidation(root, "local", {
+      mkdtemp: async (prefix) => {
+        validationDir = await mkdtempPath(prefix);
+        return validationDir;
+      },
+      spawnSync: successfulValidationSpawn(),
+      importModule: () => Promise.resolve({ tripContentReadiness: { hasTripContent: true } }),
+    });
+
+    expect(result.counts.errors).toBe(0);
+    expect(validationDir).toBeDefined();
+    expect(existsSync(validationDir!)).toBe(false);
+  });
+
   test(
     "builds an importable readiness-only entry at the validator's exact path",
     async () => {

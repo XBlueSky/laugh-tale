@@ -104,6 +104,32 @@ describe("RouteConnector", () => {
     expect(onRouteSelect).toHaveBeenCalledWith("museum--dinner");
   });
 
+  it("exposes the exact ready route owner as visibly and semantically selected", () => {
+    const { container, rerender } = render(
+      <RouteConnector
+        route={routePresentation()}
+        state={readyState}
+        selected
+        onRouteSelect={() => undefined}
+      />,
+    );
+
+    const control = container.querySelector('[data-route-id="museum--dinner"]');
+    expect(control).toHaveAttribute("aria-pressed", "true");
+    expect(control).toHaveAttribute("data-selected", "true");
+
+    rerender(
+      <RouteConnector
+        route={routePresentation()}
+        state={readyState}
+        selected={false}
+        onRouteSelect={() => undefined}
+      />,
+    );
+    expect(control).toHaveAttribute("aria-pressed", "false");
+    expect(control).toHaveAttribute("data-selected", "false");
+  });
+
   it("lets ready provider duration supersede stale authored route context", () => {
     const route = routePresentation({
       summary: "Authored train · 18 min",

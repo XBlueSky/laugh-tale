@@ -38,7 +38,23 @@ function overlaps(left, right) {
 function shouldCopyStarterEntry(starterDir, sourcePath) {
   const relativePath = relative(starterDir, sourcePath);
   if (relativePath === "") return true;
-  return !relativePath.split(sep).some((part) => OMITTED_NAMES.has(part));
+  const parts = relativePath.split(sep);
+  if (parts.some((part) => OMITTED_NAMES.has(part))) return false;
+
+  const filename = parts.at(-1)?.toLowerCase() ?? "";
+  if (filename.startsWith(".env") && filename !== ".env.example") return false;
+  if (filename.endsWith(".tsbuildinfo")) return false;
+  if (/\.(?:css|js|mjs|cjs)\.map$/i.test(filename)) return false;
+  if (
+    /^(?:credentials|(?:google[-_])?service[-_]?account(?:[-_]?key)?|client[-_]?secret)(?:[-_.][a-z0-9-]+)*\.json$/i.test(
+      filename,
+    ) ||
+    /^(?:id_rsa|id_ed25519)$/i.test(filename) ||
+    /\.(?:key|p12|pem|pfx)$/i.test(filename)
+  ) {
+    return false;
+  }
+  return true;
 }
 
 function sameIdentity(left, right) {

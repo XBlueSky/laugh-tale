@@ -313,6 +313,11 @@ button.route-connector:active {
   background: var(--color-route-surface);
 }
 
+button.route-connector[aria-pressed="true"] {
+  color: var(--color-selected-text);
+  background: var(--color-selected);
+}
+
 .route-connector__details,
 .route-status {
   color: var(--color-text-muted);
@@ -549,7 +554,8 @@ button.route-connector:active {
   }
 
   .map-marker[data-tone="selected"],
-  .itinerary-row[aria-pressed="true"] {
+  .itinerary-row[aria-pressed="true"],
+  .route-connector[aria-pressed="true"] {
     color: HighlightText;
     background: Highlight;
   }

@@ -5,7 +5,7 @@ import {
   Navigation,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, type Ref } from "react";
 
 import type { Timing } from "../../trip-core/model";
 import type { RoutePresentation } from "../../trip-core/routes";
@@ -22,6 +22,8 @@ export interface RouteConnectorProps {
   onRetry?: (routeId: string) => void;
   navigationHref?: string;
   reducedMotion?: boolean;
+  selected?: boolean;
+  controlRef?: Ref<HTMLButtonElement>;
 }
 
 function collapsedSummary(
@@ -125,6 +127,8 @@ export function RouteConnector({
   onRetry,
   navigationHref,
   reducedMotion,
+  selected = false,
+  controlRef,
 }: RouteConnectorProps) {
   const [expanded, setExpanded] = useState(false);
   const prefersReducedMotion = usePreferredReducedMotion();
@@ -198,14 +202,17 @@ export function RouteConnector({
   } else if (focusable) {
     connector = (
       <button
+        ref={controlRef}
         type="button"
         className="route-connector"
         aria-label={expanded ? "Hide transit route details" : label}
+        aria-pressed={selected}
         {...(canDisclose
           ? { "aria-controls": detailsId, "aria-expanded": expanded }
           : {})}
         data-route-id={route.edge.id}
         data-route-owner={route.edge.id}
+        data-selected={selected ? "true" : "false"}
         data-layout="compact-center"
         data-display={route.display}
         data-touch-target="44"

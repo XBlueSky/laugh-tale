@@ -5,9 +5,9 @@ import type {
   MapPadding,
   MapPresentation,
   RouteAdapter,
+  RouteRequest,
   RouteResult,
 } from "../../../src/experience-shell/provider-contracts";
-import { FakeRouteAdapter } from "../../../src/providers/fake/FakeRouteAdapter";
 import type { Coordinates, RouteEdge, Trip, TripNode } from "../../../src/trip-core/model";
 
 declare global {
@@ -335,6 +335,7 @@ class E2EVisualMapAdapter implements MapAdapter {
     this.element = element;
     this.events = events;
     element.dataset.e2eMapSurface = "true";
+    element.dataset.e2eMountCount = String(Number(element.dataset.e2eMountCount ?? "0") + 1);
     this.paint();
     return Promise.resolve();
   }
@@ -389,6 +390,8 @@ class E2EVisualMapAdapter implements MapAdapter {
       marker.dataset.mapTone = place.tone;
       marker.setAttribute("aria-label", `Map place ${place.label}`);
       marker.textContent = place.label;
+      marker.style.minBlockSize = "44px";
+      marker.style.minInlineSize = "44px";
       marker.addEventListener("click", () => this.events?.onPlaceSelect(place.ownerId));
       places.append(marker);
     }
@@ -402,6 +405,8 @@ class E2EVisualMapAdapter implements MapAdapter {
       routeControl.dataset.mapTone = route.tone;
       routeControl.setAttribute("aria-label", `Map route ${route.edgeId}`);
       routeControl.textContent = route.edgeId;
+      routeControl.style.minBlockSize = "44px";
+      routeControl.style.minInlineSize = "44px";
       routeControl.addEventListener("click", () => this.events?.onRouteSelect(route.edgeId));
       routes.append(routeControl);
     }
@@ -413,8 +418,31 @@ export function createE2EMapAdapter(): MapAdapter {
   return new E2EVisualMapAdapter();
 }
 
+class E2ERouteAdapter implements RouteAdapter {
+  private readonly attempts = new Map<string, number>();
+
+  load(request: RouteRequest, signal: AbortSignal): Promise<RouteResult> {
+    if (signal.aborted) {
+      return Promise.reject(new DOMException("Route request aborted", "AbortError"));
+    }
+    const attempt = (this.attempts.get(request.edge.id) ?? 0) + 1;
+    this.attempts.set(request.edge.id, attempt);
+    if (request.edge.id === "route-shopping-hotel" && attempt === 1) {
+      return Promise.resolve({
+        status: "unavailable",
+        reason: "Synthetic first attempt unavailable",
+      });
+    }
+    const result = routeResults[request.edge.id];
+    if (result === undefined) {
+      return Promise.resolve({ status: "unavailable", reason: "Synthetic route missing" });
+    }
+    return Promise.resolve(structuredClone(result));
+  }
+}
+
 export function createE2ERouteAdapter(): RouteAdapter {
-  return new FakeRouteAdapter(routeResults);
+  return new E2ERouteAdapter();
 }
 
 export function e2eClock(): string {

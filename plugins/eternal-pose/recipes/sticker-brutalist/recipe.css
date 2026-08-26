@@ -337,6 +337,13 @@ button.route-connector:active {
   transform: translate(-1px, -1px);
 }
 
+button.route-connector[aria-pressed="true"] {
+  border-style: solid;
+  color: var(--color-selected-text);
+  background: var(--color-selected);
+  box-shadow: 2px 2px 0 var(--color-border);
+}
+
 .route-connector__details,
 .route-status {
   color: var(--color-text);
@@ -586,7 +593,8 @@ button.route-connector:active {
   }
 
   .map-marker[data-tone="selected"],
-  .itinerary-row[aria-pressed="true"] {
+  .itinerary-row[aria-pressed="true"],
+  .route-connector[aria-pressed="true"] {
     color: HighlightText;
     background: Highlight;
   }

@@ -208,6 +208,53 @@ describe("publication safety findings", () => {
     expect(findingAt(findings, path, "credential.generic-secret")).toBe(false);
   });
 
+  test.each([
+    {
+      name: "double-quoted JSX brace",
+      source: (secret: string) => `const view = <Map apiKey={"${secret}"} />;\n`,
+    },
+    {
+      name: "single-quoted JSX brace",
+      source: (secret: string) => `const view = <Map apiKey={'${secret}'} />;\n`,
+    },
+    {
+      name: "backtick JSX brace",
+      source: (secret: string) => `const view = <Map apiKey={\`${secret}\`} />;\n`,
+    },
+    {
+      name: "parenthesized assignment",
+      source: (secret: string) => `const apiKey = ("${secret}");\n`,
+    },
+    {
+      name: "nested brace and parenthesis",
+      source: (secret: string) => `const view = <Map apiKey={(('${secret}'))} />;\n`,
+    },
+  ])("rejects a $name literal without echoing it", async ({ name, source }) => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime", "_", name[0], "L".repeat(27)].join("");
+    writeFixture(root, "src/literal-props.tsx", source(secret));
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/literal-props.tsx", "credential.generic-secret")).toBe(true);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test.each([
+    "const view = <Map apiKey={runtimeKey} />;\n",
+    "const view = <Map apiKey={(options.apiKey)} />;\n",
+    "const view = <Map apiKey={environmentString(runtimeConfig())} />;\n",
+    "const view = <Map apiKey={(import.meta.env.VITE_GOOGLE_MAPS_API_KEY)} />;\n",
+    "const view = <Map apiKey={process.env.GOOGLE_MAPS_API_KEY} />;\n",
+  ])("accepts a non-literal JSX runtime expression %#", async (contents) => {
+    const root = createTemporaryRoot();
+    writeFixture(root, "src/runtime-props.tsx", contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/runtime-props.tsx", "credential.generic-secret")).toBe(false);
+  });
+
   const quotedSourceSecret = ["runtime_", "Q".repeat(28)].join("");
   const templateSourceSecret = ["runtime_", "B".repeat(28)].join("");
   const jsonSecret = ["runtime_", "J".repeat(28)].join("");

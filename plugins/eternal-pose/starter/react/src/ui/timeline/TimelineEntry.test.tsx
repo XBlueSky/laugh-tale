@@ -11,9 +11,23 @@ import {
   type TimelineNodeState,
 } from "./TimelineEntry";
 
+const originalScrollIntoView = Object.getOwnPropertyDescriptor(
+  HTMLElement.prototype,
+  "scrollIntoView",
+);
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  if (originalScrollIntoView === undefined) {
+    Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+  } else {
+    Object.defineProperty(
+      HTMLElement.prototype,
+      "scrollIntoView",
+      originalScrollIntoView,
+    );
+  }
 });
 
 function sightseeing(overrides: Partial<TripNode> = {}): TripNode {
@@ -43,6 +57,57 @@ function state(overrides: Partial<TimelineNodeState> = {}): TimelineNodeState {
 }
 
 describe("TimelineEntry", () => {
+  it("names a cross-midnight owner with absolute dates and explicit timing certainty", () => {
+    const node: TripNode = {
+      id: "night-return",
+      dayId: "day-1",
+      kind: "lodging",
+      title: "Harbor House night return",
+      timing: { start: "23:30", end: "00:15", certainty: "suggested" },
+      optionality: "core",
+      payload: { role: "base" },
+    };
+    render(
+      <TimelineEntry
+        node={node}
+        state={state({ dayDate: "2042-04-18" })}
+        selected={false}
+        onSelect={() => undefined}
+        Renderer={rendererFor(node)}
+      />,
+    );
+
+    expect(screen.getByRole("button", {
+      name:
+        "約 23:30 Harbor House night return · Friday, 18 April 2042 · suggested time · ends Saturday, 19 April 2042 at 00:15",
+    })).toBeVisible();
+  });
+
+  it("includes an absolute date and fixed certainty in an experience owner name", () => {
+    const node: TripNode = {
+      id: "sky-room",
+      dayId: "day-1",
+      kind: "experience",
+      title: "Sky room session",
+      timing: { start: "14:00", end: "15:00", certainty: "fixed" },
+      optionality: "core",
+      payload: { durationMinutes: 60 },
+    };
+    render(
+      <TimelineEntry
+        node={node}
+        state={state({ dayDate: "2042-04-18" })}
+        selected={false}
+        onSelect={() => undefined}
+        Renderer={rendererFor(node)}
+      />,
+    );
+
+    expect(screen.getByRole("button", {
+      name: "14:00 Sky room session · Friday, 18 April 2042 · fixed time",
+    })).toBeVisible();
+  });
+
   it("keeps raw time semantics and selection state without a decorative chevron", () => {
     const node = sightseeing();
     const { container } = render(
@@ -504,6 +569,55 @@ describe("ItineraryTimeline semantic integration", () => {
     fireEvent.click(container.querySelector('[data-route-id="a--b"]')!);
     expect(onRouteSelect).toHaveBeenCalledWith("a--b");
     expect(within(container).getAllByRole("listitem").length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("scrolls and focuses only the exact map-origin selected route owner", () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    const nodes: EffectiveNode[] = [
+      { sourceNodeId: "a", completed: false, node: sightseeing({ id: "a", title: "A" }) },
+      { sourceNodeId: "b", completed: false, node: sightseeing({ id: "b", title: "B" }) },
+    ];
+
+    render(
+      <ItineraryTimeline
+        nodes={nodes}
+        routes={[{
+          id: "a--b",
+          dayId: "day-1",
+          fromNodeId: "a",
+          toNodeId: "b",
+          mode: "walking",
+          source: "manual",
+          certainty: "confirmed",
+        }]}
+        routeStates={{
+          "a--b": {
+            status: "ready",
+            durationMinutes: 4,
+            path: [
+              { lat: 35.7, lng: 139.7 },
+              { lat: 35.71, lng: 139.71 },
+            ],
+            steps: ["Walk to B"],
+          },
+        }}
+        selection={{ nodeId: null, source: "automatic" }}
+        selectedRouteId="a--b"
+        routeSelectionSource="map"
+        onNodeSelect={() => undefined}
+        onRouteSelect={() => undefined}
+      />,
+    );
+
+    const selectedRoute = screen.getByRole("button", { name: "walking · 4 min" });
+    expect(selectedRoute).toHaveAttribute("aria-pressed", "true");
+    expect(selectedRoute).toHaveAttribute("data-selected", "true");
+    expect(selectedRoute).toHaveFocus();
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
   });
 
   it("does not fabricate an absolute date when the timeline was not given one", () => {

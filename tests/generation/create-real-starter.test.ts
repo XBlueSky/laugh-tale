@@ -1,10 +1,19 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { open as openPath } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 type CreateTripProject = (
   options: {
@@ -73,6 +82,67 @@ afterEach(() => {
 });
 
 describe("real starter generation", () => {
+  test.each(recipes)("excludes local-only artifacts from a %s generated site without hiding legitimate source", async (recipe) => {
+    const root = temporaryRoot();
+    const starterDir = join(root, "contaminated-starter");
+    const targetDir = join(root, `${recipe}-sanitized-trip`);
+    const runtimeKey = ["runtime", "_", "K".repeat(28)].join("");
+    const excluded = [
+      ".env.local",
+      ".env.development.local",
+      "tsconfig.app.tsbuildinfo",
+      "src/generated.js.map",
+      "dist/bundle.js",
+      "coverage/report.json",
+      ".cache/result.json",
+      "test-results/result.json",
+      "playwright-report/index.html",
+      "credentials.json",
+      "service-account-key.json",
+      "private-key.pem",
+    ];
+    const preserved = [
+      ".env.example",
+      "src/build.ts",
+      "src/cache.ts",
+      "src/credential-form.tsx",
+      "src/map.ts",
+    ];
+
+    for (const path of [...excluded, ...preserved]) {
+      mkdirSync(dirname(join(starterDir, path)), { recursive: true });
+      writeFileSync(
+        join(starterDir, path),
+        path === ".env.local" ? `VITE_GOOGLE_MAPS_API_KEY=${runtimeKey}\n` : `safe:${path}\n`,
+      );
+    }
+
+    const consoleLog = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const captureProbe = "generator-output-capture-probe";
+    let capturedLog = "";
+    let capturedError = "";
+    try {
+      console.log(captureProbe);
+      console.error(captureProbe);
+      await createTripProject({ pluginRoot, targetDir, recipe, starterDir });
+    } finally {
+      capturedLog = consoleLog.mock.calls.flat().join(" ");
+      capturedError = consoleError.mock.calls.flat().join(" ");
+      consoleLog.mockRestore();
+      consoleError.mockRestore();
+    }
+
+    const generatedPaths = walk(targetDir);
+    for (const path of excluded) expect(generatedPaths).not.toContain(path);
+    for (const path of preserved) expect(generatedPaths).toContain(path);
+    expect(textInventory(targetDir).some(({ contents }) => contents.includes(runtimeKey))).toBe(false);
+    expect(capturedLog).toContain(captureProbe);
+    expect(capturedError).toContain(captureProbe);
+    expect(capturedLog).not.toContain(runtimeKey);
+    expect(capturedError).not.toContain(runtimeKey);
+  });
+
   test.each(recipes)("generates an independent %s trip site with only its selected recipe", async (recipe) => {
     const root = temporaryRoot();
     const targetDir = join(root, `${recipe}-trip`);

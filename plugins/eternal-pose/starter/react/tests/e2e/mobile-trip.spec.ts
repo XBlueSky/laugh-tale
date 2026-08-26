@@ -106,6 +106,60 @@ async function openTrip(page: Page): Promise<void> {
   await expect(page.locator("[data-route-id]").first()).toBeVisible();
 }
 
+async function visibleInteractiveTargetFailures(page: Page): Promise<Array<{
+  name: string;
+  width: number;
+  height: number;
+}>> {
+  return page.evaluate(() => {
+    const selector = [
+      "button",
+      "a[href]",
+      "input:not([type=hidden])",
+      "select",
+      "textarea",
+      "summary",
+      '[role="button"]',
+      '[role="link"]',
+      '[role="checkbox"]',
+      '[role="radio"]',
+      '[role="switch"]',
+      '[tabindex]:not([tabindex="-1"])',
+    ].join(",");
+    const elements = [...new Set(document.querySelectorAll<HTMLElement>(selector))];
+    return elements.flatMap((element) => {
+      if (element.matches(":disabled")) return [];
+      const style = getComputedStyle(element);
+      const ownRect = element.getBoundingClientRect();
+      if (
+        style.display === "none" ||
+        style.visibility === "hidden" ||
+        ownRect.width === 0 ||
+        ownRect.height === 0 ||
+        ownRect.bottom <= 0 ||
+        ownRect.top >= window.innerHeight ||
+        ownRect.right <= 0 ||
+        ownRect.left >= window.innerWidth
+      ) {
+        return [];
+      }
+      const input = element instanceof HTMLInputElement ? element : null;
+      const target =
+        input !== null && ["checkbox", "radio"].includes(input.type) && input.labels?.[0] !== undefined
+          ? input.labels[0]
+          : element;
+      const rect = target.getBoundingClientRect();
+      return rect.width + 0.5 < 44 || rect.height + 0.5 < 44
+        ? [{
+            name: element.getAttribute("aria-label") ?? element.textContent?.trim().slice(0, 80) ?? element.tagName,
+            width: rect.width,
+            height: rect.height,
+          }]
+        : [];
+    });
+  });
+}
+
 test("keeps the persistent map and interruptible three-snap sheet inside every mobile viewport", async ({ page }) => {
   await openTrip(page);
   const map = page.getByTestId("itinerary-map");
@@ -154,6 +208,66 @@ test("keeps the persistent map and interruptible three-snap sheet inside every m
   expect(geometry.sheetBottom).toBeLessThanOrEqual(geometry.height + 1);
 });
 
+test("proves asymmetric safe areas, clock advancement, route retry, and persistent map identity", async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as unknown as BrowserE2EGlobals).__ETERNAL_POSE_E2E_NOW__ = "2042-04-18T08:50:00Z";
+  });
+  await openTrip(page);
+  const experience = page.getByTestId("trip-experience");
+  const map = page.getByTestId("itinerary-map");
+  const mapHandle = await map.elementHandle();
+  expect(mapHandle).not.toBeNull();
+  const initialMountCount = Number(await map.getAttribute("data-e2e-mount-count"));
+  expect(initialMountCount).toBeGreaterThan(0);
+  await expect(page.getByLabel("Etc/UTC time")).toHaveText("08:50");
+  await expect(page.getByRole("button", { name: /約 09:00 Lookout terrace/ })).toHaveAttribute(
+    "data-selection-source",
+    "automatic",
+  );
+
+  await page.addStyleTag({
+    content: ".safe-area-probe { padding-top: 13px !important; padding-bottom: 29px !important; }",
+  });
+  await page.evaluate(() => window.dispatchEvent(new Event("resize")));
+  await expect.poll(() => experience.evaluate((element) => ({
+    top: element.style.getPropertyValue("--safe-area-top"),
+    bottom: element.style.getPropertyValue("--safe-area-bottom"),
+  }))).toEqual({ top: "13px", bottom: "29px" });
+  const padding = JSON.parse((await map.getAttribute("data-e2e-padding"))!) as {
+    top: number;
+    bottom: number;
+  };
+  expect(padding.top).toBeGreaterThan(13);
+  expect(padding.bottom).toBeGreaterThan(29);
+  expect(padding.top).not.toBe(padding.bottom);
+
+  const unavailable = page.locator(
+    '[data-route-owner="route-shopping-hotel"][data-state="error"]',
+  );
+  await expect(unavailable).toContainText("Synthetic first attempt unavailable");
+  await unavailable.getByRole("button", { name: "Retry route" }).click();
+  await expect(page.locator('[data-route-id="route-shopping-hotel"]')).toBeVisible();
+  await expect(unavailable).toHaveCount(0);
+
+  await page.evaluate(() => {
+    (window as unknown as BrowserE2EGlobals).__ETERNAL_POSE_E2E_NOW__ = "2042-04-18T10:15:00Z";
+  });
+  await page.getByRole("button", { name: "Collapse date choices" }).click();
+  await expect(page.getByLabel("Etc/UTC time")).toHaveText("10:15");
+  await expect(page.getByRole("button", { name: /約 10:00 Garden kitchen/ })).toHaveAttribute(
+    "aria-current",
+    "step",
+  );
+
+  await page.getByRole("button", { name: "Expand date choices" }).click();
+  await page.getByRole("button", { name: /Day 2: Cove closing day/ }).click();
+  await page.getByRole("button", { name: "Return to the current itinerary item" }).first().click();
+  expect(await mapHandle.evaluate((element) =>
+    element.isConnected && element === document.querySelector('[data-testid="itinerary-map"]'),
+  )).toBe(true);
+  await expect(map).toHaveAttribute("data-e2e-mount-count", String(initialMountCount));
+});
+
 test("synchronizes dates, live current state, list places, map places, and independent route owners", async ({ page }) => {
   await openTrip(page);
   const map = page.getByTestId("itinerary-map");
@@ -200,9 +314,17 @@ test("synchronizes dates, live current state, list places, map places, and indep
   await expect(map).toHaveAttribute("data-e2e-focus-kind", "route");
   await expect(map).toHaveAttribute("data-e2e-focus-id", "route-shuttle-ferry");
 
+  const focusCountBeforeMapSelection = Number(await map.getAttribute("data-e2e-focus-count"));
   await map.getByRole("button", { name: "Map route route-ferry-lookout" }).dispatchEvent("click");
   await expect(map.getByRole("button", { name: "Map route route-ferry-lookout" })).toHaveAttribute("data-map-tone", "selected");
-  await expect(map).toHaveAttribute("data-e2e-focus-id", "route-ferry-lookout");
+  const selectedListRoute = page.locator('[data-route-id="route-ferry-lookout"]');
+  await expect(selectedListRoute).toHaveAttribute("aria-pressed", "true");
+  await expect(selectedListRoute).toHaveAttribute("data-selected", "true");
+  await expect(selectedListRoute).toBeFocused();
+  const focusCountAfterMapSelection = Number(await map.getAttribute("data-e2e-focus-count"));
+  expect(focusCountAfterMapSelection).toBe(focusCountBeforeMapSelection);
+  await map.getByRole("button", { name: "Map route route-ferry-lookout" }).dispatchEvent("click");
+  expect(Number(await map.getAttribute("data-e2e-focus-count"))).toBe(focusCountAfterMapSelection);
 
   const liveDirections = page.getByRole("link", { name: /Open live transit directions from Harbor shuttle stop to Ferry terminal/ });
   const href = new URL((await liveDirections.getAttribute("href"))!);
@@ -269,28 +391,29 @@ test("renders all semantics, lodging roles, tasks, dialogs, and trip-scoped prog
 
   const taskTrigger = page.getByRole("button", { name: "開啟 Harbor field day 當日事項" });
   await taskTrigger.click();
-  await expect(page.getByRole("dialog", { name: "Harbor field day 當日事項" })).toBeVisible();
+  const taskDialog = page.getByRole("dialog", { name: "Harbor field day 當日事項" });
+  await expect(taskDialog).toBeVisible();
+  expect(await taskDialog.evaluate((element) =>
+    element instanceof HTMLDialogElement && element.open,
+  )).toBe(true);
   await expect(page.getByText("Use the lobby fountain.")).toBeVisible();
   await page.getByRole("button", { name: "關閉當日事項" }).click();
   await expect(taskTrigger).toBeFocused();
 
   const reservationTrigger = page.getByRole("button", { name: "開啟訂位資訊" });
   await reservationTrigger.click();
-  await expect(page.getByRole("dialog", { name: "訂位資訊" })).toBeVisible();
+  const reservationDialog = page.getByRole("dialog", { name: "訂位資訊" });
+  await expect(reservationDialog).toBeVisible();
+  expect(await reservationDialog.evaluate((element) =>
+    element instanceof HTMLDialogElement && element.open,
+  )).toBe(true);
   await expect(page.getByText("SYNTHETIC-SKY")).toHaveCount(0);
   await page.getByRole("button", { name: "顯示 Sky room admission 訂位代碼" }).click();
   await expect(page.getByText("SYNTHETIC-SKY")).toBeVisible();
   await page.getByRole("button", { name: "關閉訂位資訊" }).click();
   await expect(reservationTrigger).toBeFocused();
 
-  const targetSizes = await page.locator('[data-touch-target="44"]:visible').evaluateAll((elements) =>
-    elements.map((element) => {
-      const rect = element.getBoundingClientRect();
-      return { width: rect.width, height: rect.height };
-    }),
-  );
-  expect(targetSizes.length).toBeGreaterThan(0);
-  expect(targetSizes.every(({ width, height }) => width >= 44 && height >= 44)).toBe(true);
+  expect(await visibleInteractiveTargetFailures(page)).toEqual([]);
 
   await page.evaluate(() => {
     localStorage.removeItem("eternal-pose:trip-progress:v1:trip-e2e-archipelago");
@@ -300,6 +423,46 @@ test("renders all semantics, lodging roles, tasks, dialogs, and trip-scoped prog
   await page.getByRole("button", { name: /進入 Day 1 · Harbor field day/ }).click();
   await page.getByRole("button", { name: /時間未定 Supply hall/ }).click();
   await expect(page.getByRole("combobox", { name: "Pocket notebook 採買狀態" })).toHaveValue("pending");
+});
+
+test("keeps every semantic renderer visible and exposes absolute cross-midnight owner names", async ({ page }) => {
+  await openTrip(page);
+  await page.getByRole("button", { name: "Expand itinerary" }).click();
+  const rendererExpectations = new Map([
+    ["transport", "Board the blue local shuttle"],
+    ["transfer", "Pier One"],
+    ["lodging", "Stay base"],
+    ["dining", "Selected · Garden kitchen"],
+    ["shopping", "Pocket notebook"],
+    ["sightseeing", "North quay"],
+    ["experience", "Friday, 18 April 2042"],
+    ["logistics", "0 / 2 steps complete"],
+    ["custom", "field-notes"],
+  ]);
+  for (const [semantic, text] of rendererExpectations) {
+    const renderer = page.locator(`[data-semantic="${semantic}"]`).first();
+    await renderer.scrollIntoViewIfNeeded();
+    await expect(renderer).toBeVisible();
+    await expect(renderer).toContainText(text);
+  }
+
+  const logisticsDisclosure = page.getByRole("button", {
+    name: "Show Locker pickup details",
+  });
+  await logisticsDisclosure.scrollIntoViewIfNeeded();
+  await logisticsDisclosure.click();
+  await expect(page.getByText("Show locker slip")).toBeVisible();
+  const customOwner = page.getByRole("button", { name: /時間未定 Exchange field notes/ });
+  await customOwner.scrollIntoViewIfNeeded();
+  await customOwner.click();
+  await expect(customOwner).toHaveAttribute("aria-pressed", "true");
+
+  await expect(page.getByRole("button", {
+    name: /14:00 Sky room session · Friday, 18 April 2042 · fixed time/,
+  })).toBeAttached();
+  await expect(page.getByRole("button", {
+    name: /約 23:30 Harbor House night return · Friday, 18 April 2042 · suggested time · ends Saturday, 19 April 2042 at 00:15/,
+  })).toBeAttached();
 });
 
 test("handles location success, denied retry, stale callbacks, and explicit recenter without camera chasing", async ({ page }) => {

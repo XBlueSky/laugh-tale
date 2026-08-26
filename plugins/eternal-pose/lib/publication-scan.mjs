@@ -424,16 +424,28 @@ function filenameFindings(path) {
 }
 
 function containsGenericSecretLiteral(path, contents) {
-  const quotedLiteral =
-    /(?:^|[^A-Za-z0-9])["']?(?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|secret(?:[_-]?key)?|token|password|authorization|cookie)(?:[_-][A-Za-z0-9]+)*["']?\s*[:=]\s*(["'`])(?!(?:<|your\b|replace\b|example\b|set-at-runtime\b|process\.env\b|import\.meta\.env\b))[A-Za-z0-9_./+~-]{16,}={0,2}\1/im;
-  if (quotedLiteral.test(contents)) return true;
-
   const isCodeSource = /\.(?:[cm]?[jt]sx?|vue|svelte|astro)$/i.test(path);
-  if (isCodeSource) return false;
-
-  return /(?:^|[^A-Za-z0-9])["']?(?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|secret(?:[_-]?key)?|token|password|authorization|cookie)(?:[_-][A-Za-z0-9]+)*["']?\s*[:=]\s*(?!["'`])(?!(?:<|your\b|replace\b|example\b|set-at-runtime\b|process\.env\b|import\.meta\.env\b))[A-Za-z0-9_./+~-]{16,}/im.test(
-    contents,
-  );
+  const assignment =
+    /(?:^|[^A-Za-z0-9])["']?(?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|secret(?:[_-]?key)?|token|password|authorization|cookie)(?:[_-][A-Za-z0-9]+)*["']?\s*[:=]\s*/gim;
+  let match;
+  while ((match = assignment.exec(contents)) !== null) {
+    let remainder = contents.slice(match.index + match[0].length);
+    remainder = remainder.replace(/^[\s{(]+/, "");
+    const quoted = /^(["'`])([A-Za-z0-9_./+~-]{16,}={0,2})\1/.exec(remainder);
+    if (quoted !== null) {
+      const value = quoted[2].toLowerCase();
+      if (!/^(?:<|your\b|replace\b|example\b|set-at-runtime\b)/.test(value)) return true;
+      continue;
+    }
+    if (isCodeSource) continue;
+    const unquoted = /^([A-Za-z0-9_./+~-]{16,}={0,2})/.exec(remainder);
+    if (unquoted === null) continue;
+    const value = unquoted[1].toLowerCase();
+    if (!/^(?:<|your\b|replace\b|example\b|set-at-runtime\b|process\.env\b|import\.meta\.env\b)/.test(value)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function contentFindings(path, contents) {

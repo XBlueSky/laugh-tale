@@ -31,10 +31,23 @@ const baseCss = readFileSync(
   "utf8",
 );
 const indexHtml = readFileSync(resolve(process.cwd(), "index.html"), "utf8");
+const originalScrollIntoView = Object.getOwnPropertyDescriptor(
+  HTMLElement.prototype,
+  "scrollIntoView",
+);
 
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  if (originalScrollIntoView === undefined) {
+    Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+  } else {
+    Object.defineProperty(
+      HTMLElement.prototype,
+      "scrollIntoView",
+      originalScrollIntoView,
+    );
+  }
 });
 
 class DelayedFakeMapAdapter extends FakeMapAdapter {
@@ -301,7 +314,9 @@ describe("TripExperience", () => {
       />,
     );
 
-    const current = screen.getByRole("button", { name: "09:00 Timed exhibit" });
+    const current = screen.getByRole("button", {
+      name: "09:00 Timed exhibit · Tuesday, 12 June 2040 · fixed time",
+    });
     expect(current).toHaveAttribute("aria-current", "step");
     expect(screen.getByText("Tuesday, 12 June 2040").closest("time")).toHaveAttribute(
       "datetime",
@@ -1053,6 +1068,11 @@ describe("TripExperience", () => {
       },
     });
     const routeAdapterFactory = vi.fn(() => routeAdapter);
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
     const user = userEvent.setup();
 
     render(
@@ -1077,21 +1097,28 @@ describe("TripExperience", () => {
       ]),
     );
 
+    const focusCountBeforeListSelection = mapAdapter.focusCalls.length;
     await user.click(routeControl);
+    expect(mapAdapter.focusCalls).toHaveLength(focusCountBeforeListSelection + 1);
     expect(mapAdapter.focusCalls.at(-1)).toEqual({
       kind: "route",
       id: "route-museum-dinner",
     });
+    expect(routeControl).toHaveAttribute("aria-pressed", "true");
+    expect(routeControl).toHaveAttribute("data-selected", "true");
     await waitFor(() =>
       expect(mapAdapter.renderCalls.at(-1)?.selectedRouteId).toBe(
         "route-museum-dinner",
       ),
     );
 
+    screen.getByRole("button", { name: /Park day/ }).focus();
+    const focusCountBeforeMapSelection = mapAdapter.focusCalls.length;
     act(() => mapAdapter.emitRouteSelect("route-museum-dinner"));
-    expect(mapAdapter.focusCalls.at(-1)).toEqual({
-      kind: "route",
-      id: "route-museum-dinner",
-    });
+    await waitFor(() => expect(routeControl).toHaveFocus());
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+    expect(routeControl).toHaveAttribute("aria-pressed", "true");
+    expect(routeControl).toHaveAttribute("data-selected", "true");
+    expect(mapAdapter.focusCalls).toHaveLength(focusCountBeforeMapSelection);
   });
 });

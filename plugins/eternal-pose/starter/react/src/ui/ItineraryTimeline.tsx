@@ -30,6 +30,8 @@ export interface ItineraryTimelineProps {
   shoppingStatuses?: Readonly<Record<string, ShoppingStatus>>;
   reducedMotion?: boolean;
   currentNodeId?: string | null;
+  selectedRouteId?: string | null;
+  routeSelectionSource?: "list" | "map" | null;
 }
 
 function projection(
@@ -100,8 +102,11 @@ export function ItineraryTimeline({
   shoppingStatuses = {},
   reducedMotion,
   currentNodeId = null,
+  selectedRouteId = null,
+  routeSelectionSource = null,
 }: ItineraryTimelineProps) {
   const nodeElementsRef = useRef(new Map<string, HTMLLIElement>());
+  const routeElementsRef = useRef(new Map<string, HTMLButtonElement>());
   const timelineProjection = useMemo(
     () => projection(nodes, routes, dayDate),
     [dayDate, nodes, routes],
@@ -148,6 +153,13 @@ export function ItineraryTimeline({
       ?.scrollIntoView?.({ block: "nearest" });
   }, [selection.nodeId]);
 
+  useEffect(() => {
+    if (selectedRouteId === null || routeSelectionSource !== "map") return;
+    const routeElement = routeElementsRef.current.get(selectedRouteId);
+    routeElement?.scrollIntoView?.({ block: "nearest" });
+    routeElement?.focus({ preventScroll: true });
+  }, [routeSelectionSource, selectedRouteId]);
+
   const renderNode = (entry: NodeEntry) => {
     const effective = effectiveNodesById.get(entry.id);
     const selected = selection.nodeId === entry.id;
@@ -184,6 +196,11 @@ export function ItineraryTimeline({
               <RouteConnector
                 route={entry.route}
                 state={routeStatesById.get(entry.id)}
+                selected={selectedRouteId === entry.id}
+                controlRef={(element) => {
+                  if (element === null) routeElementsRef.current.delete(entry.id);
+                  else routeElementsRef.current.set(entry.id, element);
+                }}
                 destinationTiming={destination?.node.timing}
                 onRouteSelect={onRouteSelect}
                 onRetry={onRouteRetry}

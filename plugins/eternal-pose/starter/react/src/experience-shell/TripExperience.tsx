@@ -305,6 +305,9 @@ export function TripExperience({
   const [headerExpanded, setHeaderExpanded] = useState(true);
   const [sheetSnap, setSheetSnap] = useState<SheetSnap>("half");
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
+  const [routeSelectionSource, setRouteSelectionSource] = useState<
+    "list" | "map" | null
+  >(null);
   const [fallbackProgress, setFallbackProgress] = useState(emptyTripProgress);
   const progress = progressController?.progress ?? fallbackProgress;
   const fallbackSelectCandidate = useCallback(
@@ -583,6 +586,7 @@ export function TripExperience({
     }
     clearCandidateInteraction();
     setSelectedRouteId(null);
+    setRouteSelectionSource(null);
     selection.selectManual(nodeId);
     const ownerDay = dayForNode(trip, nodeId);
     if (options.synchronizeDay === true) {
@@ -627,21 +631,33 @@ export function TripExperience({
     }
   };
 
-  const selectRoute = (routeId: string): void => {
-    if (!selectedDayRoutes.some(({ id }) => id === routeId)) {
+  const routeIsDisplayed = (routeId: string): boolean =>
+    selectedDayRoutes.some(({ id }) => id === routeId);
+
+  const selectRouteFromList = (routeId: string): void => {
+    if (!routeIsDisplayed(routeId)) {
       return;
     }
     clearCandidateInteraction();
     setSelectedRouteId(routeId);
+    setRouteSelectionSource("list");
     focusMap(
       { kind: "route", id: routeId },
       selectedEffectiveDay.day.id,
     );
   };
 
+  const selectRouteFromMap = (routeId: string): void => {
+    if (!routeIsDisplayed(routeId)) return;
+    clearCandidateInteraction();
+    setSelectedRouteId(routeId);
+    setRouteSelectionSource("map");
+  };
+
   const returnToNow = (): void => {
     clearCandidateInteraction();
     setSelectedRouteId(null);
+    setRouteSelectionSource(null);
     selection.returnToNow();
     const liveDayId = dayForNode(trip, automaticNodeId);
     if (liveDayId !== undefined) {
@@ -685,6 +701,7 @@ export function TripExperience({
     }
     clearCandidateInteraction();
     setSelectedRouteId(null);
+    setRouteSelectionSource(null);
     markDisplayedDayIntent(dayId);
     setSheetSnap("half");
     const firstNode = day.nodes[0];
@@ -724,7 +741,7 @@ export function TripExperience({
         presentation={presentation}
         padding={mapPadding}
         onPlaceSelect={handleMapPlaceSelect}
-        onRouteSelect={selectRoute}
+        onRouteSelect={selectRouteFromMap}
         onReady={setMountedAdapter}
         onPresentationRendered={handlePresentationRendered}
       />
@@ -868,7 +885,11 @@ export function TripExperience({
           completedChecklistIds={completedChecklistIds}
           shoppingStatuses={progress.shoppingStatuses}
           routeStates={routeStates.states}
-          onRouteSelect={selectRoute}
+          selectedRouteId={activeSelectedRouteId}
+          routeSelectionSource={
+            activeSelectedRouteId === null ? null : routeSelectionSource
+          }
+          onRouteSelect={selectRouteFromList}
           onRouteRetry={(routeId) => {
             routeStates.retry(routeId);
           }}
