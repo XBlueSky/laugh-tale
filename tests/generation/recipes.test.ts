@@ -22,6 +22,12 @@ interface RecipeFixture {
   readme: string;
 }
 
+interface CssRule {
+  selectors: string[];
+  declarations: ReadonlyMap<string, string>;
+  atRules: string[];
+}
+
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 const recipesRoot = join(repoRoot, "plugins/eternal-pose/recipes");
 const starterRecipePath = join(
@@ -38,11 +44,146 @@ const expectedRecipeIds = [
   "sticker-brutalist",
 ] as const;
 
+type ExpectedRecipeId = (typeof expectedRecipeIds)[number];
+
+const expectedMetadataById: Record<ExpectedRecipeId, RecipeMetadata> = {
+  "native-minimal": {
+    id: "native-minimal",
+    label: "Native Minimal",
+    register: "product",
+    cssFile: "recipe.css",
+    motion: {
+      durationMs: 180,
+      easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+      reducedMotionMs: 0,
+    },
+  },
+  "quiet-wood": {
+    id: "quiet-wood",
+    label: "Quiet Wood",
+    register: "product",
+    cssFile: "recipe.css",
+    motion: {
+      durationMs: 200,
+      easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+      reducedMotionMs: 0,
+    },
+  },
+  "sticker-brutalist": {
+    id: "sticker-brutalist",
+    label: "Sticker Brutalist",
+    register: "product",
+    cssFile: "recipe.css",
+    motion: {
+      durationMs: 180,
+      easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+      reducedMotionMs: 0,
+    },
+  },
+};
+
 const runtimeGeometryTokens = new Set([
   "--header-clearance",
   "--safe-area-bottom",
   "--safe-area-top",
 ]);
+
+const runtimeLayoutProperties = new Set([
+  "align-content",
+  "align-items",
+  "align-self",
+  "block-size",
+  "bottom",
+  "clip",
+  "clip-path",
+  "display",
+  "flex",
+  "flex-basis",
+  "flex-direction",
+  "flex-flow",
+  "flex-grow",
+  "flex-shrink",
+  "gap",
+  "grid",
+  "grid-area",
+  "grid-template",
+  "grid-template-areas",
+  "grid-template-columns",
+  "grid-template-rows",
+  "height",
+  "inline-size",
+  "inset",
+  "inset-block",
+  "inset-block-end",
+  "inset-block-start",
+  "inset-inline",
+  "inset-inline-end",
+  "inset-inline-start",
+  "isolation",
+  "justify-content",
+  "justify-items",
+  "justify-self",
+  "left",
+  "margin",
+  "margin-block",
+  "margin-block-end",
+  "margin-block-start",
+  "margin-bottom",
+  "margin-inline",
+  "margin-inline-end",
+  "margin-inline-start",
+  "margin-left",
+  "margin-right",
+  "margin-top",
+  "max-block-size",
+  "max-height",
+  "max-inline-size",
+  "max-width",
+  "min-block-size",
+  "min-height",
+  "min-inline-size",
+  "min-width",
+  "object-fit",
+  "overflow",
+  "overflow-x",
+  "overflow-y",
+  "overscroll-behavior",
+  "overscroll-behavior-block",
+  "overscroll-behavior-inline",
+  "padding",
+  "padding-block",
+  "padding-block-end",
+  "padding-block-start",
+  "padding-bottom",
+  "padding-inline",
+  "padding-inline-end",
+  "padding-inline-start",
+  "padding-left",
+  "padding-right",
+  "padding-top",
+  "place-content",
+  "place-items",
+  "pointer-events",
+  "position",
+  "right",
+  "top",
+  "touch-action",
+  "visibility",
+  "width",
+  "will-change",
+  "z-index",
+]);
+
+const runtimeOwnedSelectors = [
+  ".trip-experience",
+  ".day-header",
+  ".map-controls",
+  ".itinerary-sheet",
+  ".safe-area-probe",
+  ".task-widget__dialog",
+  ".reservation-panel__dialog",
+  ".itinerary-map",
+] as const;
 
 const requiredRecipeTokens = [
   "--color-canvas",
@@ -123,6 +264,354 @@ function loadRecipes(): RecipeFixture[] {
       readme: readFileSync(readmePath, "utf8"),
     }];
   });
+}
+
+function splitCssList(value: string, delimiter: string): string[] {
+  const items: string[] = [];
+  let start = 0;
+  let parentheses = 0;
+  let brackets = 0;
+  let quote: "\"" | "'" | null = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (quote !== null) {
+      if (character === "\\") {
+        index += 1;
+      } else if (character === quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (character === "\"" || character === "'") {
+      quote = character;
+    } else if (character === "(") {
+      parentheses += 1;
+    } else if (character === ")") {
+      parentheses -= 1;
+    } else if (character === "[") {
+      brackets += 1;
+    } else if (character === "]") {
+      brackets -= 1;
+    } else if (character === delimiter && parentheses === 0 && brackets === 0) {
+      items.push(value.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  items.push(value.slice(start).trim());
+  return items.filter((item) => item.length > 0);
+}
+
+function findCssBlockEnd(css: string, openingBrace: number): number {
+  let depth = 1;
+  let quote: "\"" | "'" | null = null;
+  let inComment = false;
+  for (let index = openingBrace + 1; index < css.length; index += 1) {
+    const character = css[index];
+    const next = css[index + 1];
+    if (inComment) {
+      if (character === "*" && next === "/") {
+        inComment = false;
+        index += 1;
+      }
+      continue;
+    }
+    if (quote !== null) {
+      if (character === "\\") {
+        index += 1;
+      } else if (character === quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (character === "/" && next === "*") {
+      inComment = true;
+      index += 1;
+    } else if (character === "\"" || character === "'") {
+      quote = character;
+    } else if (character === "{") {
+      depth += 1;
+    } else if (character === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+  throw new Error(`CSS block beginning at ${openingBrace} is not closed`);
+}
+
+function parseCssDeclarations(body: string): ReadonlyMap<string, string> {
+  const declarations = new Map<string, string>();
+  for (const item of splitCssList(body, ";")) {
+    let parentheses = 0;
+    let quote: "\"" | "'" | null = null;
+    let colon = -1;
+    for (let index = 0; index < item.length; index += 1) {
+      const character = item[index];
+      if (quote !== null) {
+        if (character === "\\") {
+          index += 1;
+        } else if (character === quote) {
+          quote = null;
+        }
+      } else if (character === "\"" || character === "'") {
+        quote = character;
+      } else if (character === "(") {
+        parentheses += 1;
+      } else if (character === ")") {
+        parentheses -= 1;
+      } else if (character === ":" && parentheses === 0) {
+        colon = index;
+        break;
+      }
+    }
+    if (colon < 1) {
+      continue;
+    }
+    const property = item.slice(0, colon).trim().toLowerCase();
+    const value = item.slice(colon + 1).trim().replace(/\s*!important\s*$/i, "");
+    if (/^(?:--[a-z0-9-]+|[a-z-]+)$/i.test(property) && value.length > 0) {
+      declarations.set(property, value);
+    }
+  }
+  return declarations;
+}
+
+function parseCssRules(css: string): CssRule[] {
+  const rules: CssRule[] = [];
+
+  function visit(source: string, atRules: string[]): void {
+    let cursor = 0;
+    while (cursor < source.length) {
+      while (/\s|;/.test(source[cursor] ?? "")) {
+        cursor += 1;
+      }
+      if (source.startsWith("/*", cursor)) {
+        const commentEnd = source.indexOf("*/", cursor + 2);
+        if (commentEnd === -1) {
+          throw new Error("CSS contains an unterminated comment");
+        }
+        cursor = commentEnd + 2;
+        continue;
+      }
+      if (cursor >= source.length) {
+        break;
+      }
+
+      let openingBrace = -1;
+      let quote: "\"" | "'" | null = null;
+      let inComment = false;
+      for (let index = cursor; index < source.length; index += 1) {
+        const character = source[index];
+        const next = source[index + 1];
+        if (inComment) {
+          if (character === "*" && next === "/") {
+            inComment = false;
+            index += 1;
+          }
+        } else if (quote !== null) {
+          if (character === "\\") {
+            index += 1;
+          } else if (character === quote) {
+            quote = null;
+          }
+        } else if (character === "/" && next === "*") {
+          inComment = true;
+          index += 1;
+        } else if (character === "\"" || character === "'") {
+          quote = character;
+        } else if (character === "{") {
+          openingBrace = index;
+          break;
+        }
+      }
+      if (openingBrace === -1) {
+        break;
+      }
+
+      const header = source.slice(cursor, openingBrace).trim();
+      const closingBrace = findCssBlockEnd(source, openingBrace);
+      const body = source.slice(openingBrace + 1, closingBrace);
+      if (header.startsWith("@")) {
+        visit(body, [...atRules, header.replace(/\s+/g, " ").trim()]);
+      } else {
+        rules.push({
+          selectors: splitCssList(header, ","),
+          declarations: parseCssDeclarations(body),
+          atRules,
+        });
+      }
+      cursor = closingBrace + 1;
+    }
+  }
+
+  visit(css, []);
+  return rules;
+}
+
+function selectorHasClass(selector: string, className: string): boolean {
+  const escaped = className.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`\\.${escaped}(?![a-z0-9_-])`, "i").test(selector);
+}
+
+function normalizedAtRule(atRule: string): string {
+  return atRule.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function isInsideFeatureMedia(
+  rule: CssRule,
+  feature: "forced-colors" | "prefers-reduced-motion",
+  value: "active" | "reduce",
+): boolean {
+  const pattern = new RegExp(`\\(${feature}\\s*:\\s*${value}\\)`, "i");
+  return rule.atRules.some((atRule) =>
+    normalizedAtRule(atRule).startsWith("@media ") && pattern.test(atRule),
+  );
+}
+
+function tokenValues(rules: readonly CssRule[], name: string): string[] {
+  return rules
+    .filter((rule) =>
+      rule.selectors.includes(":root") &&
+      !isInsideFeatureMedia(rule, "forced-colors", "active"),
+    )
+    .map((rule) => rule.declarations.get(name))
+    .filter((value): value is string => value !== undefined);
+}
+
+function forcedSelectedDateContractViolations(css: string): string[] {
+  const expectedDeclarations = new Map([
+    ["border-color", "Highlight"],
+    ["color", "HighlightText"],
+    ["background", "Highlight"],
+  ]);
+  const selectedDatePattern =
+    /\.day-header__date\s*\[\s*aria-pressed\s*=\s*(?:"true"|'true'|true)\s*\]/i;
+  const selectedRules = parseCssRules(css).filter((rule) =>
+    isInsideFeatureMedia(rule, "forced-colors", "active") &&
+    rule.selectors.some((selector) => selectedDatePattern.test(selector)),
+  );
+  const violations: string[] = [];
+  for (const [property, expected] of expectedDeclarations) {
+    const values = selectedRules
+      .map((rule) => rule.declarations.get(property))
+      .filter((value): value is string => value !== undefined);
+    if (values.length === 0) {
+      violations.push(`forced-color selected date is missing ${property}`);
+    }
+    for (const value of values) {
+      if (value !== expected) {
+        violations.push(`forced-color selected date ${property} must be ${expected}, received ${value}`);
+      }
+    }
+  }
+  return violations;
+}
+
+function layoutContractViolations(css: string): string[] {
+  const violations: string[] = [];
+  for (const rule of parseCssRules(css)) {
+    for (const selector of rule.selectors) {
+      for (const protectedSelector of runtimeOwnedSelectors) {
+        if (!selectorHasClass(selector, protectedSelector.slice(1))) {
+          continue;
+        }
+        for (const property of rule.declarations.keys()) {
+          if (runtimeLayoutProperties.has(property)) {
+            violations.push(`${selector} must not set runtime-owned ${property}`);
+          }
+        }
+      }
+    }
+  }
+  return violations;
+}
+
+function selectorMayTarget44pxControl(selector: string): boolean {
+  return (
+    /\[\s*data-touch-target\s*=\s*(?:"44"|'44'|44)\s*\]/i.test(selector) ||
+    selectorHasClass(selector, "icon-control") ||
+    /(?:^|[\s>+~,:()])(?:button|a|input|select|\*)(?=$|[\s>+~.#:[(])/i.test(selector)
+  );
+}
+
+function pixelLength(value: string): number | undefined {
+  const match = value.match(/^(-?(?:\d+\.)?\d+)px$/i);
+  return match === null ? undefined : Number.parseFloat(match[1] ?? "");
+}
+
+function touchTargetContractViolations(css: string): string[] {
+  const violations: string[] = [];
+  let protectsMinimumWidth = false;
+  let protectsMinimumHeight = false;
+  for (const rule of parseCssRules(css)) {
+    for (const selector of rule.selectors) {
+      if (!selectorMayTarget44pxControl(selector)) {
+        continue;
+      }
+      for (const property of [
+        "width",
+        "height",
+        "min-width",
+        "min-height",
+        "max-width",
+        "max-height",
+      ]) {
+        const value = rule.declarations.get(property);
+        if (value === undefined) {
+          continue;
+        }
+        const pixels = pixelLength(value);
+        if (property === "min-width" && pixels !== undefined && pixels >= 44) {
+          protectsMinimumWidth = true;
+        }
+        if (property === "min-height" && pixels !== undefined && pixels >= 44) {
+          protectsMinimumHeight = true;
+        }
+        if (
+          (property.startsWith("max-") && value.toLowerCase() !== "none") ||
+          ((property === "width" || property === "height") && value !== "auto") ||
+          ((property === "min-width" || property === "min-height") &&
+            (pixels === undefined || pixels < 44))
+        ) {
+          violations.push(`${selector} cannot constrain ${property} to ${value}`);
+        }
+      }
+    }
+  }
+  if (!protectsMinimumWidth) {
+    violations.push("missing a 44px minimum touch-target width");
+  }
+  if (!protectsMinimumHeight) {
+    violations.push("missing a 44px minimum touch-target height");
+  }
+  return violations;
+}
+
+function contrastContractViolations(css: string): string[] {
+  const rules = parseCssRules(css);
+  const violations: string[] = [];
+  for (const focus of tokenValues(rules, "--color-focus")) {
+    for (const adjacentToken of [
+      "--color-canvas",
+      "--color-surface",
+      "--color-surface-subtle",
+    ]) {
+      for (const adjacent of tokenValues(rules, adjacentToken)) {
+        if (contrastRatio(focus, adjacent) < 3) {
+          violations.push(`focus ${focus} lacks 3:1 contrast against ${adjacentToken} ${adjacent}`);
+        }
+      }
+    }
+  }
+  for (const foreground of tokenValues(rules, "--color-selected-text")) {
+    for (const background of tokenValues(rules, "--color-marker-selected")) {
+      if (contrastRatio(foreground, background) < 4.5) {
+        violations.push(`selected marker ${foreground} on ${background} lacks 4.5:1 contrast`);
+      }
+    }
+  }
+  return violations;
 }
 
 function declaredTokens(css: string): Map<string, string> {
@@ -235,29 +724,56 @@ describe("compile-time design recipe catalog", () => {
     }
   });
 
-  test("publishes stable metadata with purposeful 180–220ms motion", () => {
+  test("publishes exact per-recipe metadata without undeclared motion keys", () => {
     const recipes = loadRecipes();
     expect(recipes).toHaveLength(3);
     for (const recipe of recipes) {
-      expect(Object.keys(recipe.metadata).sort()).toEqual([
-        "cssFile",
-        "id",
-        "label",
-        "motion",
-        "register",
-      ]);
-      expect(recipe.metadata).toMatchObject({
-        id: recipe.directory,
-        register: "product",
-        cssFile: "recipe.css",
-        motion: {
-          reducedMotionMs: 0,
-        },
-      });
-      expect(recipe.metadata.label.trim().length).toBeGreaterThan(0);
-      expect(recipe.metadata.motion.durationMs).toBeGreaterThanOrEqual(180);
-      expect(recipe.metadata.motion.durationMs).toBeLessThanOrEqual(220);
-      expect(recipe.metadata.motion.easing).toMatch(/^cubic-bezier\(/);
+      const id = recipe.directory as ExpectedRecipeId;
+      expect(recipe.metadata).toEqual(expectedMetadataById[id]);
+    }
+  });
+
+  test("keeps metadata motion synchronized with normal and reduced CSS contracts", () => {
+    const recipes = loadRecipes();
+    expect(recipes).toHaveLength(3);
+    for (const recipe of recipes) {
+      const rules = parseCssRules(recipe.css);
+      const normalRootRules = rules.filter((rule) =>
+        rule.selectors.includes(":root") &&
+        !isInsideFeatureMedia(rule, "prefers-reduced-motion", "reduce") &&
+        !isInsideFeatureMedia(rule, "forced-colors", "active"),
+      );
+      const reducedRootRules = rules.filter((rule) =>
+        rule.selectors.includes(":root") &&
+        isInsideFeatureMedia(rule, "prefers-reduced-motion", "reduce"),
+      );
+      for (const [property, expected] of [
+        ["--sheet-motion-duration", `${recipe.metadata.motion.durationMs}ms`],
+        ["--shell-motion-duration", "var(--sheet-motion-duration)"],
+        ["--motion-easing", recipe.metadata.motion.easing],
+      ] as const) {
+        const values = normalRootRules
+          .map((rule) => rule.declarations.get(property))
+          .filter((value): value is string => value !== undefined);
+        expect(values.length, `${recipe.directory} normal ${property}`).toBeGreaterThan(0);
+        expect(values, `${recipe.directory} normal ${property}`).toEqual(
+          values.map(() => expected),
+        );
+      }
+      for (const property of [
+        "--sheet-motion-duration",
+        "--shell-motion-duration",
+        "--component-motion-duration",
+      ] as const) {
+        const values = reducedRootRules
+          .map((rule) => rule.declarations.get(property))
+          .filter((value): value is string => value !== undefined);
+        const expected = `${recipe.metadata.motion.reducedMotionMs}ms`;
+        expect(values.length, `${recipe.directory} reduced ${property}`).toBeGreaterThan(0);
+        expect(values, `${recipe.directory} reduced ${property}`).toEqual(
+          values.map(() => expected),
+        );
+      }
     }
   });
 
@@ -297,7 +813,10 @@ describe("compile-time design recipe catalog", () => {
       ]) {
         expect(recipe.css).toContain(`[data-kind="${kind}"]`);
       }
-      expect(recipe.css).toMatch(/\[data-touch-target="44"\][^{]*\{[^}]*min-width:\s*44px;[^}]*min-height:\s*44px;/s);
+      expect(
+        touchTargetContractViolations(recipe.css),
+        `${recipe.directory} touch-target contract`,
+      ).toEqual([]);
     }
   });
 
@@ -315,6 +834,7 @@ describe("compile-time design recipe catalog", () => {
         ["--color-text-muted", "--color-surface-subtle"],
         ["--color-accent-strong", "--color-accent-soft"],
         ["--color-selected-text", "--color-selected"],
+        ["--color-selected-text", "--color-marker-selected"],
         ["--color-marker-text", "--color-marker"],
         ...semanticSurfaceTokens.map((surface) => ["--color-text", surface]),
       ] as const;
@@ -324,23 +844,81 @@ describe("compile-time design recipe catalog", () => {
           `${recipe.directory}: ${foreground} on ${background}`,
         ).toBeGreaterThanOrEqual(4.5);
       }
+      expect(
+        contrastContractViolations(recipe.css),
+        `${recipe.directory} selected-marker and focus-indicator contrast`,
+      ).toEqual([]);
     }
   });
 
-  test("keeps motion, forced colors, geometry, and compile-time isolation explicit", () => {
+  test("keeps forced-color selection and compile-time isolation explicit", () => {
     const recipes = loadRecipes();
     expect(recipes).toHaveLength(3);
     for (const recipe of recipes) {
       expectSyntacticallyCompleteCss(recipe.css);
       expect(recipe.css).toContain("@media (prefers-reduced-motion: reduce)");
       expect(recipe.css).toContain("@media (forced-colors: active)");
-      expect(recipe.css).toMatch(/--sheet-motion-duration:\s*0ms;/);
-      expect(recipe.css).toMatch(/--component-motion-duration:\s*0ms;/);
       expect(recipe.css).not.toMatch(/forced-color-adjust\s*:\s*none/i);
       expect(recipe.css).not.toMatch(/\[data-(?:theme|recipe)|prefers-color-scheme/i);
-      expect(recipe.css).not.toMatch(/\.itinerary-sheet\s*\{[^}]*(?:\bheight|\bbottom|\bmax-height|\bmin-height)\s*:/s);
-      expect(recipe.css).not.toMatch(/\.trip-experience\s*\{[^}]*(?:\binset|\bposition|\bheight|\bwidth)\s*:/s);
+      expect(
+        forcedSelectedDateContractViolations(recipe.css),
+        `${recipe.directory} forced-color selected-date contract`,
+      ).toEqual([]);
+      expect(
+        layoutContractViolations(recipe.css),
+        `${recipe.directory} runtime geometry ownership`,
+      ).toEqual([]);
     }
+  });
+
+  test("contract helpers reject contrast, geometry, dialog, and touch-target regressions", () => {
+    const quietWood = loadRecipes().find(({ directory }) => directory === "quiet-wood");
+    expect(quietWood).toBeDefined();
+    const css = quietWood?.css ?? "";
+
+    expect(
+      contrastContractViolations(
+        `${css}\n@media (max-width: 430px) { :root { --color-focus: #ffffff; } }`,
+      ),
+    ).toEqual(expect.arrayContaining([expect.stringContaining("focus #ffffff")]));
+    expect(
+      contrastContractViolations(
+        `${css}\n@media (max-width: 430px) { :root { --color-marker-selected: #ffffff; } }`,
+      ),
+    ).toEqual(expect.arrayContaining([expect.stringContaining("selected marker")]));
+
+    for (const mutation of [
+      ".day-header { top: 0; }",
+      ".map-controls { position: static; }",
+      ".itinerary-sheet { right: 5rem; }",
+      ".task-widget__dialog, .reservation-panel__dialog { inset: 0; }",
+    ]) {
+      expect(layoutContractViolations(`${css}\n${mutation}`), mutation).not.toEqual([]);
+    }
+
+    expect(
+      touchTargetContractViolations(
+        `${css}\n.unrelated, [data-touch-target="44"] { max-width: 40px; max-height: 40px; }`,
+      ),
+    ).toEqual(expect.arrayContaining([
+      expect.stringContaining("max-width"),
+      expect.stringContaining("max-height"),
+    ]));
+    expect(
+      forcedSelectedDateContractViolations(
+        `${css}\n@media (forced-colors: active) {
+          .unrelated, .day-header__date[aria-pressed="true"] {
+            border-color: transparent;
+            color: CanvasText;
+            background: Canvas;
+          }
+        }`,
+      ),
+    ).toEqual(expect.arrayContaining([
+      expect.stringContaining("border-color"),
+      expect.stringContaining("color"),
+      expect.stringContaining("background"),
+    ]));
   });
 
   test("rejects design slop, protected assets, and unsafe CSS payloads", () => {
