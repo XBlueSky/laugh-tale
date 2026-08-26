@@ -1,5 +1,5 @@
 :root {
-  --font-body: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
   --font-size-title: 0.95rem;
   --font-size-meta: 0.75rem;
   --space-1: 0.25rem;
@@ -12,42 +12,42 @@
   --radius-row: 0.75rem;
   --radius-shell: 0.875rem;
   --radius-sheet: 1rem;
-  --color-canvas: #f4f2ee;
-  --color-text: #302824;
-  --color-text-muted: #685b54;
-  --color-surface: #fffdf9;
-  --color-surface-subtle: #ebe5de;
-  --color-border: #c9bbb0;
-  --color-border-subtle: #ddd4cc;
-  --color-accent: #a95238;
-  --color-accent-strong: #713522;
-  --color-accent-soft: #f0ddd5;
-  --color-selected: #8f452f;
-  --color-selected-text: #fffaf7;
-  --color-focus: #7d3a27;
-  --color-map-fallback: #d9ddd8;
-  --color-marker: #fffdf9;
-  --color-marker-selected: #8f452f;
-  --color-marker-border: #713522;
-  --color-marker-text: #302824;
-  --color-success: #375f47;
-  --color-warning: #7d4b16;
-  --color-danger: #8b2f2b;
-  --color-overlay: rgb(48 40 36 / 42%);
-  --color-transport-surface: #f0efeb;
-  --color-transfer-surface: #e8ecec;
-  --color-lodging-surface: #efe9e1;
-  --color-dining-surface: #f5e8e4;
-  --color-shopping-surface: #ecece5;
-  --color-sightseeing-surface: #edf0e9;
-  --color-experience-surface: #eee8ed;
-  --color-logistics-surface: #f1ece7;
-  --color-custom-surface: #ece9ef;
-  --color-route-surface: #f4f1ed;
-  --shadow-overlay: 0 4px 16px rgb(48 40 36 / 12%);
-  --shadow-sheet: 0 -8px 28px rgb(48 40 36 / 14%);
-  --shadow-marker: 0 2px 8px rgb(48 40 36 / 18%);
-  --sheet-motion-duration: 200ms;
+  --color-canvas: #f2f2f7;
+  --color-text: #1c1c1e;
+  --color-text-muted: #5b5b60;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #e9e9ed;
+  --color-border: #8e8e93;
+  --color-border-subtle: #d1d1d6;
+  --color-accent: #0057b8;
+  --color-accent-strong: #003f84;
+  --color-accent-soft: #d9ebff;
+  --color-selected: #0057b8;
+  --color-selected-text: #ffffff;
+  --color-focus: #0057b8;
+  --color-map-fallback: #e5e5ea;
+  --color-marker: #ffffff;
+  --color-marker-selected: #0057b8;
+  --color-marker-border: #003f84;
+  --color-marker-text: #1c1c1e;
+  --color-success: #24623b;
+  --color-warning: #774a00;
+  --color-danger: #9b252f;
+  --color-overlay: rgb(28 28 30 / 38%);
+  --color-transport-surface: #eef6ff;
+  --color-transfer-surface: #f2f0ff;
+  --color-lodging-surface: #f5f2ee;
+  --color-dining-surface: #fff2f2;
+  --color-shopping-surface: #f1f7f0;
+  --color-sightseeing-surface: #eef7f5;
+  --color-experience-surface: #f5f0fa;
+  --color-logistics-surface: #f4f4f6;
+  --color-custom-surface: #f3f2f7;
+  --color-route-surface: #f4f4f6;
+  --shadow-overlay: 0 2px 10px rgb(28 28 30 / 10%);
+  --shadow-sheet: 0 -1px 12px rgb(28 28 30 / 8%);
+  --shadow-marker: 0 1px 4px rgb(28 28 30 / 20%);
+  --sheet-motion-duration: 180ms;
   --shell-motion-duration: var(--sheet-motion-duration);
   --component-motion-duration: 180ms;
   --motion-easing: cubic-bezier(0.22, 1, 0.36, 1);
@@ -69,7 +69,7 @@ body,
 .map-controls,
 .map-degraded-state,
 .itinerary-sheet {
-  border-color: var(--color-border);
+  border-color: var(--color-border-subtle);
   background: var(--color-surface);
 }
 
@@ -89,8 +89,8 @@ body,
 .trip-home h2,
 .shopping-decision-panel h3 {
   color: var(--color-text);
-  font-weight: 680;
-  letter-spacing: -0.015em;
+  font-weight: 650;
+  letter-spacing: -0.012em;
   text-wrap: balance;
 }
 
@@ -108,18 +108,17 @@ body,
 }
 
 .day-header__date {
-  border-color: var(--color-border-subtle);
+  border-color: transparent;
   border-radius: var(--radius-control);
   color: var(--color-text-muted);
-  background: var(--color-surface-subtle);
+  background: transparent;
   transition:
     color var(--component-motion-duration) var(--motion-easing),
-    border-color var(--component-motion-duration) var(--motion-easing),
     background-color var(--component-motion-duration) var(--motion-easing);
 }
 
 .day-header__date[aria-pressed="true"] {
-  border-color: var(--color-accent);
+  border-color: transparent;
   color: var(--color-accent-strong);
   background: var(--color-accent-soft);
 }
@@ -135,7 +134,7 @@ body,
 .icon-control:hover:not(:disabled),
 .icon-control:active:not(:disabled) {
   color: var(--color-text);
-  background: var(--color-accent-soft);
+  background: var(--color-surface-subtle);
 }
 
 [data-touch-target="44"] {
@@ -149,7 +148,7 @@ body,
 .candidate-decision__browse-list button,
 .reservation-panel__reveal,
 .reservation-panel__item > a {
-  border: var(--border-thin) solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border-subtle);
   border-radius: var(--radius-control);
   color: var(--color-accent-strong);
   background: var(--color-surface);
@@ -185,7 +184,6 @@ body,
 
 .map-marker[data-tone="selected"],
 .map-marker--user {
-  border-color: var(--color-marker-border);
   color: var(--color-selected-text);
   background: var(--color-marker-selected);
 }
@@ -196,10 +194,11 @@ body,
 
 .map-marker[data-tone="skipped"] {
   border-style: dashed;
+  box-shadow: none;
 }
 
 .itinerary-sheet {
-  border-color: var(--color-border);
+  border-color: var(--color-border-subtle);
   border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
   background: var(--color-surface);
   box-shadow: var(--shadow-sheet);
@@ -220,13 +219,13 @@ body,
 }
 
 .itinerary-row {
-  border-color: var(--color-border-subtle);
-  border-radius: var(--radius-row);
+  border: 0;
+  border-block-end: var(--border-thin) solid var(--color-border-subtle);
+  border-radius: 0;
   color: var(--color-text);
-  background: var(--color-surface-subtle);
+  background: var(--color-surface);
   transition:
     color var(--component-motion-duration) var(--motion-easing),
-    border-color var(--component-motion-duration) var(--motion-easing),
     background-color var(--component-motion-duration) var(--motion-easing);
 }
 
@@ -267,12 +266,10 @@ body,
 }
 
 .timeline-entry[data-current="true"] .itinerary-row {
-  border-color: var(--color-accent);
   box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 .itinerary-row[aria-pressed="true"] {
-  border-color: var(--color-selected);
   color: var(--color-selected-text);
   background: var(--color-selected);
 }
@@ -299,7 +296,7 @@ body,
 
 .semantic-entry__meta {
   color: inherit;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .route-connector {
@@ -340,14 +337,15 @@ button.route-connector:active {
 
 .candidate-decision__option {
   padding: var(--space-2);
-  border: var(--border-thin) solid var(--color-border-subtle);
-  border-radius: var(--radius-control);
+  border: 0;
+  border-block-end: var(--border-thin) solid var(--color-border-subtle);
+  border-radius: 0;
   color: var(--color-text);
-  background: var(--color-surface-subtle);
+  background: var(--color-surface);
 }
 
 .candidate-decision__option:has(input:checked) {
-  border-color: var(--color-accent);
+  color: var(--color-accent-strong);
   background: var(--color-accent-soft);
 }
 
@@ -363,7 +361,7 @@ button.route-connector:active {
 }
 
 .shopping-status-select__control {
-  border: var(--border-thin) solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border-subtle);
   border-radius: var(--radius-control);
   color: var(--color-text);
   background: var(--color-surface);
@@ -375,7 +373,7 @@ button.route-connector:active {
 
 .task-widget__dialog,
 .reservation-panel__dialog {
-  border: var(--border-thin) solid var(--color-border);
+  border: var(--border-thin) solid var(--color-border-subtle);
   border-radius: var(--radius-shell);
   color: var(--color-text);
   background: var(--color-surface);
@@ -418,19 +416,19 @@ button.route-connector:active {
 
 .trip-home__identity {
   padding-block-end: var(--space-3);
-  border-block-end: var(--border-thin) solid var(--color-border);
+  border-block-end: var(--border-thin) solid var(--color-border-subtle);
 }
 
 .trip-home__identity h1 {
   margin: 0;
-  font-size: 1.75rem;
-  line-height: 1.12;
+  font-size: 1.7rem;
+  line-height: 1.14;
 }
 
 .trip-home__eyebrow {
   color: var(--color-accent-strong);
   font-size: var(--font-size-meta);
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .trip-home__pretrip,
@@ -440,18 +438,16 @@ button.route-connector:active {
 }
 
 .trip-home__day-action {
-  border: var(--border-thin) solid var(--color-border);
-  border-radius: var(--radius-row);
+  border: 0;
+  border-block-end: var(--border-thin) solid var(--color-border-subtle);
+  border-radius: 0;
   color: var(--color-text);
   background: var(--color-surface);
-  transition:
-    border-color var(--component-motion-duration) var(--motion-easing),
-    background-color var(--component-motion-duration) var(--motion-easing);
+  transition: background-color var(--component-motion-duration) var(--motion-easing);
 }
 
 .trip-home__day-action:hover,
 .trip-home__day-action:active {
-  border-color: var(--color-accent);
   background: var(--color-accent-soft);
 }
 
@@ -546,7 +542,7 @@ button.route-connector:active {
   .trip-home__day-action,
   .task-widget__dialog,
   .reservation-panel__dialog {
-    border-color: CanvasText;
+    border: var(--border-thin) solid CanvasText;
     color: CanvasText;
     background: Canvas;
     box-shadow: none;

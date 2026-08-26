@@ -1,0 +1,11 @@
+{
+  "id": "native-minimal",
+  "label": "Native Minimal",
+  "register": "product",
+  "cssFile": "recipe.css",
+  "motion": {
+    "durationMs": 180,
+    "easing": "cubic-bezier(0.22, 1, 0.36, 1)",
+    "reducedMotionMs": 0
+  }
+}
