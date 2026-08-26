@@ -43,6 +43,38 @@ function mountBaseStyles(): void {
   document.head.append(style);
 }
 
+function expectAsymmetricSafeDialogGeometry(selector: string): void {
+  const css = readFileSync("src/ui/styles/base.css", "utf8");
+  const rule = css.match(
+    /\.task-widget__dialog,\s*\.reservation-panel__dialog\s*\{([\s\S]*?)\n\}/,
+  );
+  expect(rule?.[0]).toContain(selector);
+  const body = (rule?.[1] ?? "").replace(/\s+/g, " ");
+  const independentlyPositioned =
+    body.includes(
+      "inset-inline-start: max(var(--space-3), env(safe-area-inset-left))",
+    ) &&
+    body.includes(
+      "inset-inline-end: max(var(--space-3), env(safe-area-inset-right))",
+    ) &&
+    body.includes("margin: auto");
+  const viewportWidth = 390;
+  const safeLeftWithGap = 12;
+  const safeRightWithGap = 21;
+  const maxDialogWidth = viewportWidth - safeLeftWithGap - safeRightWithGap;
+  const left = independentlyPositioned
+    ? safeLeftWithGap
+    : (viewportWidth - maxDialogWidth) / 2;
+
+  expect(left).toBe(safeLeftWithGap);
+  expect(viewportWidth - left - maxDialogWidth).toBe(safeRightWithGap);
+  expect(left + maxDialogWidth / 2).toBe(
+    (safeLeftWithGap + viewportWidth - safeRightWithGap) / 2,
+  );
+  expect(body).toContain("max-width: calc(");
+  expect(body).toContain("100vw");
+}
+
 beforeEach(() => {
   originalShowModal = Object.getOwnPropertyDescriptor(
     HTMLDialogElement.prototype,
@@ -85,6 +117,7 @@ afterEach(() => {
 describe("ReservationPanel", () => {
   it("opens one native modal and keeps private references absent until an explicit reveal", async () => {
     mountBaseStyles();
+    expectAsymmetricSafeDialogGeometry(".reservation-panel__dialog");
     const user = userEvent.setup();
     const { container } = render(<ReservationPanel reservations={reservations} />);
     const trigger = screen.getByRole("button", { name: "開啟訂位資訊" });

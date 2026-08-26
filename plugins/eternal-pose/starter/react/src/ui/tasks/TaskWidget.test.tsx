@@ -41,6 +41,38 @@ function mountBaseStyles(): void {
   document.head.append(style);
 }
 
+function expectAsymmetricSafeDialogGeometry(selector: string): void {
+  const css = readFileSync("src/ui/styles/base.css", "utf8");
+  const rule = css.match(
+    /\.task-widget__dialog,\s*\.reservation-panel__dialog\s*\{([\s\S]*?)\n\}/,
+  );
+  expect(rule?.[0]).toContain(selector);
+  const body = (rule?.[1] ?? "").replace(/\s+/g, " ");
+  const independentlyPositioned =
+    body.includes(
+      "inset-block-start: max(var(--space-4), env(safe-area-inset-top))",
+    ) &&
+    body.includes(
+      "inset-block-end: max(var(--space-4), env(safe-area-inset-bottom))",
+    ) &&
+    body.includes("margin: auto");
+  const viewportHeight = 844;
+  const safeTop = 47;
+  const safeBottom = 34;
+  const maxDialogHeight = viewportHeight - safeTop - safeBottom;
+  const top = independentlyPositioned
+    ? safeTop
+    : (viewportHeight - maxDialogHeight) / 2;
+
+  expect(top).toBe(safeTop);
+  expect(viewportHeight - top - maxDialogHeight).toBe(safeBottom);
+  expect(top + maxDialogHeight / 2).toBe(
+    (safeTop + viewportHeight - safeBottom) / 2,
+  );
+  expect(body).toContain("max-height: calc(");
+  expect(body).toContain("100dvh");
+}
+
 beforeEach(() => {
   originalShowModal = Object.getOwnPropertyDescriptor(
     HTMLDialogElement.prototype,
@@ -83,6 +115,7 @@ afterEach(() => {
 describe("TaskWidget", () => {
   it("opens one native day-task dialog outside the timeline and discloses only nested tasks", async () => {
     mountBaseStyles();
+    expectAsymmetricSafeDialogGeometry(".task-widget__dialog");
     const user = userEvent.setup();
     render(
       <>
