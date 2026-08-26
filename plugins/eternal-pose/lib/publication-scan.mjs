@@ -431,6 +431,7 @@ const GENERIC_SECRET_NAME =
 const GENERIC_SECRET_KEY =
   /(^|[^A-Za-z0-9_$])(["']?(?:[A-Za-z0-9]+[_-])*(?:api[_-]?key|secret(?:[_-]?key)?|token|password|authorization|cookie)(?:[_-][A-Za-z0-9]+)*["']?)(?![A-Za-z0-9_$])/gim;
 const CODE_SOURCE_PATH = /\.(?:[cm]?[jt]sx?|vue|svelte|astro)$/i;
+const MARKUP_SOURCE_PATH = /\.(?:vue|svelte|astro)$/i;
 const ASSIGNMENT_OPERATORS = new Set(["=", "??=", "||=", "&&="]);
 const MULTI_CHARACTER_TOKENS = [
   "??=", "||=", "&&=", "===", "!==", "...", "=>", "/>", "?.", "??", "||", "&&",
@@ -448,15 +449,23 @@ const POSTFIX_RUNTIME_OPERATORS = new Set([
 const REGEX_PREFIX_KEYWORDS = new Set([
   "case", "delete", "do", "else", "in", "instanceof", "new", "return", "throw", "typeof", "void", "yield",
 ]);
+const CONTROL_HEAD_KEYWORDS = new Set(["catch", "for", "if", "switch", "while", "with"]);
 const REGEX_PREFIX_TOKENS = new Set(["(", "[", "{", ",", ";", ":", "=", "=>", "?", "??", "||", "&&"]);
 const MEMBER_BOUNDARY_TOKENS = new Set(["=", ":", "?", "!", "(", "["]);
 const CODE_VALUE_BOUNDARIES = new Set([";", ",", "}", ")", "]", "/>"]);
 const TYPE_CONTINUATION_TOKENS = new Set([
   "|", "&", ".", "<", ",", ":", "?", "(", "[", "{", "=>", "extends", "infer", "keyof", "new", "readonly", "typeof", "unique",
 ]);
+const TYPE_CONTINUATION_PREFIXES = new Set(["as", "extends", "satisfies"]);
 const STRUCTURAL_OPENERS = new Set(["(", "[", "{"]);
 const STRUCTURAL_CLOSERS = { ")": "(", "]": "[", "}": "{" };
 const RUNTIME_REFERENCE_VALUE = /^(?:process\.env|import\.meta\.env)(?:\.|\[)/i;
+
+function lineTerminatorWidth(contents, cursor, limit) {
+  if (cursor >= limit) return 0;
+  if (contents[cursor] === "\r") return contents[cursor + 1] === "\n" && cursor + 1 < limit ? 2 : 1;
+  return contents[cursor] === "\n" || contents[cursor] === "\u2028" || contents[cursor] === "\u2029" ? 1 : 0;
+}
 
 function readQuotedLiteral(contents, start, limit) {
   const quote = contents[start];
@@ -466,13 +475,14 @@ function readQuotedLiteral(contents, start, limit) {
       if (cursor + 1 >= limit) {
         return { closed: false, end: limit, value: contents.slice(start + 1, limit) };
       }
-      cursor += 2;
+      const continuationWidth = lineTerminatorWidth(contents, cursor + 1, limit);
+      cursor += continuationWidth > 0 ? continuationWidth + 1 : 2;
       continue;
     }
     if (contents[cursor] === quote) {
       return { closed: true, end: cursor + 1, value: contents.slice(start + 1, cursor) };
     }
-    if (contents[cursor] === "\n" || contents[cursor] === "\r") {
+    if (lineTerminatorWidth(contents, cursor, limit) > 0) {
       return { closed: false, end: cursor, value: contents.slice(start + 1, cursor) };
     }
     cursor += 1;
@@ -482,6 +492,7 @@ function readQuotedLiteral(contents, start, limit) {
 
 function canStartRegex(previousToken) {
   if (previousToken === undefined) return true;
+  if (previousToken.endsControlHead || previousToken.endsStatementBlock) return true;
   if (previousToken.kind === "identifier" && REGEX_PREFIX_KEYWORDS.has(previousToken.value)) {
     return true;
   }
@@ -493,7 +504,11 @@ function readRegexLiteral(contents, start, limit) {
   let inCharacterClass = false;
   while (cursor < limit) {
     if (contents[cursor] === "\\") {
-      cursor = Math.min(cursor + 2, limit);
+      if (lineTerminatorWidth(contents, cursor + 1, limit) > 0) {
+        return { closed: false, end: cursor + 1 };
+      }
+      if (cursor + 1 >= limit) return { closed: false, end: limit };
+      cursor += 2;
       continue;
     }
     if (contents[cursor] === "[") inCharacterClass = true;
@@ -503,12 +518,49 @@ function readRegexLiteral(contents, start, limit) {
       while (cursor < limit && /[A-Za-z]/.test(contents[cursor])) cursor += 1;
       return { closed: true, end: cursor };
     }
-    if (contents[cursor] === "\n" || contents[cursor] === "\r") {
+    if (lineTerminatorWidth(contents, cursor, limit) > 0) {
       return { closed: false, end: cursor };
     }
     cursor += 1;
   }
   return { closed: false, end: limit };
+}
+
+function readIdentifierEscape(contents, start, limit) {
+  if (contents[start] !== "\\" || contents[start + 1] !== "u") return null;
+  let cursor = start + 2;
+  let digits;
+  if (contents[cursor] === "{") {
+    const close = contents.indexOf("}", cursor + 1);
+    if (close === -1 || close >= limit) return null;
+    digits = contents.slice(cursor + 1, close);
+    if (!/^[0-9A-Fa-f]{1,6}$/.test(digits)) return null;
+    cursor = close + 1;
+  } else {
+    digits = contents.slice(cursor, cursor + 4);
+    if (digits.length !== 4 || !/^[0-9A-Fa-f]{4}$/.test(digits)) return null;
+    cursor += 4;
+  }
+  const codePoint = Number.parseInt(digits, 16);
+  if (codePoint > 0x10ffff) return null;
+  return { character: String.fromCodePoint(codePoint), end: cursor };
+}
+
+function identifierCharacterAllowed(character, first) {
+  return first ? /^[A-Za-z_$]$/.test(character) : /^[A-Za-z0-9_$]$/.test(character);
+}
+
+function readIdentifierToken(contents, start, limit) {
+  let cursor = start;
+  let value = "";
+  while (cursor < limit) {
+    const escape = readIdentifierEscape(contents, cursor, limit);
+    const character = escape?.character ?? contents[cursor];
+    if (!identifierCharacterAllowed(character, value.length === 0)) break;
+    value += character;
+    cursor = escape?.end ?? cursor + 1;
+  }
+  return value === "" ? null : { end: cursor, value };
 }
 
 function scanTemplateLiteral(contents, start, limit, nestingDepth) {
@@ -577,6 +629,22 @@ function scanTemplateLiteral(contents, start, limit, nestingDepth) {
   };
 }
 
+function startsStatementBlock(previousToken) {
+  if (previousToken === undefined) return true;
+  if (previousToken.endsControlHead || previousToken.endsStatementBlock) return true;
+  if (previousToken.value === ")" || previousToken.value === "=>") return true;
+  if ([";", "{", "}"].includes(previousToken.value)) return true;
+  return previousToken.kind === "identifier" && ["do", "else", "finally", "try"].includes(previousToken.value);
+}
+
+function startsControlHead(tokens, previousToken) {
+  return (
+    previousToken?.kind === "identifier" &&
+    CONTROL_HEAD_KEYWORDS.has(previousToken.value) &&
+    ![".", "?."].includes(tokens.at(-2)?.value)
+  );
+}
+
 function tokenizeCodeSegment(
   contents,
   start = 0,
@@ -611,8 +679,8 @@ function tokenizeCodeSegment(
       continue;
     }
     if (recognizeComments && contents.startsWith("//", cursor)) {
-      const newline = contents.indexOf("\n", cursor + 2);
-      const end = newline === -1 || newline >= limit ? limit : newline;
+      let end = cursor + 2;
+      while (end < limit && lineTerminatorWidth(contents, end, limit) === 0) end += 1;
       comments.push(contents.slice(cursor + 2, end));
       cursor = end;
       continue;
@@ -655,7 +723,13 @@ function tokenizeCodeSegment(
       continue;
     }
     if (STRUCTURAL_OPENERS.has(character)) {
-      delimiterStack.push(character);
+      const context =
+        character === "(" && startsControlHead(tokens, previousSurfaceToken)
+          ? "control-head"
+          : character === "{" && startsStatementBlock(previousSurfaceToken)
+            ? "statement-block"
+            : "expression";
+      delimiterStack.push({ context, value: character });
       push("punctuation", character);
       cursor += 1;
       continue;
@@ -665,19 +739,23 @@ function tokenizeCodeSegment(
         return { analysisLimited, closedByBrace: true, comments, cursor, malformed, tokens };
       }
       const expectedOpener = STRUCTURAL_CLOSERS[character];
-      if (delimiterStack.at(-1) === expectedOpener) {
+      const opener = delimiterStack.at(-1);
+      if (opener?.value === expectedOpener) {
         delimiterStack.pop();
       } else {
         malformed = true;
       }
-      push("punctuation", character);
+      push("punctuation", character, {
+        endsControlHead: character === ")" && opener?.context === "control-head",
+        endsStatementBlock: character === "}" && opener?.context === "statement-block",
+      });
       cursor += 1;
       continue;
     }
-    const identifier = /^[A-Za-z_$][A-Za-z0-9_$]*/.exec(contents.slice(cursor, limit));
+    const identifier = readIdentifierToken(contents, cursor, limit);
     if (identifier !== null) {
-      push("identifier", identifier[0]);
-      cursor += identifier[0].length;
+      push("identifier", identifier.value);
+      cursor = identifier.end;
       continue;
     }
     const number = /^(?:\d+(?:\.\d*)?|\.\d+)/.exec(contents.slice(cursor, limit));
@@ -699,6 +777,7 @@ function tokenizeCodeSegment(
       cursor += operator.length;
       continue;
     }
+    if (character === "\\" && contents[cursor + 1] === "u") malformed = true;
     push("punctuation", character);
     cursor += 1;
   }
@@ -737,7 +816,23 @@ function looksLikeMemberBoundary(tokens, index) {
 }
 
 function continuesTypeAcrossLine(tokens, index) {
-  return TYPE_CONTINUATION_TOKENS.has(tokens[index - 1]?.value);
+  return (
+    TYPE_CONTINUATION_TOKENS.has(tokens[index - 1]?.value) ||
+    TYPE_CONTINUATION_PREFIXES.has(tokens[index]?.value)
+  );
+}
+
+function startsAsiOrMemberBoundary(tokens, index) {
+  if (continuesTypeAcrossLine(tokens, index)) return false;
+  const token = tokens[index];
+  return (
+    token !== undefined &&
+    (token.kind === "identifier" ||
+      token.value === "@" ||
+      DECLARATION_BOUNDARIES.has(token.value) ||
+      MEMBER_BOUNDARY_MODIFIERS.has(token.value) ||
+      looksLikeMemberBoundary(tokens, index))
+  );
 }
 
 function typedAssignmentValueStart(tokens, start, budget) {
@@ -753,8 +848,7 @@ function typedAssignmentValueStart(tokens, start, budget) {
       topLevel &&
       token.lineBreakBefore &&
       hasTypeToken &&
-      looksLikeMemberBoundary(tokens, cursor) &&
-      !continuesTypeAcrossLine(tokens, cursor)
+      startsAsiOrMemberBoundary(tokens, cursor)
     ) {
       return null;
     }
@@ -771,16 +865,19 @@ function typedAssignmentValueStart(tokens, start, budget) {
   return null;
 }
 
-function assignmentValueStarts(tokens, keyIndex, budget) {
-  const token = tokens[keyIndex];
-  let cursor = keyIndex + 1;
-  if (
-    (token.kind === "string" || (token.kind === "template" && token.static)) &&
-    tokens[keyIndex - 1]?.value === "[" &&
-    tokens[keyIndex + 1]?.value === "]"
-  ) {
-    cursor = keyIndex + 2;
+function staticComputedKeyEnd(tokens, keyIndex, budget) {
+  let left = keyIndex - 1;
+  let right = keyIndex + 1;
+  while (tokens[left]?.value === "(" && tokens[right]?.value === ")") {
+    if (!consumeSyntaxStep(budget)) return null;
+    left -= 1;
+    right += 1;
   }
+  return tokens[left]?.value === "[" && tokens[right]?.value === "]" ? right : null;
+}
+
+function assignmentValueStarts(tokens, keyIndex, budget, computedKeyEnd = null) {
+  let cursor = computedKeyEnd === null ? keyIndex + 1 : computedKeyEnd + 1;
   if (tokens[cursor]?.value === "?" || tokens[cursor]?.value === "!") cursor += 1;
   if (ASSIGNMENT_OPERATORS.has(tokens[cursor]?.value)) return [cursor + 1];
   if (tokens[cursor]?.value !== ":") return [];
@@ -832,8 +929,7 @@ function consumeTypeScriptPostfix(tokens, start, closers, budget) {
     if (
       topLevel &&
       token.lineBreakBefore &&
-      (DECLARATION_BOUNDARIES.has(token.value) || looksLikeMemberBoundary(tokens, cursor)) &&
-      !continuesTypeAcrossLine(tokens, cursor)
+      startsAsiOrMemberBoundary(tokens, cursor)
     ) {
       break;
     }
@@ -861,7 +957,7 @@ function isCodeValueBoundary(tokens, cursor) {
   const token = tokens[cursor];
   if (token === undefined) return true;
   if (CODE_VALUE_BOUNDARIES.has(token.value)) return true;
-  return token.lineBreakBefore && (DECLARATION_BOUNDARIES.has(token.value) || looksLikeMemberBoundary(tokens, cursor));
+  return token.lineBreakBefore && startsAsiOrMemberBoundary(tokens, cursor);
 }
 
 function secretLiteralAt(tokens, start, allowTrailingProse, budget) {
@@ -901,27 +997,114 @@ function containsTokenizedSecret(tokens, budget, allowTrailingProse = false) {
     if (!consumeSyntaxStep(budget)) return false;
     const token = tokens[index];
     const isIdentifierKey = token.kind === "identifier" && GENERIC_SECRET_NAME.test(token.value);
+    const computedKeyEnd =
+      token.kind === "string" || (token.kind === "template" && token.static)
+        ? staticComputedKeyEnd(tokens, index, budget)
+        : null;
     const isQuotedKey =
       (token.kind === "string" || (token.kind === "template" && token.static)) &&
       GENERIC_SECRET_NAME.test(token.value) &&
-      (tokens[index + 1]?.value === ":" ||
-        (tokens[index - 1]?.value === "[" && tokens[index + 1]?.value === "]"));
+      (tokens[index + 1]?.value === ":" || computedKeyEnd !== null);
     if (!isIdentifierKey && !isQuotedKey) continue;
-    for (const valueStart of assignmentValueStarts(tokens, index, budget)) {
+    for (const valueStart of assignmentValueStarts(tokens, index, budget, computedKeyEnd)) {
       if (secretLiteralAt(tokens, valueStart, allowTrailingProse, budget)) return true;
     }
   }
   return false;
 }
 
-function containsCodeGenericSecret(contents) {
+function markupNameCharacter(character) {
+  return character !== undefined && /[A-Za-z0-9_.:@#-]/.test(character);
+}
+
+function skipMarkupWhitespace(contents, start) {
+  let cursor = start;
+  while (cursor < contents.length && /\s/.test(contents[cursor])) cursor += 1;
+  return cursor;
+}
+
+function skipMarkupExpression(contents, start) {
+  let cursor = start;
+  let depth = 0;
+  while (cursor < contents.length) {
+    const character = contents[cursor];
+    if (character === '"' || character === "'" || character === "`") {
+      const literal = readQuotedLiteral(contents, cursor, contents.length);
+      cursor = Math.max(literal.end, cursor + 1);
+      continue;
+    }
+    if (character === "{") depth += 1;
+    if (character === "}") {
+      depth -= 1;
+      cursor += 1;
+      if (depth === 0) return cursor;
+      continue;
+    }
+    cursor += 1;
+  }
+  return cursor;
+}
+
+function containsStaticMarkupSecret(contents) {
+  let cursor = 0;
+  while (cursor < contents.length) {
+    const tagStart = contents.indexOf("<", cursor);
+    if (tagStart === -1) return false;
+    cursor = tagStart + 1;
+    if (!/[A-Za-z]/.test(contents[cursor] ?? "")) continue;
+    while (markupNameCharacter(contents[cursor])) cursor += 1;
+
+    while (cursor < contents.length) {
+      cursor = skipMarkupWhitespace(contents, cursor);
+      if (contents.startsWith("/>", cursor)) {
+        cursor += 2;
+        break;
+      }
+      if (contents[cursor] === ">") {
+        cursor += 1;
+        break;
+      }
+      if (contents[cursor] === "{") {
+        cursor = skipMarkupExpression(contents, cursor);
+        continue;
+      }
+
+      const nameStart = cursor;
+      while (markupNameCharacter(contents[cursor])) cursor += 1;
+      if (cursor === nameStart) {
+        cursor += 1;
+        continue;
+      }
+      const name = contents.slice(nameStart, cursor);
+      cursor = skipMarkupWhitespace(contents, cursor);
+      if (contents[cursor] !== "=") continue;
+      cursor = skipMarkupWhitespace(contents, cursor + 1);
+      const quote = contents[cursor];
+      if (quote !== '"' && quote !== "'") {
+        cursor = contents[cursor] === "{" ? skipMarkupExpression(contents, cursor) : cursor + 1;
+        continue;
+      }
+      const literal = readQuotedLiteral(contents, cursor, contents.length);
+      if (literal.closed && GENERIC_SECRET_NAME.test(name) && isSecretLiteralValue(literal.value)) {
+        return true;
+      }
+      cursor = Math.max(literal.end, cursor + 1);
+    }
+  }
+  return false;
+}
+
+function containsCodeGenericSecret(path, contents) {
   const tokenized = tokenizeCodeSegment(contents);
   const budget = createSyntaxBudget(tokenized.tokens.length);
   const codeHasSecret = containsTokenizedSecret(tokenized.tokens, budget);
   const commentHasSecret = tokenized.comments.some((comment) => containsNonCodeGenericSecret(comment));
   return {
     analysisLimited: tokenized.analysisLimited || budget.exhausted,
-    hasSecret: codeHasSecret || commentHasSecret,
+    hasSecret:
+      codeHasSecret ||
+      commentHasSecret ||
+      (MARKUP_SOURCE_PATH.test(path) && containsStaticMarkupSecret(contents)),
     malformed: tokenized.malformed,
   };
 }
@@ -952,7 +1135,7 @@ function containsNonCodeGenericSecret(contents) {
 }
 
 function containsGenericSecretLiteral(path, contents) {
-  if (CODE_SOURCE_PATH.test(path)) return containsCodeGenericSecret(contents);
+  if (CODE_SOURCE_PATH.test(path)) return containsCodeGenericSecret(path, contents);
   return {
     analysisLimited: false,
     hasSecret: containsNonCodeGenericSecret(contents),

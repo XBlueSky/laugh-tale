@@ -4,6 +4,8 @@ import { realpath as realpathPath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { Script } from "node:vm";
+import ts from "typescript";
 import { afterEach, describe, expect, test } from "vitest";
 
 interface PublicationFinding {
@@ -68,6 +70,15 @@ function findingCodes(findings: PublicationFinding[]): string[] {
 
 function findingAt(findings: PublicationFinding[], path: string, code?: string): boolean {
   return findings.some((finding) => finding.path === path && (code === undefined || finding.code === code));
+}
+
+function expectTypeScriptSyntaxValid(source: string): void {
+  const diagnostics = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2023 },
+    fileName: "scanner-fixture.ts",
+    reportDiagnostics: true,
+  }).diagnostics ?? [];
+  expect(diagnostics.filter(({ category }) => category === ts.DiagnosticCategory.Error)).toEqual([]);
 }
 
 function createValidGeneratedProject(root: string): void {
@@ -623,6 +634,153 @@ describe("publication safety findings", () => {
     ["runtime-config.yaml", "apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY\n"],
     ["runtime-config.json", '{"apiKey":"process.env.PRIVATE_TOKEN"}\n'],
   ])("accepts a non-code runtime environment reference in %s", async (path, contents) => {
+    const root = createTemporaryRoot();
+    writeFixture(root, path, contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, path, "credential.generic-secret")).toBe(false);
+  });
+
+  test("stops a postfix type at an ASI-delimited member assignment", async () => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", "A".repeat(28)].join("");
+    const source = [
+      `const apiKey = "${secret}" as string`,
+      "config.harmless = runtimeConfig()",
+      "",
+    ].join("\n");
+    expectTypeScriptSyntaxValid(source);
+    writeFixture(root, "src/postfix-member-asi.ts", source);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/postfix-member-asi.ts", "credential.generic-secret")).toBe(true);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test("does not cross an uninitialized typed declaration into a member assignment", async () => {
+    const root = createTemporaryRoot();
+    const source = [
+      "let apiKey: string",
+      'config.harmless = "runtime_harmless_literal_value"',
+      "",
+    ].join("\n");
+    expectTypeScriptSyntaxValid(source);
+    writeFixture(root, "src/typed-member-asi.ts", source);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/typed-member-asi.ts", "credential.generic-secret")).toBe(false);
+  });
+
+  test.each([
+    {
+      name: "control head",
+      source: (secret: string) => `if (ready) /apiKey="${secret}";/.test(value);\n`,
+    },
+    {
+      name: "statement block",
+      source: (secret: string) => `{} /apiKey="${secret}";/.test(value);\n`,
+    },
+  ])("accepts a regex expression statement after a $name", async ({ name, source }) => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", name[0], "R".repeat(27)].join("");
+    const contents = source(secret);
+    expect(() => new Script(contents)).not.toThrow();
+    writeFixture(root, "src/regex-statement.js", contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/regex-statement.js", "credential.generic-secret")).toBe(false);
+    expect(findingAt(findings, "src/regex-statement.js", "scan.malformed-code")).toBe(false);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test.each([
+    "const ratio = service.if(ready) / divisor;\n",
+    "const ratio = {} / divisor;\n",
+  ])("keeps a slash in the parser-valid division expression %#", async (contents) => {
+    const root = createTemporaryRoot();
+    expect(() => new Script(contents)).not.toThrow();
+    writeFixture(root, "src/division-expression.js", contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/division-expression.js", "scan.malformed-code")).toBe(false);
+    expect(findingAt(findings, "src/division-expression.js", "credential.generic-secret")).toBe(false);
+  });
+
+  test("fails closed for a regex literal escaped across an LF", async () => {
+    const root = createTemporaryRoot();
+    const contents = ["const matcher = /abc", "\\", "\n", "/;\n"].join("");
+    expect(() => new Script(contents)).toThrow(SyntaxError);
+    writeFixture(root, "src/escaped-regex-line.js", contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/escaped-regex-line.js", "scan.malformed-code")).toBe(true);
+  });
+
+  test("accepts a quoted string continued across CRLF", async () => {
+    const root = createTemporaryRoot();
+    const contents = ['const note = "hello', "\\", "\r\n", 'world";\n'].join("");
+    expect(() => new Script(contents)).not.toThrow();
+    writeFixture(root, "src/crlf-string-continuation.js", contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/crlf-string-continuation.js", "scan.malformed-code")).toBe(false);
+  });
+
+  test("detects a credential literal assigned through an escaped identifier", async () => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", "E".repeat(28)].join("");
+    const contents = ["const api", "\\", `u004bey = "${secret}";\n`].join("");
+    expectTypeScriptSyntaxValid(contents);
+    writeFixture(root, "src/escaped-key.ts", contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/escaped-key.ts", "credential.generic-secret")).toBe(true);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test("unwraps balanced parentheses around a static computed key", async () => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", "P".repeat(28)].join("");
+    const contents = `config[(("apiKey"))] = "${secret}";\n`;
+    expect(() => new Script(contents)).not.toThrow();
+    writeFixture(root, "src/parenthesized-key.js", contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/parenthesized-key.js", "credential.generic-secret")).toBe(true);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test.each(["vue", "svelte", "astro"])(
+    "detects a static hyphenated markup credential attribute in .%s",
+    async (extension) => {
+      const root = createTemporaryRoot();
+      const secret = ["runtime_", extension[0], "H".repeat(27)].join("");
+      const path = `src/static-attribute.${extension}`;
+      writeFixture(root, path, `<Map api-key="${secret}" />\n`);
+
+      const findings = await scanPublication(root);
+
+      expect(findingAt(findings, path, "credential.generic-secret")).toBe(true);
+      expect(JSON.stringify(findings)).not.toContain(secret);
+    },
+  );
+
+  test.each([
+    ["src/dynamic-attribute.vue", '<Map :api-key="runtimeKey" />\n'],
+    ["src/dynamic-attribute.svelte", "<Map api-key={runtimeKey} />\n"],
+    ["src/dynamic-attribute.astro", "<Map api-key={runtimeKey} />\n"],
+    ["src/escaped-runtime.ts", ["const api", "\\", "u004bey = options.apiKey;\n"].join("")],
+    ["src/dynamic-computed.ts", 'config[((runtimeKey))] = "runtime_harmless_literal_value";\n'],
+  ])("accepts the dynamic static-key lookalike in %s", async (path, contents) => {
     const root = createTemporaryRoot();
     writeFixture(root, path, contents);
 
