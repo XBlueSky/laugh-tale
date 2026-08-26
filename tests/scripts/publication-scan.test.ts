@@ -1076,6 +1076,264 @@ describe("publication safety findings", () => {
     expect(findingAt(findings, path, "credential.generic-secret")).toBe(false);
   });
 
+  test.each([
+    {
+      name: "private field initializer",
+      source: (secret: string) => `class Vault { #apiKey = "${secret}"; }\n`,
+    },
+    {
+      name: "private member assignment",
+      source: (secret: string) => [
+        "class Vault {",
+        "  #apiKey = runtimeConfig();",
+        `  replace() { this.#apiKey = "${secret}"; }`,
+        "}",
+        "",
+      ].join("\n"),
+    },
+  ])("rejects a literal credential in a $name", async ({ name, source }) => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", name[0], "P".repeat(27)].join("");
+    const contents = source(secret);
+    expectTypeScriptSyntaxValid(contents);
+    writeFixture(root, "src/private-key.ts", contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/private-key.ts", "credential.generic-secret")).toBe(true);
+    expect(findingAt(findings, "src/private-key.ts", "scan.malformed-code")).toBe(false);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test("accepts runtime values for private credential-shaped fields and members", async () => {
+    const root = createTemporaryRoot();
+    const contents = [
+      "class Vault {",
+      "  #apiKey = runtimeConfig();",
+      "  replace(options: { apiKey: string }) { this.#apiKey = options.apiKey; }",
+      "}",
+      "",
+    ].join("\n");
+    expectTypeScriptSyntaxValid(contents);
+    writeFixture(root, "src/private-runtime.ts", contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/private-runtime.ts", "credential.generic-secret")).toBe(false);
+    expect(findingAt(findings, "src/private-runtime.ts", "scan.malformed-code")).toBe(false);
+  });
+
+  test.each([
+    ["event shorthand with modifiers", (secret: string) => `<button @click.stop.prevent="apiKey = '${secret}'; submit()" />\n`],
+    ["v-on argument with modifiers", (secret: string) => `<button v-on:click.once="apiKey = '${secret}'; submit()" />\n`],
+  ])("scans Vue $name as handler statements", async (name, source) => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", name[0], "V".repeat(27)].join("");
+    writeFixture(root, "src/vue-handler.vue", source(secret));
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/vue-handler.vue", "credential.generic-secret")).toBe(true);
+    expect(findingAt(findings, "src/vue-handler.vue", "scan.malformed-code")).toBe(false);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test.each([
+    ["v-if", (secret: string) => `apiKey = '${secret}'`],
+    ["v-else-if", (secret: string) => `apiKey = '${secret}'`],
+    ["v-show", (secret: string) => `apiKey = '${secret}'`],
+    ["v-html", (secret: string) => `(apiKey = '${secret}', html)`],
+    ["v-text", (secret: string) => `(apiKey = '${secret}', text)`],
+    ["v-model", (secret: string) => `form[apiKey = '${secret}']`],
+  ])("scans the Vue %s expression directive", async (directive, value) => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", directive[2], "E".repeat(27)].join("");
+    writeFixture(root, "src/vue-expression.vue", `<section ${directive}="${value(secret)}" />\n`);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/vue-expression.vue", "credential.generic-secret")).toBe(true);
+    expect(findingAt(findings, "src/vue-expression.vue", "scan.malformed-code")).toBe(false);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test.each([
+    ["v-for iterable", (secret: string) => `<li v-for="item in (apiKey = '${secret}', items)" />\n`],
+    ["dynamic bind argument", (secret: string) => `<Map :[field].prop="apiKey = '${secret}'" />\n`],
+    ["dynamic event argument", (secret: string) => `<Map @[event].once="apiKey = '${secret}'; run()" />\n`],
+    ["custom directive", (secret: string) => `<Map v-audit="apiKey = '${secret}'" />\n`],
+  ])("scans the Vue %s executable surface", async (surface, source) => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", surface[0], "D".repeat(27)].join("");
+    writeFixture(root, "src/vue-surface.vue", source(secret));
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/vue-surface.vue", "credential.generic-secret")).toBe(true);
+    expect(findingAt(findings, "src/vue-surface.vue", "scan.malformed-code")).toBe(false);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test.each([
+    ["src/vue-runtime-handler.vue", '<button @click.stop="submit(options.apiKey); count += 1" />\n'],
+    ["src/vue-runtime-expression.vue", '<section v-if="runtimeConfig()" v-show="options.visible" />\n'],
+    ["src/vue-runtime-for.vue", '<li v-for="(item, index) in runtimeItems" :key="item.id" />\n'],
+    ["src/vue-runtime-dynamic.vue", '<Map :[field].prop="runtimeKey" @[event].once="handle(runtimeKey)" />\n'],
+    ["src/vue-static-custom.vue", '<Map custom-handler="apiKey = \'runtime_harmless_literal_value\'" />\n'],
+  ])("accepts the harmless Vue surface in %s", async (path, contents) => {
+    const root = createTemporaryRoot();
+    writeFixture(root, path, contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, path, "credential.generic-secret")).toBe(false);
+    expect(findingAt(findings, path, "scan.malformed-code")).toBe(false);
+  });
+
+  test.each([
+    ["src/vue-malformed-handler.vue", '<button @click="apiKey =" />\n'],
+    ["src/vue-malformed-directive.vue", '<Map v-audit="apiKey =" />\n'],
+    ["src/vue-malformed-argument.vue", '<Map :[field="runtimeKey" />\n'],
+    ["src/vue-empty-event.vue", '<button @="run()" />\n'],
+  ])("fails closed without echo for malformed Vue syntax in %s", async (path, contents) => {
+    const root = createTemporaryRoot();
+    writeFixture(root, path, contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, path, "scan.malformed-code")).toBe(true);
+    expect(JSON.stringify(findings)).not.toContain(contents);
+  });
+
+  test.each([
+    ["attribute pipe modifier", (secret: string) => `<button on:click|once|preventDefault={() => { apiKey = "${secret}"; }} />\n`],
+    ["ordinary brace expression", (secret: string) => `<p>{apiKey = "${secret}"}</p>\n`],
+    ["spread expression", (secret: string) => `<Widget {...{ apiKey: "${secret}" }} />\n`],
+    ["if block", (secret: string) => `{#if apiKey = "${secret}"}<p />{/if}\n`],
+    ["each iterable", (secret: string) => `{#each (apiKey = "${secret}", items) as item}<p />{/each}\n`],
+    ["await with then shorthand", (secret: string) => `{#await (apiKey = "${secret}", promise) then value}<p />{/await}\n`],
+    ["await expression containing then text", (secret: string) => `{#await (apiKey = "${secret}", getPromise(" then "))}<p />{/await}\n`],
+    ["else-if branch", (secret: string) => `{:else if apiKey = "${secret}"}\n`],
+    ["then shorthand", (secret: string) => `{:then apiKey = "${secret}"}\n`],
+    ["catch shorthand", (secret: string) => `{:catch apiKey = "${secret}"}\n`],
+    ["html tag", (secret: string) => `{@html apiKey = "${secret}"}\n`],
+    ["debug tag", (secret: string) => `{@debug apiKey = "${secret}"}\n`],
+    ["const tag", (secret: string) => `{@const apiKey = "${secret}"}\n`],
+    ["render tag", (secret: string) => `{@render render(apiKey = "${secret}")}\n`],
+  ])("scans a credential assignment in the Svelte %s", async (surface, source) => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", surface[0], "S".repeat(27)].join("");
+    writeFixture(root, "src/svelte-surface.svelte", source(secret));
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/svelte-surface.svelte", "credential.generic-secret")).toBe(true);
+    expect(findingAt(findings, "src/svelte-surface.svelte", "scan.malformed-code")).toBe(false);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test.each([
+    ["src/svelte-runtime-event.svelte", '<button on:click|once={handleClick} />\n'],
+    ["src/svelte-runtime-if.svelte", "{#if ready}<p />{:else if later}<p />{:else}<p />{/if}\n"],
+    ["src/svelte-runtime-each.svelte", "{#each items as item, index (item.id)}<p />{/each}\n"],
+    ["src/svelte-runtime-await.svelte", "{#await promise then value}<p />{:catch error}<p />{/await}\n"],
+    ["src/svelte-runtime-await-text.svelte", "{#await getPromise(\" then \")}<p />{/await}\n"],
+    ["src/svelte-runtime-tags.svelte", "{@html safeHtml}{@debug safeValue}{@const value = derive()}{@render render(value)}\n"],
+  ])("accepts bounded harmless Svelte syntax in %s", async (path, contents) => {
+    const root = createTemporaryRoot();
+    writeFixture(root, path, contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, path, "credential.generic-secret")).toBe(false);
+    expect(findingAt(findings, path, "scan.malformed-code")).toBe(false);
+  });
+
+  test.each([
+    ["src/svelte-malformed-block.svelte", "{#await promise then}<p />\n"],
+    ["src/svelte-malformed-tag.svelte", "{@render apiKey = }\n"],
+    ["src/svelte-empty-if.svelte", "{#if}<p />\n"],
+    ["src/svelte-unsupported-block.svelte", "{#key runtimeConfig()}<p />{/key}\n"],
+  ])("fails closed without echo for malformed Svelte syntax in %s", async (path, contents) => {
+    const root = createTemporaryRoot();
+    writeFixture(root, path, contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, path, "scan.malformed-code")).toBe(true);
+    expect(JSON.stringify(findings)).not.toContain(contents);
+  });
+
+  test.each([
+    ["ordinary expression", (secret: string) => `<p>{apiKey = "${secret}"}</p>\n`],
+    ["spread expression", (secret: string) => `<Widget {...{ apiKey: "${secret}" }} />\n`],
+  ])("scans the Astro %s surface", async (surface, source) => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", surface[0], "A".repeat(27)].join("");
+    writeFixture(root, "src/astro-surface.astro", source(secret));
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/astro-surface.astro", "credential.generic-secret")).toBe(true);
+    expect(findingAt(findings, "src/astro-surface.astro", "scan.malformed-code")).toBe(false);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test("accepts a harmless Astro brace comment", async () => {
+    const root = createTemporaryRoot();
+    writeFixture(root, "src/astro-comment.astro", "{/* public rendering note */}<p />\n");
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/astro-comment.astro", "credential.generic-secret")).toBe(false);
+    expect(findingAt(findings, "src/astro-comment.astro", "scan.malformed-code")).toBe(false);
+  });
+
+  test("accepts an Astro expression preceded by a harmless brace comment", async () => {
+    const root = createTemporaryRoot();
+    writeFixture(root, "src/astro-comment-expression.astro", "{/* rendering note */ runtimeValue}<p />\n");
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/astro-comment-expression.astro", "credential.generic-secret")).toBe(false);
+    expect(findingAt(findings, "src/astro-comment-expression.astro", "scan.malformed-code")).toBe(false);
+  });
+
+  test("rejects a credential-shaped Astro brace comment without echoing it", async () => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", "C".repeat(28)].join("");
+    writeFixture(root, "src/astro-secret-comment.astro", `{/* apiKey = ${secret} trailing prose */}<p />\n`);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/astro-secret-comment.astro", "credential.generic-secret")).toBe(true);
+    expect(findingAt(findings, "src/astro-secret-comment.astro", "scan.malformed-code")).toBe(false);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test("rejects a credential-shaped Astro comment before an expression", async () => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", "B".repeat(28)].join("");
+    writeFixture(root, "src/astro-secret-comment-expression.astro", `{/* apiKey = ${secret} */ runtimeValue}<p />\n`);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/astro-secret-comment-expression.astro", "credential.generic-secret")).toBe(true);
+    expect(findingAt(findings, "src/astro-secret-comment-expression.astro", "scan.malformed-code")).toBe(false);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test("fails closed for an unterminated Astro brace comment", async () => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", "U".repeat(28)].join("");
+    writeFixture(root, "src/astro-malformed-comment.astro", `{/* apiKey = ${secret} }<p />\n`);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/astro-malformed-comment.astro", "scan.malformed-code")).toBe(true);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
   const quotedSourceSecret = ["runtime_", "Q".repeat(28)].join("");
   const templateSourceSecret = ["runtime_", "B".repeat(28)].join("");
   const jsonSecret = ["runtime_", "J".repeat(28)].join("");

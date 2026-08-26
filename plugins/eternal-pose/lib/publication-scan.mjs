@@ -593,6 +593,7 @@ function staticLiteralValue(node) {
 function staticPropertyName(node) {
   const current = unwrapTransparentExpression(node);
   if (current?.type === "Identifier" || current?.type === "JSXIdentifier") return current.name;
+  if (current?.type === "PrivateName") return staticPropertyName(current.id);
   return staticLiteralValue(current);
 }
 
@@ -643,6 +644,7 @@ function astNodeHasDirectSecret(node) {
     case "ObjectProperty":
       return directSecretPair(propertyDefinitionKeyName(node), node.value);
     case "ClassProperty":
+    case "ClassPrivateProperty":
     case "ClassAccessorProperty":
     case "TSPropertySignature":
       return directSecretPair(propertyDefinitionKeyName(node), node.value ?? node.initializer);
@@ -720,22 +722,115 @@ function analyzeProgramSource(path, contents, state, languageHint) {
   }
 }
 
-function normalizeFrameworkExpression(contents, componentType) {
+function componentBindingArrow(contents) {
+  const binding = contents.trim();
+  if (binding === "") return null;
+  return binding.startsWith("(") && binding.endsWith(")")
+    ? `${binding} => undefined`
+    : `(${binding}) => undefined`;
+}
+
+function componentExpressionParses(path, contents, state) {
+  consumeExpressionProbe(state, contents);
+  try {
+    parseBabelExpression(contents, componentExpressionParserOptions(path));
+    return true;
+  } catch (error) {
+    if (isParserSyntaxError(error)) return false;
+    throw new CodeAnalysisLimitError();
+  }
+}
+
+function svelteBindingAndKey(path, contents, state) {
+  const directBinding = componentBindingArrow(contents);
+  if (directBinding !== null && componentExpressionParses(path, directBinding, state)) {
+    return { binding: directBinding, key: null };
+  }
+
+  const keyCandidates = [...contents.matchAll(/\s+\(/g)].reverse();
+  for (const candidate of keyCandidates) {
+    const keyStart = candidate.index + candidate[0].length - 1;
+    const binding = componentBindingArrow(contents.slice(0, candidate.index));
+    const key = contents.slice(keyStart).trim();
+    if (
+      binding !== null &&
+      componentExpressionParses(path, binding, state) &&
+      componentExpressionParses(path, key, state)
+    ) {
+      return { binding, key };
+    }
+  }
+  return null;
+}
+
+function normalizeSvelteEachExpression(path, remainder, state) {
+  const candidates = [...remainder.matchAll(/\s+as\s+/g)];
+  for (const candidate of candidates) {
+    const iterable = remainder.slice(0, candidate.index).trim();
+    const bindingAndKey = svelteBindingAndKey(
+      path,
+      remainder.slice(candidate.index + candidate[0].length),
+      state,
+    );
+    if (
+      iterable !== "" &&
+      bindingAndKey !== null &&
+      componentExpressionParses(path, iterable, state)
+    ) {
+      return bindingAndKey.key === null
+        ? `[(${iterable}), (${bindingAndKey.binding})]`
+        : `[(${iterable}), (${bindingAndKey.binding}), (${bindingAndKey.key})]`;
+    }
+  }
+  return "(";
+}
+
+function normalizeSvelteAwaitExpression(path, remainder, state) {
+  if (componentExpressionParses(path, remainder, state)) return remainder;
+  const candidates = [...remainder.matchAll(/\s+(?:then|catch)\s+/g)];
+  for (const candidate of candidates) {
+    const awaited = remainder.slice(0, candidate.index).trim();
+    const bindingArrow = componentBindingArrow(
+      remainder.slice(candidate.index + candidate[0].length),
+    );
+    if (
+      awaited !== "" &&
+      bindingArrow !== null &&
+      componentExpressionParses(path, awaited, state) &&
+      componentExpressionParses(path, bindingArrow, state)
+    ) {
+      return `[(${awaited}), (${bindingArrow})]`;
+    }
+  }
+  return "(";
+}
+
+function normalizeFrameworkExpression(path, contents, componentType, state) {
   const expression = contents.trim();
   if (expression.startsWith("...")) return "[" + expression + "]";
   if (componentType !== "svelte") return expression;
-  if (/^\/[A-Za-z][\w-]*$/.test(expression) || /^:else$/.test(expression)) return "undefined";
   const directive = /^([#:@/])([A-Za-z][\w-]*)(?:\s+([\s\S]*))?$/.exec(expression);
   if (directive === null) return expression;
   const [, marker, name, remainder = ""] = directive;
-  if (marker === "/") return "undefined";
-  if (marker === ":" && name === "else" && remainder.startsWith("if ")) return remainder.slice(3);
-  if (marker === "#" && name === "each") {
-    const asIndex = remainder.indexOf(" as ");
-    return asIndex === -1 ? remainder : remainder.slice(0, asIndex);
+  if (marker === "/") {
+    return remainder === "" && ["if", "each", "await"].includes(name) ? "undefined" : "(";
   }
-  if (marker === "@" && name === "const") return remainder;
-  return remainder === "" ? "undefined" : remainder;
+  if (marker === ":" && name === "else") {
+    if (remainder === "") return "undefined";
+    return remainder.startsWith("if ") ? remainder.slice(3) : "(";
+  }
+  if (marker === ":" && (name === "then" || name === "catch")) {
+    const bindingArrow = componentBindingArrow(remainder);
+    return bindingArrow === null ? "undefined" : bindingArrow;
+  }
+  if (marker === "#" && name === "each") return normalizeSvelteEachExpression(path, remainder, state);
+  if (marker === "#" && name === "await") return normalizeSvelteAwaitExpression(path, remainder, state);
+  if (marker === "#" && name === "if") return remainder === "" ? "(" : remainder;
+  if (marker === "@" && name === "debug") return remainder === "" ? "undefined" : remainder;
+  if (marker === "@" && ["html", "const", "render"].includes(name)) {
+    return remainder === "" ? "(" : remainder;
+  }
+  return "(";
 }
 
 function consumeExpressionProbe(state, contents) {
@@ -750,13 +845,52 @@ function consumeExpressionProbe(state, contents) {
 }
 
 function tryParseComponentExpression(path, contents, componentType, state) {
-  const expression = normalizeFrameworkExpression(contents, componentType);
+  const trimmed = contents.trim();
+  if (componentType === "astro" && trimmed.startsWith("/*")) {
+    const comment = /^\/\*([\s\S]*)\*\/$/.exec(trimmed);
+    if (comment !== null) {
+      consumeExpressionProbe(state, trimmed);
+      return {
+        comments: [{ type: "CommentBlock", value: comment[1] }],
+        node: { type: "Identifier", name: "undefined" },
+      };
+    }
+  }
+  const expression = normalizeFrameworkExpression(path, contents, componentType, state);
   consumeExpressionProbe(state, expression);
   try {
     const node = parseBabelExpression(expression, componentExpressionParserOptions(path));
     return { comments: node.comments ?? [], node };
   } catch (error) {
     if (isParserSyntaxError(error)) return null;
+    throw new CodeAnalysisLimitError();
+  }
+}
+
+function analyzeComponentExpressionSource(path, contents, componentType, state) {
+  const expression = tryParseComponentExpression(path, contents, componentType, state);
+  if (expression === null) {
+    state.malformed = true;
+    return null;
+  }
+  analyzeComponentExpression(expression, state);
+  return expression;
+}
+
+function analyzeComponentStatements(path, contents, state) {
+  consumeExpressionProbe(state, contents);
+  try {
+    const ast = parseBabelProgram(contents, {
+      ...componentExpressionParserOptions(path),
+      allowReturnOutsideFunction: true,
+    });
+    analyzeAst(ast.program, ast.comments, state);
+  } catch (error) {
+    if (error instanceof CodeAnalysisLimitError || error instanceof RangeError) throw error;
+    if (isParserSyntaxError(error)) {
+      state.malformed = true;
+      return;
+    }
     throw new CodeAnalysisLimitError();
   }
 }
@@ -791,7 +925,10 @@ function analyzeComponentExpression(expression, state) {
 }
 
 function markupNameCharacter(character) {
-  return character !== undefined && /[A-Za-z0-9_.:@#-]/.test(character);
+  return (
+    character !== undefined &&
+    (character === "[" || character === "]" || /[A-Za-z0-9_.:@#|-]/.test(character))
+  );
 }
 
 function skipMarkupWhitespace(contents, start) {
@@ -807,41 +944,118 @@ function readMarkupQuotedValue(contents, start) {
   return { closed: true, end: end + 1, value: contents.slice(start + 1, end) };
 }
 
-function markupBinding(name, componentType) {
-  let normalized = name;
-  let expression = false;
-  if (componentType === "vue" && normalized.startsWith(":")) {
-    normalized = normalized.slice(1);
-    expression = true;
-  } else if (componentType === "vue" && normalized.startsWith("v-bind:")) {
-    normalized = normalized.slice("v-bind:".length);
-    expression = true;
-  } else if (componentType === "vue" && normalized === "v-bind") {
-    normalized = "";
-    expression = true;
+function balancedMarkupAttributeName(name) {
+  let depth = 0;
+  for (const character of name) {
+    if (character === "[") depth += 1;
+    if (character === "]") {
+      depth -= 1;
+      if (depth < 0) return false;
+    }
   }
-  normalized = normalized.split(".")[0];
-  return { expression, name: normalized };
+  return depth === 0;
+}
+
+function stripDirectiveModifiers(name) {
+  let bracketDepth = 0;
+  for (let cursor = 0; cursor < name.length; cursor += 1) {
+    if (name[cursor] === "[") bracketDepth += 1;
+    else if (name[cursor] === "]") bracketDepth -= 1;
+    else if (name[cursor] === "." && bracketDepth === 0) return name.slice(0, cursor);
+  }
+  return name;
+}
+
+function vueDirectiveDescriptor(name) {
+  if (!balancedMarkupAttributeName(name)) return { malformed: true };
+  const normalized = stripDirectiveModifiers(name);
+  if ([":", "@", "v-bind:", "v-on:"].includes(normalized)) return { malformed: true };
+  let directive;
+  let argument = "";
+  if (normalized.startsWith(":")) {
+    directive = "bind";
+    argument = normalized.slice(1);
+  } else if (normalized.startsWith("@")) {
+    directive = "on";
+    argument = normalized.slice(1);
+  } else if (normalized.startsWith("v-")) {
+    const separator = normalized.indexOf(":", 2);
+    directive = normalized.slice(2, separator === -1 ? undefined : separator);
+    argument = separator === -1 ? "" : normalized.slice(separator + 1);
+  } else {
+    return null;
+  }
+
+  if (directive === "" || argument === "[]") return { malformed: true };
+  let dynamicArgument = null;
+  let bindingName = "";
+  if (argument.startsWith("[") || argument.endsWith("]")) {
+    if (!argument.startsWith("[") || !argument.endsWith("]")) return { malformed: true };
+    dynamicArgument = argument.slice(1, -1).trim();
+    if (dynamicArgument === "") return { malformed: true };
+  } else if (directive === "bind") {
+    bindingName = argument;
+  }
+
+  let valueKind = "expression";
+  if (directive === "on" && argument !== "") valueKind = "statements";
+  else if (directive === "for") valueKind = "vue-for";
+  return { bindingName, directive, dynamicArgument, malformed: false, valueKind };
+}
+
+function analyzeVueForDirective(path, contents, state) {
+  const candidates = [...contents.matchAll(/\s+(?:in|of)\s+/g)].reverse();
+  for (const candidate of candidates) {
+    const separator = candidate.index;
+    const bindingArrow = componentBindingArrow(contents.slice(0, separator));
+    const iterableSource = contents.slice(separator + candidate[0].length).trim();
+    if (bindingArrow === null || iterableSource === "") continue;
+    const binding = tryParseComponentExpression(path, bindingArrow, "vue", state);
+    const iterable = tryParseComponentExpression(path, iterableSource, "vue", state);
+    if (binding === null || iterable === null) continue;
+    analyzeComponentExpression(binding, state);
+    analyzeComponentExpression(iterable, state);
+    return;
+  }
+  state.malformed = true;
+}
+
+function analyzeVueDirectiveArgument(path, descriptor, state) {
+  if (descriptor.dynamicArgument === null) return;
+  analyzeComponentExpressionSource(path, descriptor.dynamicArgument, "vue", state);
 }
 
 function analyzeMarkupAttribute(path, componentType, name, value, valueType, state) {
-  const binding = markupBinding(name, componentType);
+  const vueDescriptor = componentType === "vue" ? vueDirectiveDescriptor(name) : null;
+  if (vueDescriptor?.malformed) {
+    state.malformed = true;
+    return;
+  }
+  if (vueDescriptor !== null) analyzeVueDirectiveArgument(path, vueDescriptor, state);
+  if (state.malformed || valueType === "absent") return;
+
   if (valueType === "expression") {
     analyzeComponentExpression(value, state);
-    if (directSecretPair(binding.name, value.node)) state.hasSecret = true;
+    const bindingName = vueDescriptor?.bindingName ?? name;
+    if (directSecretPair(bindingName, value.node)) state.hasSecret = true;
     return;
   }
-  if (binding.expression) {
-    const expression = tryParseComponentExpression(path, value, componentType, state);
-    if (expression === null) {
-      state.malformed = true;
-      return;
+  if (vueDescriptor?.valueKind === "statements") {
+    analyzeComponentStatements(path, value, state);
+    return;
+  }
+  if (vueDescriptor?.valueKind === "vue-for") {
+    analyzeVueForDirective(path, value, state);
+    return;
+  }
+  if (vueDescriptor !== null) {
+    const expression = analyzeComponentExpressionSource(path, value, componentType, state);
+    if (expression !== null && directSecretPair(vueDescriptor.bindingName, expression.node)) {
+      state.hasSecret = true;
     }
-    analyzeComponentExpression(expression, state);
-    if (directSecretPair(binding.name, expression.node)) state.hasSecret = true;
     return;
   }
-  if (directSecretPair(binding.name, { type: "StringLiteral", value })) state.hasSecret = true;
+  if (directSecretPair(name, { type: "StringLiteral", value })) state.hasSecret = true;
 }
 
 function parseMarkupStartTag(path, contents, start, componentType, state) {
@@ -878,9 +1092,14 @@ function parseMarkupStartTag(path, contents, start, componentType, state) {
       return { attributes, cursor: contents.length, selfClosing: false, tagName };
     }
     const attributeName = contents.slice(attributeStart, cursor);
+    if (!balancedMarkupAttributeName(attributeName)) {
+      state.malformed = true;
+      return { attributes, cursor: contents.length, selfClosing: false, tagName };
+    }
     cursor = skipMarkupWhitespace(contents, cursor);
     if (contents[cursor] !== "=") {
       attributes.set(attributeName.toLowerCase(), "");
+      analyzeMarkupAttribute(path, componentType, attributeName, "", "absent", state);
       continue;
     }
     cursor = skipMarkupWhitespace(contents, cursor + 1);
