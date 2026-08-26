@@ -84,8 +84,11 @@ const expectedMetadataById: Record<ExpectedRecipeId, RecipeMetadata> = {
 
 const runtimeGeometryTokens = new Set([
   "--header-clearance",
+  "--map-padding-bottom",
+  "--map-padding-top",
   "--safe-area-bottom",
   "--safe-area-top",
+  "--sheet-ceiling",
 ]);
 
 const runtimeLayoutProperties = new Set([
@@ -183,6 +186,96 @@ const runtimeOwnedSelectors = [
   ".task-widget__dialog",
   ".reservation-panel__dialog",
   ".itinerary-map",
+] as const;
+
+const dimensionProperties = new Set([
+  "block-size",
+  "height",
+  "inline-size",
+  "max-block-size",
+  "max-height",
+  "max-inline-size",
+  "max-width",
+  "min-block-size",
+  "min-height",
+  "min-inline-size",
+  "min-width",
+  "width",
+]);
+
+const sheetDescendantPropertyMatrix = new Map<string, ReadonlySet<string>>([
+  [
+    "itinerary-sheet__drag-handle",
+    new Set([
+      ...dimensionProperties,
+      "flex",
+      "flex-basis",
+      "flex-grow",
+      "flex-shrink",
+      "pointer-events",
+      "touch-action",
+    ]),
+  ],
+  [
+    "itinerary-sheet__toolbar",
+    new Set([
+      ...dimensionProperties,
+      "display",
+      "flex",
+      "flex-basis",
+      "flex-grow",
+      "flex-shrink",
+      "grid",
+      "grid-template",
+      "grid-template-areas",
+      "grid-template-columns",
+      "grid-template-rows",
+      "overflow",
+      "overflow-x",
+      "overflow-y",
+    ]),
+  ],
+  [
+    "itinerary-sheet__heading",
+    new Set([
+      ...dimensionProperties,
+      "display",
+      "overflow",
+      "overflow-x",
+      "overflow-y",
+    ]),
+  ],
+  [
+    "itinerary-sheet__scroll",
+    new Set([
+      ...dimensionProperties,
+      "display",
+      "flex",
+      "flex-basis",
+      "flex-grow",
+      "flex-shrink",
+      "overflow",
+      "overflow-x",
+      "overflow-y",
+      "overscroll-behavior",
+      "overscroll-behavior-block",
+      "overscroll-behavior-inline",
+      "touch-action",
+    ]),
+  ],
+]);
+
+const knownTouchTargetClassNames = [
+  "candidate-decision__option",
+  "candidate-decision__trigger",
+  "day-header__date",
+  "icon-control",
+  "itinerary-row",
+  "itinerary-sheet__drag-handle",
+  "reservation-panel__reveal",
+  "route-connector",
+  "shopping-status-select__control",
+  "trip-home__day-action",
 ] as const;
 
 const requiredRecipeTokens = [
@@ -522,6 +615,28 @@ function layoutContractViolations(css: string): string[] {
           }
         }
       }
+      for (const [className, protectedProperties] of sheetDescendantPropertyMatrix) {
+        if (!selectorHasClass(selector, className)) {
+          continue;
+        }
+        for (const property of rule.declarations.keys()) {
+          if (protectedProperties.has(property)) {
+            violations.push(`${selector} must not set behavior-critical ${property}`);
+          }
+        }
+      }
+    }
+  }
+  return violations;
+}
+
+function runtimeGeometryTokenContractViolations(css: string): string[] {
+  const violations: string[] = [];
+  for (const rule of parseCssRules(css)) {
+    for (const property of rule.declarations.keys()) {
+      if (runtimeGeometryTokens.has(property)) {
+        violations.push(property);
+      }
     }
   }
   return violations;
@@ -530,14 +645,22 @@ function layoutContractViolations(css: string): string[] {
 function selectorMayTarget44pxControl(selector: string): boolean {
   return (
     /\[\s*data-touch-target\s*=\s*(?:"44"|'44'|44)\s*\]/i.test(selector) ||
-    selectorHasClass(selector, "icon-control") ||
-    /(?:^|[\s>+~,:()])(?:button|a|input|select|\*)(?=$|[\s>+~.#:[(])/i.test(selector)
+    knownTouchTargetClassNames.some((className) => selectorHasClass(selector, className)) ||
+    /(?:^|[\s>+~,:()])(?:button|a|input|label|select|\*)(?=$|[\s>+~.#:[(])/i.test(selector)
   );
 }
 
 function pixelLength(value: string): number | undefined {
-  const match = value.match(/^(-?(?:\d+\.)?\d+)px$/i);
-  return match === null ? undefined : Number.parseFloat(match[1] ?? "");
+  const match = value.match(/^(-?(?:\d+\.)?\d+)(px|r?em)?$/i);
+  if (match === null) {
+    return undefined;
+  }
+  const amount = Number.parseFloat(match[1] ?? "");
+  const unit = match[2]?.toLowerCase();
+  if (unit === undefined && amount !== 0) {
+    return undefined;
+  }
+  return unit === "rem" || unit === "em" ? amount * 16 : amount;
 }
 
 function touchTargetContractViolations(css: string): string[] {
@@ -568,12 +691,9 @@ function touchTargetContractViolations(css: string): string[] {
         if (property === "min-height" && pixels !== undefined && pixels >= 44) {
           protectsMinimumHeight = true;
         }
-        if (
-          (property.startsWith("max-") && value.toLowerCase() !== "none") ||
-          ((property === "width" || property === "height") && value !== "auto") ||
-          ((property === "min-width" || property === "min-height") &&
-            (pixels === undefined || pixels < 44))
-        ) {
+        const isMinimum = property === "min-width" || property === "min-height";
+        if ((isMinimum && (pixels === undefined || pixels < 44)) ||
+          (!isMinimum && pixels !== undefined && pixels < 44)) {
           violations.push(`${selector} cannot constrain ${property} to ${value}`);
         }
       }
@@ -794,9 +914,10 @@ describe("compile-time design recipe catalog", () => {
       for (const name of [...baseTokens, ...requiredRecipeTokens, ...semanticSurfaceTokens]) {
         expect(tokens.has(name), `${recipe.directory} must declare ${name}`).toBe(true);
       }
-      for (const name of runtimeGeometryTokens) {
-        expect(tokens.has(name), `${recipe.directory} must not own runtime geometry ${name}`).toBe(false);
-      }
+      expect(
+        runtimeGeometryTokenContractViolations(recipe.css),
+        `${recipe.directory} must not own runtime geometry tokens`,
+      ).toEqual([]);
       for (const selector of requiredComponentSelectors) {
         expect(recipe.css, `${recipe.directory} must style ${selector}`).toContain(selector);
       }
@@ -919,6 +1040,66 @@ describe("compile-time design recipe catalog", () => {
       expect.stringContaining("color"),
       expect.stringContaining("background"),
     ]));
+  });
+
+  test("rejects behavior-critical sheet and class-only touch-target mutations", () => {
+    const quietWood = loadRecipes().find(({ directory }) => directory === "quiet-wood");
+    expect(quietWood).toBeDefined();
+    const css = quietWood?.css ?? "";
+
+    expect.soft(
+      layoutContractViolations(
+        `${css}\n.itinerary-sheet__drag-handle {
+          min-height: 20px;
+          height: 20px;
+          touch-action: auto;
+        }`,
+      ),
+      "drag handle size and gesture ownership",
+    ).not.toEqual([]);
+    expect.soft(
+      layoutContractViolations(
+        `${css}\n.itinerary-sheet__scroll { overflow: hidden; }`,
+      ),
+      "sheet scroll ownership",
+    ).not.toEqual([]);
+    expect.soft(
+      touchTargetContractViolations(
+        `${css}\n.candidate-decision__trigger {
+          min-width: 20px;
+          min-height: 20px;
+        }`,
+      ),
+      "class-only candidate trigger minimum",
+    ).not.toEqual([]);
+
+    expect(
+      touchTargetContractViolations(
+        `${css}\n.candidate-decision__trigger {
+          width: 100%;
+          min-width: 44px;
+          min-height: 44px;
+        }`,
+      ),
+      "a full-width candidate trigger with intact minimums is harmless presentation",
+    ).toEqual([]);
+  });
+
+  test("rejects every runtime-owned geometry token mutation", () => {
+    const quietWood = loadRecipes().find(({ directory }) => directory === "quiet-wood");
+    expect(quietWood).toBeDefined();
+    const css = quietWood?.css ?? "";
+
+    for (const name of [
+      "--sheet-ceiling",
+      "--map-padding-top",
+      "--map-padding-bottom",
+    ]) {
+      expect.soft(
+        runtimeGeometryTokenContractViolations(`${css}\n:root { ${name}: 1px; }`),
+        `${name} must be rejected as runtime-owned geometry`,
+      ).toContain(name);
+    }
   });
 
   test("rejects design slop, protected assets, and unsafe CSS payloads", () => {
