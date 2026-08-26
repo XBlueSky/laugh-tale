@@ -1,6 +1,7 @@
 import { Temporal } from "@js-temporal/polyfill";
-import { LocateFixed, MapPin, Pause } from "lucide-react";
+import { House, LocateFixed, MapPin, Pause } from "lucide-react";
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -10,8 +11,12 @@ import {
 } from "react";
 
 import { GoogleNavigationAdapter } from "../providers/google/google-maps-url";
-import type { Trip } from "../trip-core/model";
-import { emptyTripProgress, nodeCompletionKey } from "../trip-core/progress";
+import type { CandidateGroup, Trip, TripNode } from "../trip-core/model";
+import {
+  emptyTripProgress,
+  nodeCompletionKey,
+  tripProgressReducer,
+} from "../trip-core/progress";
 import {
   resolveEffectiveItinerary,
   type EffectiveDay,
@@ -20,13 +25,25 @@ import {
 import { findLiveState, resolveSchedule } from "../trip-core/time";
 import { DayHeader } from "../ui/DayHeader";
 import { ItineraryTimeline } from "../ui/ItineraryTimeline";
+import {
+  CandidateDecision,
+  type CandidateMapOverride,
+  type CandidatePreviewRequest,
+} from "../ui/decisions/CandidateDecision";
+import {
+  resolveShoppingStatus,
+  ShoppingStatusSelect,
+} from "../ui/decisions/ShoppingStatusSelect";
+import { ReservationPanel } from "../ui/reservations/ReservationPanel";
 import "../ui/styles/base.css";
 import "../ui/styles/recipe.css";
+import { TaskWidget } from "../ui/tasks/TaskWidget";
 import { ItineraryMap } from "./ItineraryMap";
 import { ItinerarySheet } from "./ItinerarySheet";
 import { buildMapPresentation } from "./map-presentation";
 import {
   decodeMapPlaceOwnerId,
+  candidateMapOwnerId,
   nodeMapOwnerId,
   type MapAdapter,
   type MapFocusTarget,
@@ -38,12 +55,16 @@ import {
   type SheetSnap,
 } from "./sheet-geometry";
 import { useTripSelection } from "./useTripSelection";
+import type { TripProgressController } from "./useTripProgress";
 import { useUserLocation } from "./useUserLocation";
 
 export interface TripExperienceProps {
   trip: Trip;
   adapterFactory: () => MapAdapter;
   clock?: () => string;
+  initialDayId?: string;
+  progressController?: TripProgressController;
+  onBackToHome?: () => void;
 }
 
 interface ViewportMetrics {
@@ -165,6 +186,33 @@ function dayForNode(trip: Trip, nodeId: string | null): string | undefined {
   return trip.days.find((day) => day.nodes.some((node) => node.id === nodeId))?.id;
 }
 
+function sourceNode(trip: Trip, nodeId: string | null): TripNode | undefined {
+  if (nodeId === null) {
+    return undefined;
+  }
+  return trip.days.flatMap(({ nodes }) => nodes).find(({ id }) => id === nodeId);
+}
+
+function candidateGroupForNode(
+  trip: Trip,
+  node: TripNode | undefined,
+): CandidateGroup | undefined {
+  if (node === undefined) {
+    return undefined;
+  }
+  if (node.kind === "dining" && node.payload.candidateGroupId !== undefined) {
+    return trip.candidateGroups.find(
+      (group) =>
+        group.id === node.payload.candidateGroupId &&
+        group.parentNodeId === node.id,
+    );
+  }
+  const groups = trip.candidateGroups.filter(
+    ({ parentNodeId }) => parentNodeId === node.id,
+  );
+  return groups.length === 1 ? groups[0] : undefined;
+}
+
 function isLocatableLodging(node: EffectiveNode): boolean {
   if (node.node.kind !== "lodging") {
     return false;
@@ -245,6 +293,9 @@ export function TripExperience({
   trip,
   adapterFactory,
   clock = systemClock,
+  initialDayId: requestedInitialDayId,
+  progressController,
+  onBackToHome,
 }: TripExperienceProps) {
   const safeAreaProbeRef = useRef<HTMLDivElement>(null);
   const viewport = useViewportMetrics(safeAreaProbeRef);
@@ -253,7 +304,45 @@ export function TripExperience({
   const [mountedAdapter, setMountedAdapter] = useState<MapAdapter | null>(null);
   const [headerExpanded, setHeaderExpanded] = useState(true);
   const [sheetSnap, setSheetSnap] = useState<SheetSnap>("half");
-  const [progress] = useState(emptyTripProgress);
+  const [fallbackProgress, setFallbackProgress] = useState(emptyTripProgress);
+  const progress = progressController?.progress ?? fallbackProgress;
+  const fallbackSelectCandidate = useCallback(
+    (groupId: string, candidateId: string): void => {
+      setFallbackProgress((current) =>
+        tripProgressReducer(current, {
+          type: "select-candidate",
+          groupId,
+          candidateId,
+        }),
+      );
+    },
+    [],
+  );
+  const fallbackSetShoppingStatus = useCallback(
+    (itemId: string, status: Parameters<TripProgressController["setShoppingStatus"]>[1]): void => {
+      setFallbackProgress((current) =>
+        tripProgressReducer(current, {
+          type: "set-shopping-status",
+          itemId,
+          status,
+        }),
+      );
+    },
+    [],
+  );
+  const fallbackSetCompleted = useCallback(
+    (id: string, completed: boolean): void => {
+      setFallbackProgress((current) =>
+        tripProgressReducer(current, { type: "set-completed", id, completed }),
+      );
+    },
+    [],
+  );
+  const selectCandidate =
+    progressController?.selectCandidate ?? fallbackSelectCandidate;
+  const setShoppingStatus =
+    progressController?.setShoppingStatus ?? fallbackSetShoppingStatus;
+  const setCompleted = progressController?.setCompleted ?? fallbackSetCompleted;
   const [clockTick, setClockTick] = useState(0);
 
   useEffect(() => {
@@ -298,10 +387,17 @@ export function TripExperience({
   const automaticNodeId =
     liveState.currentId ?? liveState.nextId ?? availableNodeIds[0] ?? null;
   const selection = useTripSelection(automaticNodeId, availableNodeIds);
-  const initialDayId =
-    dayForNode(trip, automaticNodeId) ?? trip.days[0]?.id ?? "";
-  const [displayedDayId, setDisplayedDayId] = useState(initialDayId);
+  const initialDisplayedDayId =
+    trip.days.some(({ id }) => id === requestedInitialDayId)
+      ? (requestedInitialDayId ?? "")
+      : dayForNode(trip, automaticNodeId) ?? trip.days[0]?.id ?? "";
+  const [displayedDayId, setDisplayedDayId] = useState(initialDisplayedDayId);
   const [dayCameraIntent, setDayCameraIntent] = useState(0);
+  const [candidateMapOverride, setCandidateMapOverride] =
+    useState<CandidateMapOverride | null>(null);
+  const candidateMapOverrideRef = useRef<CandidateMapOverride | null>(null);
+  const [candidatePreviewRequest, setCandidatePreviewRequest] =
+    useState<CandidatePreviewRequest>();
 
   const selectedEffectiveDay =
     effectiveTrip.days.find(({ day }) => day.id === displayedDayId) ??
@@ -320,14 +416,61 @@ export function TripExperience({
     return [...owners.values()];
   }, [effectiveTrip, selectedEffectiveDay.day.id]);
 
+  const selectedSourceNode = sourceNode(trip, selection.selection.nodeId);
+  const selectedEffectiveNode = selectedEffectiveDay.nodes.find(
+    ({ sourceNodeId }) => sourceNodeId === selection.selection.nodeId,
+  );
+  const selectedCandidateGroup =
+    selectedEffectiveNode === undefined
+      ? undefined
+      : candidateGroupForNode(trip, selectedSourceNode);
+  const candidateSequenceNumber = Math.max(
+    1,
+    selectedEffectiveDay.day.nodes.findIndex(
+      ({ id }) => id === selectedCandidateGroup?.parentNodeId,
+    ) + 1,
+  );
+  const activeCandidateMapOverride =
+    selectedCandidateGroup?.id === candidateMapOverride?.group.id
+      ? candidateMapOverride
+      : null;
+
+  const handleCandidateMapOverrideChange = useCallback(
+    (next: CandidateMapOverride | null): void => {
+      const previousGroupId = candidateMapOverrideRef.current?.group.id;
+      const nextGroupId = next?.group.id;
+      candidateMapOverrideRef.current = next;
+      setCandidateMapOverride(next);
+      if (previousGroupId !== nextGroupId) {
+        setDayCameraIntent((intent) => intent + 1);
+      }
+    },
+    [],
+  );
+
   const presentation = useMemo(
     () =>
       buildMapPresentation(selectedEffectiveDay, {
         ...(selection.selection.nodeId === null
           ? {}
           : { selectedNodeId: selection.selection.nodeId }),
+        ...(activeCandidateMapOverride === null
+          ? {}
+          : {
+              expandedCandidateGroup: activeCandidateMapOverride.group,
+              ...(activeCandidateMapOverride.activeOptionId === undefined
+                ? {}
+                : {
+                    activeCandidateOptionId:
+                      activeCandidateMapOverride.activeOptionId,
+                  }),
+            }),
       }),
-    [selectedEffectiveDay, selection.selection.nodeId],
+    [
+      activeCandidateMapOverride,
+      selectedEffectiveDay,
+      selection.selection.nodeId,
+    ],
   );
   const lastFittedDayIntentRef = useRef(-1);
   const pendingMapFocusRef = useRef<PendingMapFocus | null>(null);
@@ -436,6 +579,18 @@ export function TripExperience({
     if (owner?.kind !== "candidate") {
       return;
     }
+    if (
+      activeCandidateMapOverride?.group.options.some(
+        ({ id }) => id === owner.id,
+      )
+    ) {
+      selection.selectManual(activeCandidateMapOverride.group.parentNodeId);
+      setCandidatePreviewRequest((current) => ({
+        optionId: owner.id,
+        requestId: (current?.requestId ?? 0) + 1,
+      }));
+      return;
+    }
     const group = trip.candidateGroups.find((candidateGroup) =>
       candidateGroup.options.some((option) => option.id === owner.id),
     );
@@ -494,6 +649,21 @@ export function TripExperience({
     }
   };
 
+  const dayTasks = trip.tasks.filter(
+    ({ scope, dayId }) =>
+      scope === "day" && dayId === selectedEffectiveDay.day.id,
+  );
+  const completedProgressIds = new Set(progress.completedIds);
+  const completedChecklistIds = new Set(
+    progress.completedIds.flatMap((id) =>
+      id.startsWith("checklist:") ? [id.slice("checklist:".length)] : [],
+    ),
+  );
+  const shoppingNode =
+    selectedEffectiveNode?.node.kind === "shopping"
+      ? selectedEffectiveNode.node
+      : undefined;
+
   return (
     <main
       className="trip-experience"
@@ -530,6 +700,18 @@ export function TripExperience({
       />
 
       <div className="map-controls" role="toolbar" aria-label="Map controls">
+        {onBackToHome === undefined ? null : (
+          <button
+            type="button"
+            className="icon-control"
+            aria-label="回到旅行首頁"
+            data-touch-target="44"
+            onClick={onBackToHome}
+          >
+            <House aria-hidden="true" size={19} strokeWidth={1.8} />
+          </button>
+        )}
+        <ReservationPanel reservations={trip.reservations} />
         <button
           type="button"
           className="map-controls__location icon-control"
@@ -578,6 +760,56 @@ export function TripExperience({
         onSnapChange={setSheetSnap}
         onReturnToNow={returnToNow}
       >
+        {selectedCandidateGroup === undefined || selectedSourceNode === undefined ? null : (
+          <CandidateDecision
+            key={`candidate-decision:${selectedCandidateGroup.id}`}
+            group={selectedCandidateGroup}
+            label={selectedSourceNode.title}
+            sequenceNumber={candidateSequenceNumber}
+            committedOptionId={selectedEffectiveNode?.selectedCandidateId}
+            mapPreviewRequest={candidatePreviewRequest}
+            onMapOverrideChange={handleCandidateMapOverrideChange}
+            onCommit={selectCandidate}
+            onLocateOption={(optionId) =>
+              focusMap(
+                { kind: "place", id: candidateMapOwnerId(optionId) },
+                selectedEffectiveDay.day.id,
+              )
+            }
+          />
+        )}
+
+        {shoppingNode === undefined ? null : (
+          <section
+            className="shopping-decision-panel"
+            data-surface="shopping-progress"
+            aria-label={`${shoppingNode.title} 採買清單`}
+          >
+            <h3>{shoppingNode.title}</h3>
+            <ul className="shopping-decision-panel__items">
+              {shoppingNode.payload.items.map((item) => (
+                <li key={`shopping-item:${item.id}`}>
+                  <span>{item.title}</span>
+                  <ShoppingStatusSelect
+                    item={item}
+                    status={resolveShoppingStatus(item, progress.shoppingStatuses)}
+                    onChange={(status) => setShoppingStatus(item.id, status)}
+                  />
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {dayTasks.length === 0 ? null : (
+          <TaskWidget
+            dayTitle={selectedEffectiveDay.day.title}
+            tasks={dayTasks}
+            completedIds={completedProgressIds}
+            onCompletedChange={setCompleted}
+          />
+        )}
+
         <ItineraryTimeline
           nodes={selectedEffectiveDay.nodes}
           routes={selectedDayRoutes}
@@ -586,6 +818,8 @@ export function TripExperience({
           dayDate={selectedEffectiveDay.day.date}
           currentNodeId={liveState.currentId}
           navigationAdapter={DEFAULT_NAVIGATION_ADAPTER}
+          completedChecklistIds={completedChecklistIds}
+          shoppingStatuses={progress.shoppingStatuses}
         />
       </ItinerarySheet>
     </main>

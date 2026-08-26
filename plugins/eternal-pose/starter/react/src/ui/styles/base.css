@@ -166,6 +166,266 @@ button {
   background: transparent;
 }
 
+.shopping-status-select {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.shopping-status-select__control {
+  max-width: 100%;
+  padding-inline: var(--space-3) calc(var(--space-5) + var(--space-1));
+  appearance: none;
+}
+
+.shopping-status-select__chevron {
+  position: absolute;
+  inset-inline-end: var(--space-2);
+  pointer-events: none;
+}
+
+.trip-home {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 100dvh;
+  max-height: 100dvh;
+  align-content: start;
+  gap: var(--space-4);
+  padding: max(var(--space-4), env(safe-area-inset-top)) var(--space-4)
+    max(var(--space-5), env(safe-area-inset-bottom));
+  overflow-x: hidden;
+  overflow-y: auto;
+  font-family: var(--font-body);
+}
+
+.trip-home > * {
+  width: min(100%, 42rem);
+  min-width: 0;
+  margin-inline: auto;
+}
+
+.trip-home__identity,
+.trip-home__pretrip,
+.candidate-decision,
+.shopping-decision-panel {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.trip-home__identity > *,
+.trip-home__section-header > *,
+.trip-home__reservations h2,
+.trip-home__reservations p,
+.candidate-decision__summary p,
+.shopping-decision-panel h3 {
+  margin: 0;
+}
+
+.trip-home__section-header,
+.trip-home__reservations,
+.candidate-decision__summary,
+.shopping-decision-panel__items > li,
+.task-widget__item-primary {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.trip-home__task-list,
+.trip-home__task-children,
+.trip-home__days,
+.candidate-decision__browse-list,
+.shopping-decision-panel__items,
+.task-widget__list,
+.task-widget__children,
+.reservation-panel__list {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.trip-home__task-primary {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.trip-home__task label,
+.task-widget__item label,
+.task-widget__children label {
+  display: grid;
+  min-width: 0;
+  min-height: 44px;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.trip-home__task-children,
+.task-widget__children {
+  padding-inline-start: var(--space-4);
+}
+
+.trip-home__day-action {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  text-align: start;
+}
+
+.trip-home__day-action > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.candidate-decision__summary > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.candidate-decision__trigger {
+  max-width: min(12rem, 44vw);
+  padding-inline: var(--space-2);
+}
+
+.candidate-decision__options {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.candidate-decision__option {
+  display: grid;
+  min-width: 0;
+  min-height: 44px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.candidate-decision__location-state {
+  text-align: end;
+}
+
+.candidate-decision__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.candidate-decision__actions > button,
+.candidate-decision__browse-list button {
+  padding-inline: var(--space-3);
+}
+
+.candidate-decision__browse-list button {
+  width: 100%;
+  text-align: start;
+}
+
+.shopping-decision-panel__items > li {
+  min-height: 44px;
+}
+
+.shopping-decision-panel__items > li > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.task-widget {
+  display: flex;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.reservation-panel {
+  display: contents;
+}
+
+.task-widget__dialog,
+.reservation-panel__dialog {
+  width: min(32rem, calc(100% - (var(--space-3) * 2)));
+  max-width: 100%;
+  max-height: calc(100dvh - (var(--space-4) * 2));
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+}
+
+.task-widget__dialog-surface,
+.reservation-panel__dialog-surface {
+  display: flex;
+  min-width: 0;
+  max-height: inherit;
+  flex-direction: column;
+}
+
+.task-widget__dialog-header,
+.reservation-panel__dialog-header {
+  display: grid;
+  min-width: 0;
+  min-height: 52px;
+  flex: none;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: var(--space-2);
+  padding-inline-start: var(--space-3);
+}
+
+.task-widget__dialog-header h2,
+.reservation-panel__dialog-header h2 {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.task-widget__list,
+.reservation-panel__list {
+  min-height: 0;
+  flex: 1;
+  padding: 0 var(--space-3) var(--space-3);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.task-widget__item,
+.reservation-panel__item {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-1);
+}
+
+.reservation-panel__reveal,
+.reservation-panel__item > a {
+  width: fit-content;
+  max-width: 100%;
+  padding-inline: var(--space-2);
+}
+
+.candidate-decision [hidden],
+.task-widget [hidden],
+.trip-home [hidden] {
+  display: none;
+}
+
 .day-header__date-rail {
   display: flex;
   min-width: 0;
@@ -450,7 +710,7 @@ button {
   background: var(--color-marker-selected);
 }
 
-button:focus-visible {
+:where(button, a, input, select):focus-visible {
   outline: 2px solid currentColor;
   outline-offset: 2px;
 }
@@ -506,7 +766,7 @@ button:disabled {
     border-color: CanvasText;
   }
 
-  button:focus-visible {
+  :where(button, a, input, select):focus-visible {
     outline: 2px solid CanvasText;
   }
 }
