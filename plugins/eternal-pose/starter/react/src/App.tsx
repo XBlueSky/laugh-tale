@@ -24,26 +24,54 @@ function ReadyTripApp({ trip, adapterFactory, clock }: ReadyTripAppProps) {
   const progressController = useTripProgress(trip);
   const [activeDayId, setActiveDayId] = useState<string | null>(null);
 
-  if (activeDayId === null) {
+  if (!progressController.hydrated) {
     return (
+      <main
+        className="trip-progress-loading"
+        role="status"
+        aria-label="正在讀取旅行進度"
+      >
+        正在讀取旅行進度
+      </main>
+    );
+  }
+
+  const persistenceHint =
+    progressController.persistenceStatus === "memory-only" ? (
+      <p
+        className="trip-progress-persistence"
+        role="status"
+        aria-label="旅行進度僅保留在此頁面"
+        data-persistence-status="memory-only"
+      >
+        目前無法儲存進度，這次變更僅保留在此頁面。
+      </p>
+    ) : null;
+
+  const surface =
+    activeDayId === null ? (
       <TripHome
         trip={trip}
         progress={progressController.progress}
         onCompletedChange={progressController.setCompleted}
         onEnterDay={setActiveDayId}
       />
+    ) : (
+      <TripExperience
+        trip={trip}
+        adapterFactory={adapterFactory}
+        initialDayId={activeDayId}
+        progressController={progressController}
+        onBackToHome={() => setActiveDayId(null)}
+        {...(clock === undefined ? {} : { clock })}
+      />
     );
-  }
 
   return (
-    <TripExperience
-      trip={trip}
-      adapterFactory={adapterFactory}
-      initialDayId={activeDayId}
-      progressController={progressController}
-      onBackToHome={() => setActiveDayId(null)}
-      {...(clock === undefined ? {} : { clock })}
-    />
+    <>
+      {persistenceHint}
+      {surface}
+    </>
   );
 }
 
@@ -55,6 +83,7 @@ export function App({ adapterFactory, tripOverride, clock }: AppProps = {}) {
 
   return (
     <ReadyTripApp
+      key={trip.id}
       trip={trip}
       adapterFactory={adapterFactory}
       {...(clock === undefined ? {} : { clock })}

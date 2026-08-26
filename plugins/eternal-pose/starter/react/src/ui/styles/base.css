@@ -200,6 +200,28 @@ button {
   font-family: var(--font-body);
 }
 
+.trip-progress-loading {
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+  padding: max(var(--space-4), env(safe-area-inset-top))
+    max(var(--space-4), env(safe-area-inset-right))
+    max(var(--space-4), env(safe-area-inset-bottom))
+    max(var(--space-4), env(safe-area-inset-left));
+}
+
+.trip-progress-persistence {
+  position: fixed;
+  z-index: 40;
+  right: max(var(--space-3), env(safe-area-inset-right));
+  bottom: max(var(--space-3), env(safe-area-inset-bottom));
+  left: max(var(--space-3), env(safe-area-inset-left));
+  margin: 0;
+  padding: var(--space-2);
+  text-align: center;
+  pointer-events: none;
+}
+
 .trip-home > * {
   width: min(100%, 42rem);
   min-width: 0;
@@ -274,6 +296,12 @@ button {
 .trip-home__task-children,
 .task-widget__children {
   padding-inline-start: var(--space-4);
+}
+
+.trip-home__task-note,
+.task-widget__note {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .trip-home__day-action {
@@ -362,9 +390,21 @@ button {
 
 .task-widget__dialog,
 .reservation-panel__dialog {
-  width: min(32rem, calc(100% - (var(--space-3) * 2)));
-  max-width: 100%;
-  max-height: calc(100dvh - (var(--space-4) * 2));
+  width: min(
+    32rem,
+    calc(
+      100vw - max(var(--space-3), env(safe-area-inset-left)) -
+        max(var(--space-3), env(safe-area-inset-right))
+    )
+  );
+  max-width: calc(
+    100vw - max(var(--space-3), env(safe-area-inset-left)) -
+      max(var(--space-3), env(safe-area-inset-right))
+  );
+  max-height: calc(
+    100dvh - max(var(--space-4), env(safe-area-inset-top)) -
+      max(var(--space-4), env(safe-area-inset-bottom))
+  );
   padding: 0;
   overflow: hidden;
   border: 0;
@@ -418,6 +458,11 @@ button {
   width: fit-content;
   max-width: 100%;
   padding-inline: var(--space-2);
+}
+
+.reservation-panel__item > a {
+  display: inline-flex;
+  align-items: center;
 }
 
 .candidate-decision [hidden],

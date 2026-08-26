@@ -438,15 +438,26 @@ export function TripExperience({
   const handleCandidateMapOverrideChange = useCallback(
     (next: CandidateMapOverride | null): void => {
       const previousGroupId = candidateMapOverrideRef.current?.group.id;
+      const previousSessionId = candidateMapOverrideRef.current?.sessionId;
       const nextGroupId = next?.group.id;
+      const nextSessionId = next?.sessionId;
       candidateMapOverrideRef.current = next;
       setCandidateMapOverride(next);
+      if (
+        previousGroupId !== nextGroupId ||
+        previousSessionId !== nextSessionId
+      ) {
+        setCandidatePreviewRequest(undefined);
+      }
       if (previousGroupId !== nextGroupId) {
         setDayCameraIntent((intent) => intent + 1);
       }
     },
     [],
   );
+  const clearCandidateInteraction = useCallback((): void => {
+    handleCandidateMapOverrideChange(null);
+  }, [handleCandidateMapOverrideChange]);
 
   const presentation = useMemo(
     () =>
@@ -557,6 +568,7 @@ export function TripExperience({
     if (!availableNodeIds.includes(nodeId)) {
       return;
     }
+    clearCandidateInteraction();
     selection.selectManual(nodeId);
     const ownerDay = dayForNode(trip, nodeId);
     if (options.synchronizeDay === true) {
@@ -586,6 +598,8 @@ export function TripExperience({
     ) {
       selection.selectManual(activeCandidateMapOverride.group.parentNodeId);
       setCandidatePreviewRequest((current) => ({
+        groupId: activeCandidateMapOverride.group.id,
+        sessionId: activeCandidateMapOverride.sessionId,
         optionId: owner.id,
         requestId: (current?.requestId ?? 0) + 1,
       }));
@@ -600,6 +614,7 @@ export function TripExperience({
   };
 
   const returnToNow = (): void => {
+    clearCandidateInteraction();
     selection.returnToNow();
     const liveDayId = dayForNode(trip, automaticNodeId);
     if (liveDayId !== undefined) {
@@ -641,6 +656,7 @@ export function TripExperience({
     if (day === undefined) {
       return;
     }
+    clearCandidateInteraction();
     markDisplayedDayIntent(dayId);
     setSheetSnap("half");
     const firstNode = day.nodes[0];
@@ -706,7 +722,10 @@ export function TripExperience({
             className="icon-control"
             aria-label="回到旅行首頁"
             data-touch-target="44"
-            onClick={onBackToHome}
+            onClick={() => {
+              clearCandidateInteraction();
+              onBackToHome();
+            }}
           >
             <House aria-hidden="true" size={19} strokeWidth={1.8} />
           </button>

@@ -30,7 +30,7 @@ export function TaskWidget({
   const titleId = `day-task-dialog-title-${generatedId}`;
   const dialogRef = useRef<HTMLDialogElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const [modalUnavailable, setModalUnavailable] = useState(false);
   const [expandedTaskIds, setExpandedTaskIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -38,7 +38,7 @@ export function TaskWidget({
   useEffect(() => {
     const dialog = dialogRef.current;
     return () => {
-      if (dialog?.open) {
+      if (dialog?.open && typeof dialog.close === "function") {
         dialog.close();
       }
     };
@@ -49,29 +49,24 @@ export function TaskWidget({
     if (dialog === null || dialog.open) {
       return;
     }
-    restoreFocusRef.current =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : triggerRef.current;
-    if (typeof dialog.showModal === "function") {
+    if (typeof dialog.showModal !== "function") {
+      setModalUnavailable(true);
+      return;
+    }
+    try {
       dialog.showModal();
-    } else {
-      dialog.setAttribute("open", "");
+      setModalUnavailable(false);
+    } catch {
+      setModalUnavailable(true);
     }
   };
 
   const closeDialog = (): void => {
     const dialog = dialogRef.current;
-    if (dialog?.open) {
-      if (typeof dialog.close === "function") {
-        dialog.close();
-      } else {
-        dialog.removeAttribute("open");
-      }
+    if (dialog?.open && typeof dialog.close === "function") {
+      dialog.close();
     }
-    const restoreTarget = restoreFocusRef.current ?? triggerRef.current;
-    restoreFocusRef.current = null;
-    restoreTarget?.focus();
+    triggerRef.current?.focus();
   };
 
   const handleBackdrop = (event: ReactMouseEvent<HTMLDialogElement>): void => {
@@ -104,6 +99,16 @@ export function TaskWidget({
       >
         <ListChecks aria-hidden="true" size={19} strokeWidth={1.8} />
       </button>
+
+      {modalUnavailable ? (
+        <span
+          className="task-widget__unsupported"
+          role="status"
+          aria-label={`無法開啟 ${dayTitle} 當日事項`}
+        >
+          此瀏覽器無法開啟當日事項。
+        </span>
+      ) : null}
 
       {/* Native dialog backdrops dispatch their pointer click to the dialog itself. */}
       {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */}
@@ -169,6 +174,9 @@ export function TaskWidget({
                       </button>
                     ) : null}
                   </div>
+                  {task.note === undefined ? null : (
+                    <p className="task-widget__note">{task.note}</p>
+                  )}
                   {children.length === 0 ? null : (
                     <ul
                       id={childrenId}

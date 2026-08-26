@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode, useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -155,6 +155,7 @@ function Harness({ trip, onController }: HarnessProps) {
   return (
     <div>
       <output aria-label="hydrated">{controller.hydrated ? "yes" : "no"}</output>
+      <output aria-label="persistence status">{controller.persistenceStatus}</output>
       <output aria-label="progress">{JSON.stringify(controller.progress)}</output>
       <button
         type="button"
@@ -191,8 +192,14 @@ function readProgress(): TripProgressV1 {
   return JSON.parse(screen.getByLabelText("progress").textContent ?? "null") as TripProgressV1;
 }
 
+function dispatchStorage(key: string, newValue: string | null): void {
+  act(() => {
+    window.dispatchEvent(new StorageEvent("storage", { key, newValue }));
+  });
+}
+
 describe("useTripProgress", () => {
-  it("hydrates one atomic state in StrictMode without writing an empty pre-hydration schema", async () => {
+  it("hydrates one atomic state in StrictMode without echoing or writing an empty schema", async () => {
     const trip = twoDayTrip();
     const seeded: TripProgressV1 = {
       version: 1,
@@ -213,18 +220,9 @@ describe("useTripProgress", () => {
 
     await waitFor(() => expect(screen.getByLabelText("hydrated")).toHaveTextContent("yes"));
     expect(readProgress()).toEqual(seeded);
-    await waitFor(() =>
-      expect(
-        write.mock.calls
-          .filter(([writtenKey]) => writtenKey === key)
-          .map(([, payload]) => payload)
-          .at(-1),
-      ).toBe(JSON.stringify(seeded)),
-    );
-    const payloads = write.mock.calls
-      .filter(([writtenKey]) => writtenKey === key)
-      .map(([, payload]) => payload);
-    expect(payloads).not.toContain(JSON.stringify(emptyTripProgress()));
+    expect(screen.getByLabelText("persistence status")).toHaveTextContent("persistent");
+    await act(async () => Promise.resolve());
+    expect(write).not.toHaveBeenCalled();
   });
 
   it("isolates exact trip keys and never writes the previous trip into the next key", async () => {
@@ -265,6 +263,7 @@ describe("useTripProgress", () => {
     const user = userEvent.setup();
     render(<Harness trip={twoDayTrip()} />);
     await waitFor(() => expect(screen.getByLabelText("hydrated")).toHaveTextContent("yes"));
+    expect(screen.getByLabelText("persistence status")).toHaveTextContent("memory-only");
     expect(write).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "purchase first item" }));
@@ -282,6 +281,82 @@ describe("useTripProgress", () => {
 
     await user.click(screen.getByRole("button", { name: "skip first stop" }));
     expect(readProgress().skippedNodeIds).toEqual(["optional-one"]);
+    await waitFor(() =>
+      expect(screen.getByLabelText("persistence status")).toHaveTextContent("memory-only"),
+    );
+  });
+
+  it("adopts valid exact-key storage events without echoing and ignores malformed or wrong-key events", async () => {
+    const trip = twoDayTrip();
+    const key = tripProgressStorageKey(trip.id);
+    const external: TripProgressV1 = {
+      ...emptyTripProgress(),
+      shoppingStatuses: { "item-one": "purchased" },
+      completedIds: [taskCompletionKey("task-one")],
+    };
+    const write = vi.spyOn(window.localStorage, "setItem");
+    render(<Harness trip={trip} />);
+    await waitFor(() => expect(screen.getByLabelText("hydrated")).toHaveTextContent("yes"));
+    write.mockClear();
+
+    dispatchStorage("eternal-pose:trip-progress:v1:wrong-trip", JSON.stringify(external));
+    dispatchStorage(key, "{malformed");
+    dispatchStorage(key, JSON.stringify({ version: 1 }));
+    dispatchStorage(key, null);
+    expect(readProgress()).toEqual(emptyTripProgress());
+
+    dispatchStorage(key, JSON.stringify(external));
+    expect(readProgress()).toEqual(external);
+    await act(async () => Promise.resolve());
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it("lets a second active controller retain fields synchronized from the first controller", async () => {
+    const trip = twoDayTrip();
+    const key = tripProgressStorageKey(trip.id);
+    const user = userEvent.setup();
+    const write = vi.spyOn(window.localStorage, "setItem");
+    render(
+      <>
+        <section aria-label="first controller">
+          <Harness trip={trip} />
+        </section>
+        <section aria-label="second controller">
+          <Harness trip={trip} />
+        </section>
+      </>,
+    );
+    const first = screen.getByRole("region", { name: "first controller" });
+    const second = screen.getByRole("region", { name: "second controller" });
+    await waitFor(() =>
+      expect(within(first).getByLabelText("hydrated")).toHaveTextContent("yes"),
+    );
+    await waitFor(() =>
+      expect(within(second).getByLabelText("hydrated")).toHaveTextContent("yes"),
+    );
+
+    await user.click(within(first).getByRole("button", { name: "purchase first item" }));
+    await waitFor(() =>
+      expect(JSON.parse(window.localStorage.getItem(key) ?? "null")).toMatchObject({
+        shoppingStatuses: { "item-one": "purchased" },
+      }),
+    );
+    const firstPayload = window.localStorage.getItem(key);
+    write.mockClear();
+    dispatchStorage(key, firstPayload);
+    expect(
+      JSON.parse(within(second).getByLabelText("progress").textContent ?? "null"),
+    ).toMatchObject({ shoppingStatuses: { "item-one": "purchased" } });
+    expect(write).not.toHaveBeenCalled();
+
+    await user.click(within(second).getByRole("button", { name: "complete first task" }));
+    await waitFor(() =>
+      expect(JSON.parse(window.localStorage.getItem(key) ?? "null")).toEqual({
+        ...emptyTripProgress(),
+        shoppingStatuses: { "item-one": "purchased" },
+        completedIds: [taskCompletionKey("task-one")],
+      }),
+    );
   });
 
   it("keeps every action callback stable across progress updates and equivalent trip objects", async () => {
@@ -342,5 +417,59 @@ describe("useTripProgress", () => {
       skippedNodeIds: [],
       completedIds: [taskCompletionKey("task-two")],
     });
+  });
+
+  it("hydrates and resets prototype-shaped IDs under StrictMode without inherited lookup", async () => {
+    const trip = twoDayTrip("prototype-trip");
+    const dayOne = trip.days[0];
+    const shopping = dayOne?.nodes.find(({ kind }) => kind === "shopping");
+    const candidateNode = trip.days[1]?.nodes.find(({ kind }) => kind === "dining");
+    if (dayOne === undefined || shopping?.kind !== "shopping" || candidateNode === undefined) {
+      throw new Error("Prototype progress fixture is incomplete");
+    }
+    shopping.payload.items[0] = { id: "constructor", title: "Prototype item" };
+    candidateNode.id = "toString";
+    trip.candidateGroups[0] = {
+      id: "__proto__",
+      parentNodeId: "toString",
+      mode: "single",
+      defaultOptionId: "candidate-prototype",
+      options: [{ id: "candidate-prototype", title: "Prototype candidate" }],
+    };
+    dayOne.nodes.push(candidateNode);
+    trip.days[1].nodes = trip.days[1].nodes.filter(({ id }) => id !== "toString");
+    const selectedCandidateIds = Object.fromEntries([
+      ["__proto__", "candidate-prototype"],
+      ["other-group", "keep-candidate"],
+    ]);
+    const shoppingStatuses = Object.fromEntries([
+      ["constructor", "purchased"],
+      ["other-item", "unavailable"],
+    ]) as TripProgressV1["shoppingStatuses"];
+    window.localStorage.setItem(
+      tripProgressStorageKey(trip.id),
+      JSON.stringify({
+        ...emptyTripProgress(),
+        selectedCandidateIds,
+        shoppingStatuses,
+      } satisfies TripProgressV1),
+    );
+    const user = userEvent.setup();
+    render(
+      <StrictMode>
+        <Harness trip={trip} />
+      </StrictMode>,
+    );
+    await waitFor(() => expect(screen.getByLabelText("hydrated")).toHaveTextContent("yes"));
+    expect(Object.hasOwn(readProgress().selectedCandidateIds, "__proto__")).toBe(true);
+    expect(Object.hasOwn(readProgress().shoppingStatuses, "constructor")).toBe(true);
+
+    await user.click(screen.getByRole("button", { name: "reset first day" }));
+    expect(readProgress()).toMatchObject({
+      selectedCandidateIds: { "other-group": "keep-candidate" },
+      shoppingStatuses: { "other-item": "unavailable" },
+    });
+    expect(Object.hasOwn(readProgress().selectedCandidateIds, "__proto__")).toBe(false);
+    expect(Object.hasOwn(readProgress().shoppingStatuses, "constructor")).toBe(false);
   });
 });

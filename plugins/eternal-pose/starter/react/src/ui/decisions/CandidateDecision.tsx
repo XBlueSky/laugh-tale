@@ -10,10 +10,13 @@ import type { CandidateGroup, CandidateOption } from "../../trip-core/model";
 
 export interface CandidateMapOverride {
   group: CandidateGroup;
+  sessionId: number;
   activeOptionId?: string;
 }
 
 export interface CandidatePreviewRequest {
+  groupId: string;
+  sessionId: number;
   optionId: string;
   requestId: number;
 }
@@ -74,6 +77,13 @@ function hasCoordinates(option: CandidateOption): boolean {
   );
 }
 
+let candidateSessionSequence = 0;
+
+function nextCandidateSessionId(): number {
+  candidateSessionSequence += 1;
+  return candidateSessionSequence;
+}
+
 export function CandidateDecision({
   group,
   label,
@@ -87,14 +97,14 @@ export function CandidateDecision({
   const radioName = `candidate-decision-${useId().replaceAll(":", "")}`;
   const triggerRef = useRef<HTMLButtonElement>(null);
   const optionRefs = useRef(new Map<string, HTMLElement>());
-  const lastFocusedMapPreviewRequestIdRef = useRef<number | null>(null);
+  const lastFocusedMapPreviewRequestKeyRef = useRef<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [sessionId, setSessionId] = useState<number | null>(null);
   const [draftOptionId, setDraftOptionId] = useState<string | undefined>(() =>
     initialDraftId(group, committedOptionId),
   );
-  const [handledMapPreviewRequestId, setHandledMapPreviewRequestId] = useState<
-    number | null
-  >(null);
+  const [handledMapPreviewRequestKey, setHandledMapPreviewRequestKey] =
+    useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
   const committedOption = group.options.find(({ id }) => id === committedOptionId);
   const numberedGroup = useMemo<CandidateGroup>(
@@ -111,32 +121,46 @@ export function CandidateDecision({
   const requestedPreviewId = mapPreviewRequest?.requestId;
   const hasValidPreviewRequest =
     expanded &&
+    sessionId !== null &&
+    mapPreviewRequest?.groupId === group.id &&
+    mapPreviewRequest.sessionId === sessionId &&
     requestedPreviewId !== undefined &&
     requestedOptionId !== undefined &&
     group.options.some(({ id }) => id === requestedOptionId);
+  const requestedPreviewKey = hasValidPreviewRequest
+    ? `${sessionId}:${requestedPreviewId}`
+    : null;
 
   if (
-    hasValidPreviewRequest &&
-    requestedPreviewId !== handledMapPreviewRequestId
+    requestedPreviewKey !== null &&
+    requestedPreviewKey !== handledMapPreviewRequestKey
   ) {
-    setHandledMapPreviewRequestId(requestedPreviewId);
+    setHandledMapPreviewRequestKey(requestedPreviewKey);
     if (group.mode === "single" && requestedOptionId !== draftOptionId) {
       setDraftOptionId(requestedOptionId);
     }
   }
 
   useEffect(() => {
-    if (!expanded) {
+    if (!expanded || sessionId === null) {
       onMapOverrideChange(null);
       return;
     }
     onMapOverrideChange({
       group: numberedGroup,
+      sessionId,
       ...(group.mode === "single" && draftOptionId !== undefined
         ? { activeOptionId: draftOptionId }
         : {}),
     });
-  }, [draftOptionId, expanded, group.mode, numberedGroup, onMapOverrideChange]);
+  }, [
+    draftOptionId,
+    expanded,
+    group.mode,
+    numberedGroup,
+    onMapOverrideChange,
+    sessionId,
+  ]);
 
   useEffect(
     () => () => {
@@ -148,20 +172,20 @@ export function CandidateDecision({
   useEffect(() => {
     if (
       !hasValidPreviewRequest ||
-      requestedPreviewId !== handledMapPreviewRequestId ||
-      requestedPreviewId === lastFocusedMapPreviewRequestIdRef.current
+      requestedPreviewKey !== handledMapPreviewRequestKey ||
+      requestedPreviewKey === lastFocusedMapPreviewRequestKeyRef.current
     ) {
       return;
     }
-    lastFocusedMapPreviewRequestIdRef.current = requestedPreviewId;
+    lastFocusedMapPreviewRequestKeyRef.current = requestedPreviewKey;
     const optionControl = optionRefs.current.get(requestedOptionId);
     optionControl?.scrollIntoView?.({ block: "nearest" });
     optionControl?.focus();
   }, [
-    handledMapPreviewRequestId,
+    handledMapPreviewRequestKey,
     hasValidPreviewRequest,
     requestedOptionId,
-    requestedPreviewId,
+    requestedPreviewKey,
   ]);
 
   const restoreTriggerFocus = (): void => {
@@ -170,12 +194,14 @@ export function CandidateDecision({
 
   const closeComparison = (): void => {
     setDraftOptionId(initialDraftId(group, committedOptionId));
+    setSessionId(null);
     setExpanded(false);
     restoreTriggerFocus();
   };
 
   const openComparison = (): void => {
     setDraftOptionId(initialDraftId(group, committedOptionId));
+    setSessionId(nextCandidateSessionId());
     setExpanded(true);
   };
 
@@ -189,6 +215,7 @@ export function CandidateDecision({
     }
     onCommit(group.id, option.id);
     setAnnouncement(`已選擇 ${option.title}`);
+    setSessionId(null);
     setExpanded(false);
     restoreTriggerFocus();
   };

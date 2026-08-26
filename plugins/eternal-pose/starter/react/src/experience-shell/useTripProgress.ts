@@ -14,11 +14,16 @@ const STORAGE_PREFIX = "eternal-pose:trip-progress:v1:";
 interface PersistedProgressState {
   progress: TripProgressV1;
   hydratedStorageKey: string | null;
+  persistenceStatus: ProgressPersistenceStatus;
+  pendingWriteId: number | null;
 }
+
+export type ProgressPersistenceStatus = "persistent" | "memory-only";
 
 export interface TripProgressController {
   progress: TripProgressV1;
   hydrated: boolean;
+  persistenceStatus: ProgressPersistenceStatus;
   selectCandidate: (groupId: string, candidateId: string) => void;
   setShoppingStatus: (itemId: string, status: ShoppingStatus) => void;
   setSkipped: (nodeId: string, skipped: boolean) => void;
@@ -30,13 +35,79 @@ export function tripProgressStorageKey(tripId: string): string {
   return `${STORAGE_PREFIX}${tripId}`;
 }
 
+const PROGRESS_KEYS = new Set([
+  "version",
+  "selectedCandidateIds",
+  "shoppingStatuses",
+  "skippedNodeIds",
+  "completedIds",
+]);
+const SHOPPING_STATUSES = new Set<ShoppingStatus>([
+  "pending",
+  "purchased",
+  "unavailable",
+  "skipped",
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isNonBlankString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isValidStorageEventProgress(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+  const keys = Object.keys(value);
+  if (
+    keys.length !== PROGRESS_KEYS.size ||
+    keys.some((key) => !PROGRESS_KEYS.has(key)) ||
+    value.version !== 1 ||
+    !isRecord(value.selectedCandidateIds) ||
+    !Object.entries(value.selectedCandidateIds).every(
+      ([key, candidateId]) => isNonBlankString(key) && isNonBlankString(candidateId),
+    ) ||
+    !isRecord(value.shoppingStatuses) ||
+    !Object.entries(value.shoppingStatuses).every(
+      ([key, status]) =>
+        isNonBlankString(key) &&
+        typeof status === "string" &&
+        SHOPPING_STATUSES.has(status as ShoppingStatus),
+    ) ||
+    !Array.isArray(value.skippedNodeIds) ||
+    !value.skippedNodeIds.every(isNonBlankString) ||
+    !Array.isArray(value.completedIds) ||
+    !value.completedIds.every(isNonBlankString)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function parseStorageEventProgress(raw: string | null): TripProgressV1 | null {
+  if (raw === null) {
+    return null;
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return isValidStorageEventProgress(parsed) ? parseTripProgress(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function useTripProgress(trip: Trip): TripProgressController {
   const storageKey = useMemo(() => tripProgressStorageKey(trip.id), [trip.id]);
   const tripRef = useRef(trip);
-  const blockedStorageKeysRef = useRef(new Set<string>());
+  const writeSequenceRef = useRef(0);
   const [state, setState] = useState<PersistedProgressState>(() => ({
     progress: emptyTripProgress(),
     hydratedStorageKey: null,
+    persistenceStatus: "persistent",
+    pendingWriteId: null,
   }));
 
   useEffect(() => {
@@ -46,16 +117,21 @@ export function useTripProgress(trip: Trip): TripProgressController {
   useEffect(() => {
     let active = true;
     let progress: TripProgressV1;
+    let persistenceStatus: ProgressPersistenceStatus = "persistent";
     try {
       progress = parseTripProgress(window.localStorage.getItem(storageKey));
-      blockedStorageKeysRef.current.delete(storageKey);
     } catch {
       progress = emptyTripProgress();
-      blockedStorageKeysRef.current.add(storageKey);
+      persistenceStatus = "memory-only";
     }
     queueMicrotask(() => {
       if (active) {
-        setState({ progress, hydratedStorageKey: storageKey });
+        setState({
+          progress,
+          hydratedStorageKey: storageKey,
+          persistenceStatus,
+          pendingWriteId: null,
+        });
       }
     });
     return () => {
@@ -64,25 +140,66 @@ export function useTripProgress(trip: Trip): TripProgressController {
   }, [storageKey]);
 
   useEffect(() => {
+    const handleStorage = (event: StorageEvent): void => {
+      if (event.key !== storageKey) {
+        return;
+      }
+      const progress = parseStorageEventProgress(event.newValue);
+      if (progress === null) {
+        return;
+      }
+      setState((current) =>
+        current.hydratedStorageKey === storageKey
+          ? { ...current, progress, pendingWriteId: null }
+          : current,
+      );
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, [storageKey]);
+
+  useEffect(() => {
     if (
       state.hydratedStorageKey !== storageKey ||
-      blockedStorageKeysRef.current.has(storageKey)
+      state.persistenceStatus === "memory-only" ||
+      state.pendingWriteId === null
     ) {
       return;
     }
+    let active = true;
     try {
       window.localStorage.setItem(storageKey, JSON.stringify(state.progress));
     } catch {
-      // Device progress remains usable in memory when storage is unavailable.
-      blockedStorageKeysRef.current.add(storageKey);
+      queueMicrotask(() => {
+        if (!active) {
+          return;
+        }
+        setState((current) =>
+          current.hydratedStorageKey === storageKey &&
+          current.pendingWriteId === state.pendingWriteId
+            ? { ...current, persistenceStatus: "memory-only" }
+            : current,
+        );
+      });
     }
+    return () => {
+      active = false;
+    };
   }, [state, storageKey]);
 
   const dispatch = useCallback(
     (reduce: (current: TripProgressV1) => TripProgressV1): void => {
       setState((current) => {
         const progress = reduce(current.progress);
-        return progress === current.progress ? current : { ...current, progress };
+        if (progress === current.progress) {
+          return current;
+        }
+        writeSequenceRef.current += 1;
+        return {
+          ...current,
+          progress,
+          pendingWriteId: writeSequenceRef.current,
+        };
       });
     },
     [],
@@ -155,6 +272,7 @@ export function useTripProgress(trip: Trip): TripProgressController {
   return {
     progress: state.progress,
     hydrated: state.hydratedStorageKey === storageKey,
+    persistenceStatus: state.persistenceStatus,
     selectCandidate,
     setShoppingStatus,
     setSkipped,

@@ -14,6 +14,7 @@ const tasks: TripTask[] = [
     title: "Refill water",
     scope: "day",
     dayId: "day-one",
+    note: "Use the fountain beside the lobby.",
     children: [{ id: "single-child", title: "Use the lobby fountain" }],
   },
   {
@@ -112,6 +113,7 @@ describe("TaskWidget", () => {
     expect(getComputedStyle(dialogSurface!).display).toBe("flex");
     expect(getComputedStyle(taskList!).overflowY).toBe("auto");
     expect(screen.getByLabelText("Refill water")).toBeVisible();
+    expect(screen.getByText("Use the fountain beside the lobby.")).toBeVisible();
     expect(screen.getByText("Use the lobby fountain")).toBeVisible();
     expect(screen.queryByRole("button", { name: /Refill water 子項/ })).not.toBeInTheDocument();
 
@@ -184,6 +186,46 @@ describe("TaskWidget", () => {
     await user.click(within(dialog).getByRole("button", { name: "關閉當日事項" }));
     expect(dialog).not.toHaveAttribute("open");
     expect(trigger).toHaveFocus();
+  });
+
+  it("restores its own trigger after programmatic activation that never focused it", () => {
+    render(
+      <>
+        <button type="button">Other control</button>
+        <TaskWidget
+          dayTitle="Harbor day"
+          tasks={tasks}
+          completedIds={new Set()}
+          onCompletedChange={() => undefined}
+        />
+      </>,
+    );
+    const other = screen.getByRole("button", { name: "Other control" });
+    const trigger = screen.getByRole("button", { name: "開啟 Harbor day 當日事項" });
+    other.focus();
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole("dialog", { name: "Harbor day 當日事項" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "關閉當日事項" }));
+
+    expect(trigger).toHaveFocus();
+  });
+
+  it("does not fake an open modal when showModal is unavailable", () => {
+    Reflect.deleteProperty(HTMLDialogElement.prototype, "showModal");
+    const { container } = render(
+      <TaskWidget
+        dayTitle="Harbor day"
+        tasks={tasks}
+        completedIds={new Set()}
+        onCompletedChange={() => undefined}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "開啟 Harbor day 當日事項" }));
+
+    expect(container.querySelector("dialog")).not.toHaveAttribute("open");
+    expect(
+      screen.getByRole("status", { name: "無法開啟 Harbor day 當日事項" }),
+    ).toBeVisible();
   });
 
   it("closes an open native dialog during StrictMode-safe cleanup", async () => {

@@ -4,7 +4,11 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../../App";
-import { candidateMapOwnerId, nodeMapOwnerId } from "../../experience-shell/provider-contracts";
+import {
+  candidateMapOwnerId,
+  decodeMapPlaceOwnerId,
+  nodeMapOwnerId,
+} from "../../experience-shell/provider-contracts";
 import { tripProgressStorageKey } from "../../experience-shell/useTripProgress";
 import { FakeMapAdapter } from "../../providers/fake/FakeMapAdapter";
 import type { Trip } from "../../trip-core/model";
@@ -147,12 +151,19 @@ function appTrip(): Trip {
         ownerId: "meal-a",
         booking: { status: "pending" },
       },
+      {
+        id: "unbooked-reservation",
+        title: "Harbor cruise",
+        ownerId: "hotel",
+        booking: { status: "none" },
+      },
     ],
     tasks: [
       {
         id: "prepare-documents",
         title: "Prepare documents",
         scope: "pretrip",
+        note: "Keep originals in the day bag.",
         children: [
           { id: "pack-passport", title: "Pack passport" },
           { id: "save-confirmations", title: "Save confirmations" },
@@ -168,6 +179,7 @@ function appTrip(): Trip {
         title: "Refill water bottle",
         scope: "day",
         dayId: "day-one",
+        note: "Use the fountain beside the lobby.",
       },
     ],
   };
@@ -286,9 +298,13 @@ describe("TripHome", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Synthetic Island Escape" })).toBeVisible();
-    expect(screen.getByText("2040/06/12–2040/06/13")).toBeVisible();
+    const dates = screen.getAllByText(/2040\/06\/1[23]/);
+    expect(dates).toHaveLength(2);
+    expect(dates[0]?.closest("time")).toHaveAttribute("datetime", "2040-06-12");
+    expect(dates[1]?.closest("time")).toHaveAttribute("datetime", "2040-06-13");
     expect(screen.getByText("1 / 4 旅前事項完成")).toBeVisible();
-    expect(screen.getByText("1 已確認 · 1 待確認")).toBeVisible();
+    expect(screen.getByText("1 已確認 · 1 待確認 · 1 未訂位")).toBeVisible();
+    expect(screen.getByText("Keep originals in the day bag.")).toBeVisible();
     expect(screen.getAllByRole("button", { name: /進入 Day/ })).toHaveLength(2);
     expect(screen.getByRole("button", { name: "進入 Day 1 · Harbor day" })).toBeVisible();
     expect(screen.getByRole("button", { name: "進入 Day 2 · Clifftop day" })).toBeVisible();
@@ -320,6 +336,76 @@ describe("TripHome", () => {
 });
 
 describe("App home/day progress integration", () => {
+  it("gates progress-bound surfaces until the exact trip key hydrates, including key switches", async () => {
+    const alpha = appTrip();
+    const beta = structuredClone(alpha);
+    beta.id = "home-trip-beta";
+    beta.title = "Second Synthetic Escape";
+    window.localStorage.setItem(
+      tripProgressStorageKey(alpha.id),
+      JSON.stringify({
+        ...emptyTripProgress(),
+        completedIds: [taskCompletionKey("download-map")],
+      } satisfies TripProgressV1),
+    );
+    const adapterFactory = () => new FakeMapAdapter();
+    const { rerender } = render(
+      <App
+        tripOverride={alpha}
+        adapterFactory={adapterFactory}
+        clock={() => "2040-06-12T11:30:00Z"}
+      />,
+    );
+
+    expect(screen.queryByTestId("trip-home")).not.toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "正在讀取旅行進度" })).toBeVisible();
+    expect(await screen.findByTestId("trip-home")).toBeVisible();
+    expect(screen.getByLabelText("Download offline map")).toBeChecked();
+
+    rerender(
+      <App
+        tripOverride={beta}
+        adapterFactory={adapterFactory}
+        clock={() => "2040-06-12T11:30:00Z"}
+      />,
+    );
+    expect(screen.queryByTestId("trip-home")).not.toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "正在讀取旅行進度" })).toBeVisible();
+    expect(await screen.findByTestId("trip-home")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Second Synthetic Escape" })).toBeVisible();
+    expect(screen.getByLabelText("Download offline map")).not.toBeChecked();
+  });
+
+  it.each(["read", "write"] as const)(
+    "keeps %s failures usable in memory and surfaces a quiet persistence hint",
+    async (failureMode) => {
+      if (failureMode === "read") {
+        vi.spyOn(window.localStorage, "getItem").mockImplementation(() => {
+          throw new DOMException("read blocked", "SecurityError");
+        });
+      } else {
+        vi.spyOn(window.localStorage, "setItem").mockImplementation(() => {
+          throw new DOMException("write blocked", "QuotaExceededError");
+        });
+      }
+      const user = userEvent.setup();
+      render(
+        <App
+          tripOverride={appTrip()}
+          adapterFactory={() => new FakeMapAdapter()}
+          clock={() => "2040-06-12T11:30:00Z"}
+        />,
+      );
+
+      expect(await screen.findByTestId("trip-home")).toBeVisible();
+      await user.click(screen.getByLabelText("Download offline map"));
+      expect(screen.getByLabelText("Download offline map")).toBeChecked();
+      expect(
+        await screen.findByRole("status", { name: "旅行進度僅保留在此頁面" }),
+      ).toBeVisible();
+    },
+  );
+
   it("keeps candidate numbers tied to authored day order when earlier optional stops are skipped", async () => {
     const user = userEvent.setup();
     const trip = appTrip();
@@ -343,7 +429,7 @@ describe("App home/day progress integration", () => {
         clock={() => "2040-06-12T11:30:00Z"}
       />,
     );
-    await user.click(screen.getByRole("button", { name: "進入 Day 1 · Harbor day" }));
+    await user.click(await screen.findByRole("button", { name: "進入 Day 1 · Harbor day" }));
     await user.click(await screen.findByRole("button", { name: "重新比較 Lunch choices" }));
 
     expect(screen.getByRole("radio", { name: "2A · A" })).toBeChecked();
@@ -362,8 +448,8 @@ describe("App home/day progress integration", () => {
       />,
     );
 
-    expect(screen.getByTestId("trip-home")).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "進入 Day 1 · Harbor day" }));
+    expect(await screen.findByTestId("trip-home")).toBeVisible();
+    await user.click(await screen.findByRole("button", { name: "進入 Day 1 · Harbor day" }));
     expect(await screen.findByTestId("trip-experience")).toBeVisible();
     await waitFor(() => expect(adapter.mountCalls).toHaveLength(1));
     expect(screen.queryByText("Prepare documents")).not.toBeInTheDocument();
@@ -383,7 +469,7 @@ describe("App home/day progress integration", () => {
 
     await user.click(screen.getByRole("button", { name: "回到旅行首頁" }));
     expect(screen.getByTestId("trip-home")).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "進入 Day 1 · Harbor day" }));
+    await user.click(await screen.findByRole("button", { name: "進入 Day 1 · Harbor day" }));
     await user.click(screen.getByRole("button", { name: "開啟 Harbor day 當日事項" }));
     expect(
       within(screen.getByRole("dialog", { name: "Harbor day 當日事項" })).getByLabelText(
@@ -410,7 +496,7 @@ describe("App home/day progress integration", () => {
         clock={() => "2040-06-12T11:30:00Z"}
       />,
     );
-    await user.click(screen.getByRole("button", { name: "進入 Day 1 · Harbor day" }));
+    await user.click(await screen.findByRole("button", { name: "進入 Day 1 · Harbor day" }));
     await waitFor(() => expect(adapter.renderCalls.length).toBeGreaterThan(0));
 
     await user.click(screen.getByRole("button", { name: "約 12:00 A" }));
@@ -453,6 +539,50 @@ describe("App home/day progress integration", () => {
     );
   });
 
+  it("discards stale candidate preview intent when leaving and reopening the same decision", async () => {
+    const user = userEvent.setup();
+    const adapter = new FakeMapAdapter();
+    render(
+      <App
+        tripOverride={appTrip()}
+        adapterFactory={() => adapter}
+        clock={() => "2040-06-12T11:30:00Z"}
+      />,
+    );
+    await user.click(await screen.findByRole("button", { name: "進入 Day 1 · Harbor day" }));
+    await user.click(screen.getByRole("button", { name: "約 12:00 A" }));
+    await user.click(screen.getByRole("button", { name: "重新比較 Lunch choices" }));
+    act(() => adapter.emitPlaceSelect(candidateMapOwnerId("meal-b")));
+    await waitFor(() => expect(screen.getByRole("radio", { name: "2B · B" })).toBeChecked());
+
+    await user.click(screen.getByRole("button", { name: "時間未定 Supply shop" }));
+    expect(screen.queryByRole("group", { name: "Lunch choices" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "約 12:00 A" }));
+    const reopen = screen.getByRole("button", { name: "重新比較 Lunch choices" });
+    const fitsBeforeReopen = adapter.fitCalls.length;
+    const focusBeforeReopen = adapter.focusCalls.length;
+    await user.click(reopen);
+
+    const radioA = screen.getByRole("radio", { name: "2A · A" });
+    const radioB = screen.getByRole("radio", { name: "2B · B" });
+    expect(radioA).toBeChecked();
+    expect(radioB).not.toBeChecked();
+    expect(reopen).toHaveFocus();
+    await waitFor(() => expect(adapter.fitCalls).toHaveLength(fitsBeforeReopen + 1));
+    expect(adapter.focusCalls).toHaveLength(focusBeforeReopen);
+    expect(adapter.renderCalls.at(-1)?.selectedPlaceOwnerId).toBe(
+      candidateMapOwnerId("meal-a"),
+    );
+    expect(
+      adapter.renderCalls.at(-1)?.places
+        .filter(({ ownerId }) => decodeMapPlaceOwnerId(ownerId)?.kind === "candidate")
+        .map(({ ownerId, tone }) => ({ ownerId, tone })),
+    ).toEqual([
+      { ownerId: candidateMapOwnerId("meal-a"), tone: "selected" },
+      { ownerId: candidateMapOwnerId("meal-b"), tone: "candidate" },
+    ]);
+  });
+
   it("keeps candidate comparison inside the existing camera and route-owner boundaries without provider fetches", async () => {
     const user = userEvent.setup();
     const trip = appTrip();
@@ -491,7 +621,7 @@ describe("App home/day progress integration", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "進入 Day 1 · Harbor day" }));
+    await user.click(await screen.findByRole("button", { name: "進入 Day 1 · Harbor day" }));
     await waitFor(() => expect(adapter.mountCalls).toHaveLength(1));
     expect(adapterFactory).toHaveBeenCalledTimes(1);
     expect(fetchSpy).not.toHaveBeenCalled();

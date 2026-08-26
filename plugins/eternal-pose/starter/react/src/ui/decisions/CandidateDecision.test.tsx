@@ -169,8 +169,10 @@ function Harness({ adapter, group, initialProgress, sequenceNumber }: HarnessPro
         padding={{ top: 0, right: 0, bottom: 0, left: 0 }}
         onPlaceSelect={(ownerId) => {
           const owner = decodeMapPlaceOwnerId(ownerId);
-          if (owner?.kind === "candidate") {
+          if (owner?.kind === "candidate" && mapOverride !== null) {
             setPreviewRequest((current) => ({
+              groupId: mapOverride.group.id,
+              sessionId: mapOverride.sessionId,
               optionId: owner.id,
               requestId: (current?.requestId ?? 0) + 1,
             }));

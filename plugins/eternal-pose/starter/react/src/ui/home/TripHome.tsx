@@ -16,8 +16,8 @@ export interface TripHomeProps {
   onEnterDay: (dayId: string) => void;
 }
 
-function dateRange(trip: Trip): string {
-  return `${trip.startDate.replaceAll("-", "/")}–${trip.endDate.replaceAll("-", "/")}`;
+function displayDate(date: string): string {
+  return date.replaceAll("-", "/");
 }
 
 export function TripHome({
@@ -44,6 +44,9 @@ export function TripHome({
   const pendingReservations = trip.reservations.filter(
     ({ booking }) => booking.status === "pending",
   ).length;
+  const unbookedReservations = trip.reservations.filter(
+    ({ booking }) => booking.status === "none",
+  ).length;
 
   const toggleTask = (taskId: string): void => {
     setExpandedTaskIds((current) => {
@@ -62,9 +65,11 @@ export function TripHome({
       <header className="trip-home__identity">
         <p className="trip-home__eyebrow">Trip overview</p>
         <h1>{trip.title}</h1>
-        <time className="trip-home__dates" dateTime={`${trip.startDate}/${trip.endDate}`}>
-          {dateRange(trip)}
-        </time>
+        <p className="trip-home__dates">
+          <time dateTime={trip.startDate}>{displayDate(trip.startDate)}</time>
+          <span aria-hidden="true">–</span>
+          <time dateTime={trip.endDate}>{displayDate(trip.endDate)}</time>
+        </p>
       </header>
 
       <section className="trip-home__pretrip" aria-labelledby={`pretrip-title-${generatedId}`}>
@@ -115,6 +120,9 @@ export function TripHome({
                       </button>
                     ) : null}
                   </div>
+                  {task.note === undefined ? null : (
+                    <p className="trip-home__task-note">{task.note}</p>
+                  )}
                   {children.length === 0 ? null : (
                     <ul
                       id={childrenId}
@@ -150,7 +158,10 @@ export function TripHome({
       <section className="trip-home__reservations" aria-label="訂位摘要">
         <div>
           <h2>訂位</h2>
-          <p>{confirmedReservations} 已確認 · {pendingReservations} 待確認</p>
+          <p>
+            {confirmedReservations} 已確認 · {pendingReservations} 待確認 ·{" "}
+            {unbookedReservations} 未訂位
+          </p>
         </div>
         <ReservationPanel reservations={trip.reservations} />
       </section>

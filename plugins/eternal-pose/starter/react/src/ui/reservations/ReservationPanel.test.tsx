@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { readFileSync } from "node:fs";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Reservation } from "../../trip-core/model";
@@ -33,6 +34,7 @@ const reservations: Reservation[] = [
 let originalShowModal: PropertyDescriptor | undefined;
 let originalClose: PropertyDescriptor | undefined;
 let showModalSpy: ReturnType<typeof vi.fn>;
+let closeSpy: ReturnType<typeof vi.fn>;
 
 function mountBaseStyles(): void {
   const style = document.createElement("style");
@@ -55,11 +57,12 @@ beforeEach(() => {
     configurable: true,
     value: showModalSpy,
   });
+  closeSpy = vi.fn(function close(this: HTMLDialogElement) {
+    this.removeAttribute("open");
+  });
   Object.defineProperty(HTMLDialogElement.prototype, "close", {
     configurable: true,
-    value: vi.fn(function close(this: HTMLDialogElement) {
-      this.removeAttribute("open");
-    }),
+    value: closeSpy,
   });
 });
 
@@ -110,9 +113,19 @@ describe("ReservationPanel", () => {
       }),
     );
     expect(within(dialog).getByText("PRIVATE-OBSERVATORY-42")).toBeVisible();
-    expect(
-      within(dialog).getByRole("link", { name: "開啟 Observatory admission 訂位頁面" }),
-    ).toHaveAttribute("href", "https://example.test/reservations/observatory");
+    const bookingLink = within(dialog).getByRole("link", {
+      name: "開啟 Observatory admission 訂位頁面",
+    });
+    expect(bookingLink).toHaveAttribute("href", "https://example.test/reservations/observatory");
+    expect(bookingLink).toHaveAttribute("data-touch-target", "44");
+    expect(getComputedStyle(bookingLink).minHeight).toBe("44px");
+    const dialogRule = readFileSync("src/ui/styles/base.css", "utf8").match(
+      /\.task-widget__dialog,[\s\S]*?\n}/,
+    )?.[0];
+    expect(dialogRule).toContain("env(safe-area-inset-top)");
+    expect(dialogRule).toContain("env(safe-area-inset-right)");
+    expect(dialogRule).toContain("env(safe-area-inset-bottom)");
+    expect(dialogRule).toContain("env(safe-area-inset-left)");
     expect(within(dialog).queryByRole("link", { name: /Meal request/ })).not.toBeInTheDocument();
   });
 
@@ -145,5 +158,45 @@ describe("ReservationPanel", () => {
     await user.click(within(dialog).getByRole("button", { name: "關閉訂位資訊" }));
     expect(dialog).not.toHaveAttribute("open");
     expect(trigger).toHaveFocus();
+  });
+
+  it("restores its own trigger after programmatic activation that never focused it", () => {
+    render(
+      <>
+        <button type="button">Other control</button>
+        <ReservationPanel reservations={reservations} />
+      </>,
+    );
+    const other = screen.getByRole("button", { name: "Other control" });
+    const trigger = screen.getByRole("button", { name: "開啟訂位資訊" });
+    other.focus();
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole("dialog", { name: "訂位資訊" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "關閉訂位資訊" }));
+
+    expect(trigger).toHaveFocus();
+  });
+
+  it("does not fake an open modal when showModal is unavailable", () => {
+    Reflect.deleteProperty(HTMLDialogElement.prototype, "showModal");
+    const { container } = render(<ReservationPanel reservations={reservations} />);
+    fireEvent.click(screen.getByRole("button", { name: "開啟訂位資訊" }));
+
+    expect(container.querySelector("dialog")).not.toHaveAttribute("open");
+    expect(screen.getByRole("status", { name: "無法開啟訂位資訊" })).toBeVisible();
+  });
+
+  it("closes an open native reservation dialog during StrictMode-safe cleanup", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(
+      <StrictMode>
+        <ReservationPanel reservations={reservations} />
+      </StrictMode>,
+    );
+    await user.click(screen.getByRole("button", { name: "開啟訂位資訊" }));
+    expect(screen.getByRole("dialog", { name: "訂位資訊" })).toHaveAttribute("open");
+
+    unmount();
+    expect(closeSpy).toHaveBeenCalled();
   });
 });
