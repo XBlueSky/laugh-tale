@@ -270,6 +270,24 @@ describe("publication safety findings", () => {
       source: (secret: string) => `const token = \`${secret}\` satisfies string;\n`,
     },
     {
+      name: "literal with as assertion before ASI identifier assignment",
+      source: (secret: string) => [
+        `const apiKey = "${secret}" as string`,
+        "harmless = runtimeConfig()",
+        "",
+      ].join("\n"),
+    },
+    {
+      name: "class literal with satisfies before adjacent member",
+      source: (secret: string) => [
+        "class RuntimeConfig {",
+        `  apiKey = "${secret}" satisfies string`,
+        "  harmless = runtimeConfig()",
+        "}",
+        "",
+      ].join("\n"),
+    },
+    {
       name: "JSX literal with as const assertion",
       source: (secret: string) => `const view = <Map apiKey={"${secret}" as const} />;\n`,
     },
@@ -337,6 +355,55 @@ describe("publication safety findings", () => {
       name: "TypeScript prefix assertion",
       path: "src/prefix-assertion.ts",
       source: (secret: string) => `const apiKey = <string>"${secret}";\n`,
+    },
+    {
+      name: "multiline union typed initializer",
+      path: "src/multiline-union.ts",
+      source: (secret: string) => [
+        "class RuntimeConfig {",
+        "  apiKey:",
+        "    string |",
+        "    undefined",
+        `    = "${secret}"`,
+        "}",
+        "",
+      ].join("\n"),
+    },
+    {
+      name: "multiline intersection typed initializer",
+      path: "src/multiline-intersection.ts",
+      source: (secret: string) => [
+        "class RuntimeConfig {",
+        "  token:",
+        "    RuntimeToken &",
+        "    BrandedToken",
+        `    = "${secret}"`,
+        "}",
+        "",
+      ].join("\n"),
+    },
+    {
+      name: "qualified generic multiline typed initializer",
+      path: "src/qualified-generic.ts",
+      source: (secret: string) => [
+        "class RuntimeConfig {",
+        "  secret:",
+        "    Runtime",
+        "      .Credential<",
+        "        string",
+        "      >",
+        `    = "${secret}"`,
+        "}",
+        "",
+      ].join("\n"),
+    },
+    {
+      name: "typed initializer after more than 128 type tokens",
+      path: "src/long-type.ts",
+      source: (secret: string) => {
+        const typeMembers = Array.from({ length: 140 }, (_, index) => `Type${index}`).join(" | ");
+        return `const apiKey: ${typeMembers} = "${secret}";\n`;
+      },
     },
   ])("rejects a $name literal without echoing it", async ({ name, source, path }) => {
     const root = createTemporaryRoot();
@@ -434,6 +501,18 @@ describe("publication safety findings", () => {
       "// the example text is \"runtime_harmless_literal_value\"",
       "",
     ].join("\n"),
+    [
+      "const apiKey = options.apiKey as string",
+      "harmless = \"runtime_harmless_literal_value\"",
+      "",
+    ].join("\n"),
+    [
+      "class RuntimeConfig {",
+      "  apiKey = options.apiKey satisfies string",
+      "  harmless = \"runtime_harmless_literal_value\"",
+      "}",
+      "",
+    ].join("\n"),
   ])("accepts a non-literal JSX runtime expression %#", async (contents) => {
     const root = createTemporaryRoot();
     writeFixture(root, "src/runtime-props.tsx", contents);
@@ -441,6 +520,115 @@ describe("publication safety findings", () => {
     const findings = await scanPublication(root);
 
     expect(findingAt(findings, "src/runtime-props.tsx", "credential.generic-secret")).toBe(false);
+  });
+
+  test.each([
+    {
+      name: "line comment with unquoted value and trailing prose",
+      source: (secret: string) => `// apiKey: ${secret} rotate after the release window\n`,
+    },
+    {
+      name: "block comment with unquoted value and trailing prose",
+      source: (secret: string) => `/* token = ${secret} keep only for the release window */\n`,
+    },
+  ])("rejects a $name without scanning beyond its comment", async ({ name, source }) => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", name[0], "C".repeat(27)].join("");
+    writeFixture(root, "src/comment-secret.ts", source(secret));
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/comment-secret.ts", "credential.generic-secret")).toBe(true);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+  });
+
+  test.each([
+    {
+      name: "unterminated double-quoted string",
+      source: (secret: string) => `const apiKey = "${secret}`,
+    },
+    {
+      name: "unterminated single-quoted string",
+      source: (secret: string) => `const token = '${secret}`,
+    },
+    {
+      name: "unterminated template",
+      source: (secret: string) => `const token = \`${secret}`,
+    },
+    {
+      name: "unterminated block comment",
+      source: (secret: string) => `/* apiKey: ${secret}`,
+    },
+    {
+      name: "unterminated regular expression",
+      source: () => "const matcher = /unterminated[abc",
+    },
+    {
+      name: "unmatched opening parenthesis",
+      source: () => "const value = (runtimeConfig();\n",
+    },
+    {
+      name: "unmatched opening bracket",
+      source: () => "const value = [runtimeConfig();\n",
+    },
+    {
+      name: "unmatched opening brace",
+      source: () => "function readRuntime() { return runtimeConfig();\n",
+    },
+    {
+      name: "unmatched closing parenthesis",
+      source: () => "const value = runtimeConfig());\n",
+    },
+    {
+      name: "unmatched closing bracket",
+      source: () => "const value = runtimeConfig()];\n",
+    },
+    {
+      name: "unmatched closing brace",
+      source: () => "const value = runtimeConfig(); }\n",
+    },
+    {
+      name: "unterminated nested template interpolation",
+      source: () => "const note = `prefix ${(() => { return runtimeConfig(); })()",
+    },
+    {
+      name: "unmatched delimiter inside template interpolation",
+      source: () => "const note = `prefix ${([runtimeConfig())}`;\n",
+    },
+  ])("fails closed with a stable finding for $name", async ({ name, source }) => {
+    const root = createTemporaryRoot();
+    const sensitiveValue = ["runtime_", name[0], "M".repeat(27)].join("");
+    writeFixture(root, "src/malformed.ts", source(sensitiveValue));
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/malformed.ts", "scan.malformed-code")).toBe(true);
+    expect(findings.find((finding) => finding.code === "scan.malformed-code")?.severity).toBe("error");
+    expect(JSON.stringify(findings)).not.toContain(sensitiveValue);
+  });
+
+  test("fails closed instead of silently bypassing an exhausted syntax-analysis budget", async () => {
+    const root = createTemporaryRoot();
+    const ambiguousFields = Array.from({ length: 2_000 }, () => "apiKey: RuntimeType").join(" ");
+    writeFixture(root, "src/adversarial-syntax.ts", `${ambiguousFields}\n`);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "src/adversarial-syntax.ts", "scan.analysis-limit")).toBe(true);
+    expect(findings.find((finding) => finding.code === "scan.analysis-limit")?.severity).toBe("error");
+  });
+
+  test.each([
+    ["runtime-config.txt", "PRIVATE_TOKEN=process.env.PRIVATE_TOKEN\n"],
+    ["runtime-config.yaml", "apiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY\n"],
+    ["runtime-config.json", '{"apiKey":"process.env.PRIVATE_TOKEN"}\n'],
+  ])("accepts a non-code runtime environment reference in %s", async (path, contents) => {
+    const root = createTemporaryRoot();
+    writeFixture(root, path, contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, path, "credential.generic-secret")).toBe(false);
   });
 
   const quotedSourceSecret = ["runtime_", "Q".repeat(28)].join("");
