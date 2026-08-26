@@ -1903,11 +1903,17 @@ function parseYamlBlockScalar(contents, headerEnd, parentIndent, header, state) 
   return { end: cursor, value };
 }
 
+function isYamlFlowCommentStart(contents, cursor) {
+  if (contents[cursor] !== "#") return false;
+  if (cursor === 0) return true;
+  return [" ", "\t", "\r", "\n"].includes(contents[cursor - 1]);
+}
+
 function skipYamlFlowTrivia(contents, start) {
   let cursor = start;
   while (cursor < contents.length) {
     while (cursor < contents.length && /\s/.test(contents[cursor])) cursor += 1;
-    if (contents[cursor] !== "#") break;
+    if (!isYamlFlowCommentStart(contents, cursor)) break;
     cursor = nextYamlLine(contents, cursor);
   }
   return cursor;

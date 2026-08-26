@@ -2400,6 +2400,49 @@ describe("publication safety findings", () => {
     expect(JSON.stringify(findings)).not.toContain(contents);
   });
 
+  test.each([
+    ["quoted scalar", 'values: ["safe"#comment\n]\n'],
+    ["nested collection", "values: [[safe]#comment\n]\n"],
+    ["comma", "values: [safe,#comment\n  next]\n"],
+    ["opening delimiter", "values: [#comment\n  safe]\n"],
+  ])("fails closed for an unseparated YAML flow comment after a %s", async (_label, contents) => {
+    const root = createTemporaryRoot();
+    writeFixture(root, "flow-comment-boundary.yaml", contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "flow-comment-boundary.yaml", "scan.malformed-code")).toBe(true);
+    expect(JSON.stringify(findings)).not.toContain(contents);
+  });
+
+  test("does not echo a credential-shaped unseparated YAML flow comment", async () => {
+    const root = createTemporaryRoot();
+    const secret = ["runtime_", "C".repeat(28)].join("");
+    const contents = `values: [# apiKey: ${secret}\n  safe]\n`;
+    writeFixture(root, "flow-comment-secret.yaml", contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "flow-comment-secret.yaml", "scan.malformed-code")).toBe(true);
+    expect(JSON.stringify(findings)).not.toContain(secret);
+    expect(JSON.stringify(findings)).not.toContain(contents);
+  });
+
+  test.each([
+    ["quoted scalar", 'values: ["safe" # comment\n]\n'],
+    ["nested collection", "values: [[safe] # comment\n]\n"],
+    ["comma", "values: [safe, # comment\n  next]\n"],
+    ["opening delimiter", "values: [ # comment\n  safe]\n"],
+    ["line start", "[\n# comment\nsafe\n]\n"],
+  ])("accepts a separated YAML flow comment after a %s", async (_label, contents) => {
+    const root = createTemporaryRoot();
+    writeFixture(root, "flow-comment-valid.yaml", contents);
+
+    const findings = await scanPublication(root);
+
+    expect(findingAt(findings, "flow-comment-valid.yaml", "scan.malformed-code")).toBe(false);
+  });
+
   test("bounds YAML flow analysis work", async () => {
     const root = createTemporaryRoot();
     const values = Array.from({ length: 100_001 }, () => "safe").join(",");
