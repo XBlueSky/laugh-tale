@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and ideas
+    url: https://github.com/XBlueSky/laugh-tale/discussions
+    about: Ask usage questions or float ideas in Discussions before opening an issue.
+  - name: Security vulnerabilities
+    url: https://github.com/XBlueSky/laugh-tale/security/advisories/new
+    about: Report security issues privately — never through a public issue.

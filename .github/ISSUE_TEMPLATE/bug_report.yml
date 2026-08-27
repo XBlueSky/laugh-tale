@@ -1,0 +1,66 @@
+name: Bug report
+description: Something is broken or behaves differently than documented
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Where does the problem live?
+      options:
+        - Eternal Pose plugin / skill
+        - React starter (generated site)
+        - "@laugh-tale-island/core"
+        - "@laugh-tale-island/react"
+        - Documentation
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, and what went wrong?
+      placeholder: Describe the bug and paste any error output here.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: >-
+        The smallest sequence of steps that shows the problem. For plugin
+        issues, include the prompt or skill invocation you used (redact any
+        personal trip data you don't want public).
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Fill in whatever applies.
+      placeholder: |
+        - OS:
+        - Node.js version:
+        - Claude Code / Codex version:
+        - Plugin or package version:
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this hasn't been reported yet.
+          required: true
+        - label: This is not a security vulnerability (those go through [private vulnerability reporting](https://github.com/XBlueSky/laugh-tale/security/advisories/new)).
+          required: true

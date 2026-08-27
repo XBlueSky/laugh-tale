@@ -1,0 +1,30 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      dev-dependencies:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+  - package-ecosystem: npm
+    directory: "/plugins/eternal-pose/starter/react"
+    schedule:
+      interval: weekly
+    # The starter's pins on the workspace packages are managed by the release
+    # train and the staging script, not by Dependabot.
+    ignore:
+      - dependency-name: "@laugh-tale-island/*"
+    groups:
+      starter-dependencies:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
