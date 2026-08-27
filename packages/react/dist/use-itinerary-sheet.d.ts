@@ -1,5 +1,5 @@
 import { type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type RefCallback } from "react";
-import { type SheetGeometry, type SheetSnap } from "@laugh-tale/core";
+import { type SheetGeometry, type SheetSnap } from "@laugh-tale-island/core";
 export interface UseItinerarySheetOptions {
     /** Controlled snap; the hook never stores its own. */
     snap: SheetSnap;

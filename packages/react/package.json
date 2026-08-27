@@ -1,8 +1,30 @@
 {
-  "name": "@laugh-tale/react",
+  "name": "@laugh-tale-island/react",
   "version": "0.1.0",
-  "description": "React hooks and prop-getters for map-first travel sites built on @laugh-tale/core.",
+  "description": "React hooks and prop-getters for map-first travel sites built on @laugh-tale-island/core.",
   "license": "MIT",
+  "author": "XBlueSky",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/XBlueSky/laugh-tale.git",
+    "directory": "packages/react"
+  },
+  "homepage": "https://github.com/XBlueSky/laugh-tale#readme",
+  "bugs": {
+    "url": "https://github.com/XBlueSky/laugh-tale/issues"
+  },
+  "keywords": [
+    "travel",
+    "itinerary",
+    "trip",
+    "headless",
+    "react",
+    "hooks",
+    "map"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "sideEffects": false,
   "engines": {
@@ -26,11 +48,11 @@
     "lint": "eslint ."
   },
   "peerDependencies": {
-    "@laugh-tale/core": "0.1.0",
+    "@laugh-tale-island/core": "0.1.0",
     "react": ">=19.2.0 <20"
   },
   "devDependencies": {
-    "@laugh-tale/core": "0.1.0",
+    "@laugh-tale-island/core": "0.1.0",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.2",
     "@testing-library/user-event": "14.6.4",

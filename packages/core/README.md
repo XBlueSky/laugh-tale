@@ -1,4 +1,4 @@
-# @laugh-tale/core
+# @laugh-tale-island/core
 
 Framework-neutral trip behavior for map-first travel sites: the semantic trip model, validation, timezone-aware scheduling, device progress, effective-itinerary and candidate resolution, candidate comparison-session transitions, route-edge composition, pure map/timeline presentation builders, stable owner identifiers, and sheet snap geometry.
 
@@ -7,15 +7,15 @@ This package contains **no finished visual system** — no components, CSS, icon
 ## Install
 
 ```bash
-npm install @laugh-tale/core
+npm install @laugh-tale-island/core
 ```
 
 Requires Node.js `>=22.13.0` for building and testing. ESM only.
 
 ## Entry points
 
-- `@laugh-tale/core` — the default entry. Usable without React, a DOM, local storage, geolocation, or a map SDK.
-- `@laugh-tale/core/browser` — provider-neutral browser contracts (`MapAdapter`, `RouteAdapter`, `PlaceAdapter`, `NavigationAdapter`) and an injectable `ProgressStore` with a `localStorage` adapter. This subpath may reference web-platform types.
+- `@laugh-tale-island/core` — the default entry. Usable without React, a DOM, local storage, geolocation, or a map SDK.
+- `@laugh-tale-island/core/browser` — provider-neutral browser contracts (`MapAdapter`, `RouteAdapter`, `PlaceAdapter`, `NavigationAdapter`) and an injectable `ProgressStore` with a `localStorage` adapter. This subpath may reference web-platform types.
 
 No other import path is public; the `exports` map blocks package internals.
 
@@ -29,7 +29,7 @@ import {
   buildTimelineEntries,
   buildMapPresentation,
   type Trip,
-} from "@laugh-tale/core";
+} from "@laugh-tale-island/core";
 
 const trip: Trip = /* your typed trip content */;
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { completeTrip } from "./fixtures/complete-trip.js";
-import type { Trip } from "@laugh-tale/core";
+import type { Trip } from "@laugh-tale-island/core";
 import {
   collectDayProgressScope,
   checklistCompletionKey,
@@ -11,7 +11,7 @@ import {
   taskCompletionKey,
   tripProgressReducer,
   type TripProgressV1,
-} from "@laugh-tale/core";
+} from "@laugh-tale-island/core";
 
 const validProgress: TripProgressV1 = {
   version: 1,

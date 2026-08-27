@@ -1,6 +1,6 @@
 import { ChevronDown } from "lucide-react";
 
-import type { ShoppingItem, ShoppingStatus } from "@laugh-tale/core";
+import type { ShoppingItem, ShoppingStatus } from "@laugh-tale-island/core";
 
 const STATUS_OPTIONS: readonly {
   value: ShoppingStatus;

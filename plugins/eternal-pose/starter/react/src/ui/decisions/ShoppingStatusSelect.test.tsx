@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { ShoppingItem, ShoppingStatus } from "@laugh-tale/core";
+import type { ShoppingItem, ShoppingStatus } from "@laugh-tale-island/core";
 import {
   isTerminalShoppingStatus,
   resolveShoppingStatus,

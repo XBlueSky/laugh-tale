@@ -1,4 +1,4 @@
-import type { Coordinates } from "@laugh-tale/core";
+import type { Coordinates } from "@laugh-tale-island/core";
 
 function finiteCoordinate(
   value: unknown,

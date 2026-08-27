@@ -4,8 +4,8 @@ import { readFileSync } from "node:fs";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { TripTask } from "@laugh-tale/core";
-import { checklistCompletionKey, taskCompletionKey } from "@laugh-tale/core";
+import type { TripTask } from "@laugh-tale-island/core";
+import { checklistCompletionKey, taskCompletionKey } from "@laugh-tale-island/core";
 import { TaskWidget } from "./TaskWidget";
 
 const tasks: TripTask[] = [

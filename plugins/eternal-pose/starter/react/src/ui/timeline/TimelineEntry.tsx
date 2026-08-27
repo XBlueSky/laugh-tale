@@ -6,7 +6,7 @@ import {
   type ReactElement,
 } from "react";
 
-import type { Booking, ShoppingStatus, Timing, TripNode } from "@laugh-tale/core";
+import type { Booking, ShoppingStatus, Timing, TripNode } from "@laugh-tale-island/core";
 import { formatTimingLabel } from "../timing-label";
 
 export interface TimelineNodeState {

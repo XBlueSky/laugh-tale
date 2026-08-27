@@ -1,5 +1,5 @@
-import type { ShoppingStatus, Trip, TripProgressV1 } from "@laugh-tale/core";
-import type { ProgressStore } from "@laugh-tale/core/browser";
+import type { ShoppingStatus, Trip, TripProgressV1 } from "@laugh-tale-island/core";
+import type { ProgressStore } from "@laugh-tale-island/core/browser";
 export type ProgressPersistenceStatus = "persistent" | "memory-only";
 export interface TripProgressController {
     progress: TripProgressV1;

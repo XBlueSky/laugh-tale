@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import type { RouteEdge, TripDay, TripNode } from "@laugh-tale/core";
-import type { EffectiveNode } from "@laugh-tale/core";
-import { buildRoutePresentations } from "@laugh-tale/core";
+import type { RouteEdge, TripDay, TripNode } from "@laugh-tale-island/core";
+import type { EffectiveNode } from "@laugh-tale-island/core";
+import { buildRoutePresentations } from "@laugh-tale-island/core";
 
 function node(id: string): TripNode {
   return {

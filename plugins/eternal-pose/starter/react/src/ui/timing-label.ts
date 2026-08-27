@@ -1,4 +1,4 @@
-import type { Timing } from "@laugh-tale/core";
+import type { Timing } from "@laugh-tale-island/core";
 
 export function formatTimingLabel(timing: Timing): string {
   if (timing.certainty === "unknown" || timing.start === undefined) {

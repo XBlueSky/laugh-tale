@@ -65,8 +65,8 @@ describe("clean tarball consumer", () => {
             private: true,
             type: "module",
             dependencies: {
-              "@laugh-tale/core": `file:${coreTarball}`,
-              "@laugh-tale/react": `file:${reactTarball}`,
+              "@laugh-tale-island/core": `file:${coreTarball}`,
+              "@laugh-tale-island/react": `file:${reactTarball}`,
               react: "19.2.6",
               "react-dom": "19.2.6",
             },
@@ -100,8 +100,8 @@ describe("clean tarball consumer", () => {
       writeFileSync(
         join(consumerRoot, "src/core-consumer.ts"),
         [
-          'import { buildTimelineEntries, emptyTripProgress, resolveEffectiveItinerary, validateTrip, type Trip } from "@laugh-tale/core";',
-          'import type { ProgressStore } from "@laugh-tale/core/browser";',
+          'import { buildTimelineEntries, emptyTripProgress, resolveEffectiveItinerary, validateTrip, type Trip } from "@laugh-tale-island/core";',
+          'import type { ProgressStore } from "@laugh-tale-island/core/browser";',
           "",
           "export function summarize(trip: Trip, store: ProgressStore): number {",
           "  const validation = validateTrip(trip);",
@@ -117,9 +117,9 @@ describe("clean tarball consumer", () => {
       writeFileSync(
         join(consumerRoot, "src/react-consumer.tsx"),
         [
-          'import type { Trip } from "@laugh-tale/core";',
-          'import { createLocalStorageProgressStore } from "@laugh-tale/core/browser";',
-          'import { useCandidateDecision, useItinerarySheet, useTripProgress } from "@laugh-tale/react";',
+          'import type { Trip } from "@laugh-tale-island/core";',
+          'import { createLocalStorageProgressStore } from "@laugh-tale-island/core/browser";',
+          'import { useCandidateDecision, useItinerarySheet, useTripProgress } from "@laugh-tale-island/react";',
           "",
           "export function Consumer({ trip }: { trip: Trip }) {",
           '  const progress = useTripProgress(trip, createLocalStorageProgressStore(`trip:${trip.id}`));',
@@ -147,7 +147,7 @@ describe("clean tarball consumer", () => {
       run(npm(), ["install", "--no-audit", "--no-fund"], consumerRoot);
 
       for (const name of ["core", "react"]) {
-        const installed = join(consumerRoot, "node_modules/@laugh-tale", name);
+        const installed = join(consumerRoot, "node_modules/@laugh-tale-island", name);
         expect(lstatSync(installed).isSymbolicLink(), `${name} must not be a symlink`).toBe(false);
         expect(existsSync(join(installed, "dist/index.js"))).toBe(true);
         expect(existsSync(join(installed, "src"))).toBe(false);
@@ -163,7 +163,7 @@ describe("clean tarball consumer", () => {
       run(tsc, ["-p", "tsconfig.json"], consumerRoot);
 
       const imported = (await import(
-        pathToFileURL(join(consumerRoot, "node_modules/@laugh-tale/core/dist/index.js")).href
+        pathToFileURL(join(consumerRoot, "node_modules/@laugh-tale-island/core/dist/index.js")).href
       )) as Record<string, unknown>;
       expect(typeof imported.validateTrip).toBe("function");
       expect(typeof imported.resolveSheetGeometry).toBe("function");

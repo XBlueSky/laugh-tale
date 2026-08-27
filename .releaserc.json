@@ -1,0 +1,25 @@
+{
+  "branches": ["main"],
+  "plugins": [
+    "@semantic-release/commit-analyzer",
+    "@semantic-release/release-notes-generator",
+    "@semantic-release/changelog",
+    "@semantic-release/npm",
+    [
+      "@semantic-release/exec",
+      {
+        "//": "The root package is a private workspace container, so @semantic-release/npm only bumps its version and never publishes. prepare: lockstep-bump @laugh-tale-island/core and @laugh-tale-island/react (react pins the exact core version it was tested against) and resync the lockfile — the workspace link satisfies react's core pin, so no registry fetch of the not-yet-published version happens. publish: build both packages, then publish core before react (react peers on core). Starter pins and eternal-pose versions are bumped deliberately per plugin release, never here.",
+        "prepareCmd": "node scripts/set-release-versions.mjs ${nextRelease.version} && npm install --package-lock-only --no-audit --no-fund --registry=https://registry.npmjs.org",
+        "publishCmd": "npm run build:packages && npm publish -w packages/core --provenance --access public && npm publish -w packages/react --provenance --access public"
+      }
+    ],
+    "@semantic-release/github",
+    [
+      "@semantic-release/git",
+      {
+        "assets": ["package.json", "package-lock.json", "packages/core/package.json", "packages/react/package.json", "CHANGELOG.md"],
+        "message": "chore(release): bump version to ${nextRelease.version}\n\n[skip ci]"
+      }
+    ]
+  ]
+}

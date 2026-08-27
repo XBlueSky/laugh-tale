@@ -155,7 +155,7 @@ function createValidGeneratedProject(root: string): void {
     "CLAUDE.md": "Read docs/trip-experience-contract.md.\n",
     ".env.example": "GOOGLE_MAPS_API_KEY=\n",
     ".gitignore": ".env.local\ndist/\ncoverage/\n",
-    "package.json": `${JSON.stringify({ scripts: { build: "node scripts/build.mjs", lint: "node scripts/pass.mjs", test: "node scripts/pass.mjs", "type-check": "node scripts/pass.mjs" }, dependencies: { "@laugh-tale/core": "0.1.0", "@laugh-tale/react": "0.1.0" } }, null, 2)}\n`,
+    "package.json": `${JSON.stringify({ scripts: { build: "node scripts/build.mjs", lint: "node scripts/pass.mjs", test: "node scripts/pass.mjs", "type-check": "node scripts/pass.mjs" }, dependencies: { "@laugh-tale-island/core": "0.1.0", "@laugh-tale-island/react": "0.1.0" } }, null, 2)}\n`,
     "package-lock.json": "{}\n",
     "docs/trip-experience-contract.md": "# Contract\n",
     "scripts/pass.mjs": "// Synthetic validation fixture command.\n",

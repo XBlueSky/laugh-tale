@@ -7,7 +7,7 @@ import {
   isValidCandidatePreviewRequest,
   type CandidateGroup,
   type CandidateSessionState,
-} from "@laugh-tale/core";
+} from "@laugh-tale-island/core";
 
 const group: CandidateGroup = {
   id: "dinner-group",

@@ -5,13 +5,13 @@ import { useCallback, useMemo, useState } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { ItineraryMap } from "../../experience-shell/ItineraryMap";
-import { buildMapPresentation } from "@laugh-tale/core";
-import { candidateMapOwnerId, decodeMapPlaceOwnerId, nodeMapOwnerId, type MapPresentation } from "@laugh-tale/core";
+import { buildMapPresentation } from "@laugh-tale-island/core";
+import { candidateMapOwnerId, decodeMapPlaceOwnerId, nodeMapOwnerId, type MapPresentation } from "@laugh-tale-island/core";
 import { FakeMapAdapter } from "../../providers/fake/FakeMapAdapter";
-import type { CandidateGroup, Trip } from "@laugh-tale/core";
-import { emptyTripProgress, tripProgressReducer, type TripProgressV1 } from "@laugh-tale/core";
-import { resolveEffectiveItinerary } from "@laugh-tale/core";
-import type { CandidateMapOverride, CandidatePreviewRequest } from "@laugh-tale/core";
+import type { CandidateGroup, Trip } from "@laugh-tale-island/core";
+import { emptyTripProgress, tripProgressReducer, type TripProgressV1 } from "@laugh-tale-island/core";
+import { resolveEffectiveItinerary } from "@laugh-tale-island/core";
+import type { CandidateMapOverride, CandidatePreviewRequest } from "@laugh-tale-island/core";
 import { CandidateDecision } from "./CandidateDecision";
 
 function mountBaseStyles(): void {

@@ -2,8 +2,8 @@
 
 Generated sites depend on two public npm packages that carry the protected runtime behavior:
 
-- `@laugh-tale/core` — the trip model, validation, scheduling, progress, candidate transitions, route composition, map/timeline presentation builders, owner IDs, and sheet geometry; browser adapter contracts and the localStorage progress store live under `@laugh-tale/core/browser`.
-- `@laugh-tale/react` — the behavior hooks: `useTripSelection`, `useTripProgress`, `useRouteStates`, `useUserLocation`, `useCandidateDecision`, `useItinerarySheet`.
+- `@laugh-tale-island/core` — the trip model, validation, scheduling, progress, candidate transitions, route composition, map/timeline presentation builders, owner IDs, and sheet geometry; browser adapter contracts and the localStorage progress store live under `@laugh-tale-island/core/browser`.
+- `@laugh-tale-island/react` — the behavior hooks: `useTripSelection`, `useTripProgress`, `useRouteStates`, `useUserLocation`, `useCandidateDecision`, `useItinerarySheet`.
 
 ## Rules
 

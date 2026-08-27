@@ -1,25 +1,69 @@
 # Releasing Laugh Tale
 
-Three release lines share this repository: the Eternal Pose plugin/marketplace, `@laugh-tale/core`, and `@laugh-tale/react`. Every externally visible action below is separately approval-gated. A successful local pack is **never** reported as a release.
+Three release lines share this repository: the Eternal Pose plugin/marketplace,
+and the two npm packages `@laugh-tale-island/core` and `@laugh-tale-island/react`.
+Since 2026-08-27 the two packages ship as **one lockstep release train**
+published automatically by semantic-release (modeled on `cc-marketspec`),
+superseding the earlier manual runbook. A successful local pack is still
+**never** a release.
 
-## Initial package release (from `main`)
+## How a package release happens
 
-1. [ ] Workspace gates green: `npm ci && npm run stage:starter && LAUGH_TALE_STARTER_ROOT="$PWD/tmp/staged-starter" npm run check`.
-2. [ ] Staged starter gates green: `npm run test:starter:staged && npm run test:e2e:staged`.
-3. [ ] Artifact gates green: `npx vitest run tests/packages` (tarball allowlists + clean tarball consumer).
-4. [ ] Publication scan clean over both packed tarball file lists.
-5. [ ] **STOP — explicit user approval required.** Confirm all of: npm authentication (2FA), control of the `@laugh-tale` npm organization, and the exact versions to publish. If the scope cannot be obtained, stop and revise the design spec; do not publish under another name.
-6. [ ] Publish `@laugh-tale/core@0.1.0` publicly, then `@laugh-tale/react@0.1.0` publicly.
-7. [ ] Regenerate the starter lockfile from the public registry (`npm --prefix plugins/eternal-pose/starter/react install`) and commit it; restore direct starter installs in CI (`npm ci` in the starter replaces the staged path).
-8. [ ] Generate a clean site through `plugins/eternal-pose/scripts/create-trip-project.mjs`, run `npm ci` and its full checks in that site with no Laugh Tale checkout on any resolution path.
-9. [ ] **STOP — separate approvals** for each of: pushing to the remote, creating a GitHub release or tag, and announcing the package-backed plugin release in any marketplace.
+1. A push to `main` runs the `check` job (workspace gates against the staged
+   tarball-installed starter, including Playwright E2E).
+2. When `check` is green, the `release` job runs `npx semantic-release`:
+   - the version is computed from conventional commits since the last tag
+     (`fix:` → patch, `feat:` → minor, `BREAKING CHANGE:` → major; other types
+     release nothing);
+   - `scripts/set-release-versions.mjs` lockstep-bumps both packages and pins
+     react's `peerDependencies`/`devDependencies` on core to the exact new
+     version, then the lockfile is resynced;
+   - both packages are built and published with `--provenance --access public`,
+     core before react;
+   - a GitHub release and `CHANGELOG.md` entry are created, and the version
+     bump is committed back with `[skip ci]`.
 
-> The extraction was merged to `main` before the first publish (maintainer decision, 2026-08-27). Until steps 6–7 complete, the committed starter lockfile does not yet include the two packages, so direct `npm ci` inside `plugins/eternal-pose/starter/react` fails; use the staged flow (`npm run stage:starter`) documented in the README. Publishing and regenerating the lockfile clears this state.
+There is no publish path outside that job. Locally you can rehearse with
+`npx semantic-release --dry-run` (needs a `GITHUB_TOKEN`).
+
+## One-time setup (owner actions)
+
+- [ ] Own the `laugh-tale-island` npm organization (free plan; public packages).
+- [ ] Create a **granular npm access token** with read/write on the
+      `@laugh-tale-island` scope, allowed to bypass 2FA for automation, and add
+      it to the GitHub repository as the `NPM_TOKEN` Actions secret.
+- [ ] Push the `v0.0.0` baseline tag together with `main`
+      (`git push --follow-tags`). semantic-release otherwise starts at
+      `1.0.0`; from the baseline, the release-setup `feat:` commit computes
+      `0.1.0`, which must match the starter's exact pins.
+
+## After the first successful publish (still required)
+
+1. [ ] Regenerate the starter lockfile from the public registry
+       (`npm --prefix plugins/eternal-pose/starter/react install`) and commit
+       it; restore direct starter installs in CI (`npm ci` in the starter
+       replaces the staged path).
+2. [ ] Generate a clean site through
+       `plugins/eternal-pose/scripts/create-trip-project.mjs`, run `npm ci`
+       and its full checks in that site with no Laugh Tale checkout on any
+       resolution path.
+3. [ ] Announcing the package-backed plugin release in any marketplace remains
+       separately approval-gated.
+
+> Until those lockfile steps complete, direct `npm ci` inside
+> `plugins/eternal-pose/starter/react` fails; use the staged flow
+> (`npm run stage:starter`) documented in the README.
 
 ## Subsequent releases
 
-- Packages follow SemVer independently; `@laugh-tale/react` declares the exact `@laugh-tale/core` version it was tested against.
-- Before `1.0.0`, a breaking public API change requires a migration note and a minor-version bump.
-- A plugin release that bumps the starter's pinned versions records those versions in its release notes so Update and Audit flows can recognize them.
-- Every release line keeps release notes; generated sites are never upgraded automatically (see the Eternal Pose `packages.md` reference for the explicit upgrade flow).
-- CI stays read-only. A future trusted-publishing workflow remains separately approval-gated.
+- Core and react always share one version; react declares the exact
+  `@laugh-tale-island/core` version it was tested against (enforced by
+  `set-release-versions.mjs`).
+- Before `1.0.0`, a breaking public API change requires a migration note and a
+  minor-version bump — type the commit accordingly.
+- Starter pins and recorded `eternal-pose` versions are **not** bumped by the
+  release train. A plugin release that bumps the starter's pinned versions does
+  so deliberately, tests against them, and records those versions in its
+  release notes so Update and Audit flows can recognize them.
+- Generated sites are never upgraded automatically (see the Eternal Pose
+  `packages.md` reference for the explicit upgrade flow).

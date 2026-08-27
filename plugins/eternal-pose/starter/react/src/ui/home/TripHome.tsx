@@ -1,8 +1,8 @@
 import { ChevronDown, ChevronUp, MapPinned } from "lucide-react";
 import { useId, useState } from "react";
 
-import type { Trip } from "@laugh-tale/core";
-import { checklistCompletionKey, taskCompletionKey, type TripProgressV1 } from "@laugh-tale/core";
+import type { Trip } from "@laugh-tale-island/core";
+import { checklistCompletionKey, taskCompletionKey, type TripProgressV1 } from "@laugh-tale-island/core";
 import { ReservationPanel } from "../reservations/ReservationPanel";
 
 export interface TripHomeProps {

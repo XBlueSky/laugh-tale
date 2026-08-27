@@ -2,7 +2,7 @@ import { StrictMode, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 
 import { App } from "./App";
-import type { RouteAdapter } from "@laugh-tale/core/browser";
+import type { RouteAdapter } from "@laugh-tale-island/core/browser";
 import { trip } from "./trip-content/trip";
 
 const rootElement = document.getElementById("root");

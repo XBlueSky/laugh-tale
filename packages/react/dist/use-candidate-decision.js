@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, } from "react";
-import { candidateMapOverrideFor, candidateSessionReducer, initialCandidateDraftId, isValidCandidatePreviewRequest, } from "@laugh-tale/core";
+import { candidateMapOverrideFor, candidateSessionReducer, initialCandidateDraftId, isValidCandidatePreviewRequest, } from "@laugh-tale-island/core";
 let candidateSessionSequence = 0;
 function nextCandidateSessionId() {
     candidateSessionSequence += 1;

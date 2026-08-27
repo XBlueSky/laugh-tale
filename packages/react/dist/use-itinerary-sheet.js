@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, } from "react";
-import { clampSheetHeight, nearestSheetSnap, } from "@laugh-tale/core";
+import { clampSheetHeight, nearestSheetSnap, } from "@laugh-tale-island/core";
 const SNAP_ORDER = ["collapsed", "half", "expanded"];
 function snapHeight(snap, geometry) {
     return geometry[snap];

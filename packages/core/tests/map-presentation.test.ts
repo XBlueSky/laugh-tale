@@ -11,7 +11,7 @@ import {
   type EffectiveNode,
   type MapPresentationContext,
   type TripNode,
-} from "@laugh-tale/core";
+} from "@laugh-tale-island/core";
 
 function placeNode(
   id: string,

@@ -1,5 +1,5 @@
-import type { Coordinates } from "@laugh-tale/core";
-import { type MapAdapter } from "@laugh-tale/core/browser";
+import type { Coordinates } from "@laugh-tale-island/core";
+import { type MapAdapter } from "@laugh-tale-island/core/browser";
 export type UserLocationStatus = "idle" | "requesting" | "active" | "denied" | "unavailable";
 export interface UserLocationController {
     status: UserLocationStatus;

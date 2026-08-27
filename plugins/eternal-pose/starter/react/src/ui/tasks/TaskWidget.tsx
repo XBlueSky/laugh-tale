@@ -7,8 +7,8 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 
-import type { TripTask } from "@laugh-tale/core";
-import { checklistCompletionKey, taskCompletionKey } from "@laugh-tale/core";
+import type { TripTask } from "@laugh-tale-island/core";
+import { checklistCompletionKey, taskCompletionKey } from "@laugh-tale-island/core";
 
 export interface TaskWidgetProps {
   dayTitle: string;

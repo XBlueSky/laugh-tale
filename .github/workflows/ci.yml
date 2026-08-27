@@ -24,3 +24,38 @@ jobs:
       - run: npm run test:starter:staged
       - run: npm --prefix tmp/staged-starter exec playwright install --with-deps chromium
       - run: npm run test:e2e:staged
+
+  release:
+    needs: check
+    # Only release from the default branch (not PRs or tags). semantic-release
+    # creates the tags itself; its [skip ci] bump commit won't re-trigger CI.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write       # tags, the version-bump commit, GitHub releases
+      issues: write
+      pull-requests: write
+      id-token: write        # npm provenance
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0     # semantic-release walks history from the last tag
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - name: Release
+        run: npx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # setup-node's registry-url writes a .npmrc with `_authToken=${NODE_AUTH_TOKEN}`
+          # and points NPM_CONFIG_USERCONFIG at it; without NODE_AUTH_TOKEN that placeholder
+          # resolves to a dummy value and npm publish 401s. NPM_TOKEN is what
+          # @semantic-release/npm reads itself — provide both so neither auth path sees an
+          # empty token.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

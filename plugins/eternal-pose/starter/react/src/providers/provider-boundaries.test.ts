@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { nodeMapOwnerId, type MapPresentation } from "@laugh-tale/core";
+import { nodeMapOwnerId, type MapPresentation } from "@laugh-tale-island/core";
 
 import { FakeMapAdapter } from "./fake/FakeMapAdapter";
 import { createGoogleMapsUrl } from "./google/google-maps-url";

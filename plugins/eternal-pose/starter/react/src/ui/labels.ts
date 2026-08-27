@@ -1,4 +1,4 @@
-import type { UserLocationStatus } from "@laugh-tale/react";
+import type { UserLocationStatus } from "@laugh-tale-island/react";
 
 export const USER_LOCATION_LABELS: Record<UserLocationStatus, string> = {
   idle: "Location off",

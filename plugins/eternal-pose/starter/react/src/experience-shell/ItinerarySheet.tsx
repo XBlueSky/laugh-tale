@@ -8,8 +8,8 @@ import {
 } from "lucide-react";
 import { type ReactNode } from "react";
 
-import type { SheetGeometry, SheetSnap } from "@laugh-tale/core";
-import { useItinerarySheet } from "@laugh-tale/react";
+import type { SheetGeometry, SheetSnap } from "@laugh-tale-island/core";
+import { useItinerarySheet } from "@laugh-tale-island/react";
 
 export interface ItineraryRouteStatus {
   state: "loading" | "error";

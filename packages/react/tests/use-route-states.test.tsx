@@ -1,10 +1,10 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 
-import type { RouteEdge } from "@laugh-tale/core";
-import type { RouteRequest, RouteResult } from "@laugh-tale/core";
-import type { RouteAdapter } from "@laugh-tale/core/browser";
-import { useRouteStates } from "@laugh-tale/react";
+import type { RouteEdge } from "@laugh-tale-island/core";
+import type { RouteRequest, RouteResult } from "@laugh-tale-island/core";
+import type { RouteAdapter } from "@laugh-tale-island/core/browser";
+import { useRouteStates } from "@laugh-tale-island/react";
 
 function route(id: string, fromNodeId = `${id}-from`, toNodeId = `${id}-to`): RouteEdge {
   return {

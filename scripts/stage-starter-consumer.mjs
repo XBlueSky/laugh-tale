@@ -48,8 +48,8 @@ async function packWorkspacePackages() {
 
 function packageNameForTarball(tarball) {
   const filename = tarball.split(sep).at(-1) ?? "";
-  const bareName = filename.replace(/^laugh-tale-/, "").replace(/-\d+\.\d+\.\d+.*\.tgz$/, "");
-  return `@laugh-tale/${bareName}`;
+  const bareName = filename.replace(/^laugh-tale-island-/, "").replace(/-\d+\.\d+\.\d+.*\.tgz$/, "");
+  return `@laugh-tale-island/${bareName}`;
 }
 
 export async function stageStarterConsumer({ install = true, outDir } = {}) {
@@ -70,7 +70,7 @@ export async function stageStarterConsumer({ install = true, outDir } = {}) {
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
   const tarballByName = new Map(tarballs.map((tarball) => [packageNameForTarball(tarball), tarball]));
   for (const dependencyName of Object.keys(manifest.dependencies ?? {})) {
-    if (!dependencyName.startsWith("@laugh-tale/")) continue;
+    if (!dependencyName.startsWith("@laugh-tale-island/")) continue;
     const tarball = tarballByName.get(dependencyName);
     if (tarball === undefined) throw new Error(`no packed tarball for ${dependencyName}`);
     manifest.dependencies[dependencyName] = `file:${tarball}`;

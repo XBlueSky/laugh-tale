@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { USER_LOCATION_OWNER_ID } from "@laugh-tale/core";
+import { USER_LOCATION_OWNER_ID } from "@laugh-tale-island/core";
 function browserGeolocation() {
     return typeof navigator === "undefined" ? undefined : navigator.geolocation;
 }

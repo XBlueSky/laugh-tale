@@ -5,8 +5,8 @@ import type {
   CandidateMapOverride,
   CandidateOption,
   CandidatePreviewRequest,
-} from "@laugh-tale/core";
-import { useCandidateDecision } from "@laugh-tale/react";
+} from "@laugh-tale-island/core";
+import { useCandidateDecision } from "@laugh-tale-island/react";
 
 export interface CandidateDecisionProps {
   group: CandidateGroup;

@@ -4,11 +4,11 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../../App";
-import { candidateMapOwnerId, decodeMapPlaceOwnerId, nodeMapOwnerId } from "@laugh-tale/core";
+import { candidateMapOwnerId, decodeMapPlaceOwnerId, nodeMapOwnerId } from "@laugh-tale-island/core";
 import { tripProgressStorageKey } from "../../experience-shell/progress-storage";
 import { FakeMapAdapter } from "../../providers/fake/FakeMapAdapter";
-import type { Trip } from "@laugh-tale/core";
-import { checklistCompletionKey, emptyTripProgress, taskCompletionKey, type TripProgressV1 } from "@laugh-tale/core";
+import type { Trip } from "@laugh-tale-island/core";
+import { checklistCompletionKey, emptyTripProgress, taskCompletionKey, type TripProgressV1 } from "@laugh-tale-island/core";
 import { TripHome } from "./TripHome";
 
 function appTrip(): Trip {

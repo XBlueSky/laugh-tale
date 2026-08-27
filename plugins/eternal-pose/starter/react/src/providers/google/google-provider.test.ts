@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { candidateMapOwnerId, decodeMapPlaceOwnerId, nodeMapOwnerId, USER_LOCATION_OWNER_ID, type MapPresentation, type RouteRequest, type RouteResult } from "@laugh-tale/core";
-import type { RouteEdge } from "@laugh-tale/core";
+import { candidateMapOwnerId, decodeMapPlaceOwnerId, nodeMapOwnerId, USER_LOCATION_OWNER_ID, type MapPresentation, type RouteRequest, type RouteResult } from "@laugh-tale-island/core";
+import type { RouteEdge } from "@laugh-tale-island/core";
 import { FakeRouteAdapter } from "../fake/FakeRouteAdapter";
 import {
   configureGoogleMaps,

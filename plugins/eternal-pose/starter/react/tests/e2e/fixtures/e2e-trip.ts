@@ -1,6 +1,6 @@
-import type { MapFocusTarget, MapPadding, MapPresentation, RouteRequest, RouteResult } from "@laugh-tale/core";
-import type { MapAdapter, MapEvents, RouteAdapter } from "@laugh-tale/core/browser";
-import type { Coordinates, RouteEdge, Trip, TripNode } from "@laugh-tale/core";
+import type { MapFocusTarget, MapPadding, MapPresentation, RouteRequest, RouteResult } from "@laugh-tale-island/core";
+import type { MapAdapter, MapEvents, RouteAdapter } from "@laugh-tale-island/core/browser";
+import type { Coordinates, RouteEdge, Trip, TripNode } from "@laugh-tale-island/core";
 
 declare global {
   interface Window {

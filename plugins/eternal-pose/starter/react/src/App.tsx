@@ -1,13 +1,13 @@
 import { useMemo, useState } from "react";
 
 import { TripExperience } from "./experience-shell/TripExperience";
-import type { MapAdapter, RouteAdapter } from "@laugh-tale/core/browser";
-import { createLocalStorageProgressStore } from "@laugh-tale/core/browser";
-import { useTripProgress } from "@laugh-tale/react";
+import type { MapAdapter, RouteAdapter } from "@laugh-tale-island/core/browser";
+import { createLocalStorageProgressStore } from "@laugh-tale-island/core/browser";
+import { useTripProgress } from "@laugh-tale-island/react";
 
 import { tripProgressStorageKey } from "./experience-shell/progress-storage";
 import { trip as configuredTrip } from "./trip-content/trip";
-import type { Trip } from "@laugh-tale/core";
+import type { Trip } from "@laugh-tale-island/core";
 import { SetupRequired, type SetupIssue } from "./ui/SetupRequired";
 import { TripHome } from "./ui/home/TripHome";
 

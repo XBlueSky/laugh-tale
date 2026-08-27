@@ -95,7 +95,7 @@ function createControlledProject(root: string, tripReady: boolean): void {
     private: true,
     type: "module",
     scripts,
-    dependencies: { "@laugh-tale/core": "0.1.0", "@laugh-tale/react": "0.1.0" },
+    dependencies: { "@laugh-tale-island/core": "0.1.0", "@laugh-tale-island/react": "0.1.0" },
   };
   const packageLock = {
     name: packageJson.name,
@@ -241,7 +241,7 @@ describe("generated project validation", () => {
     expect(result.findings.filter((finding) => finding.code === "project.missing-directory")).toEqual([]);
   });
 
-  test("rejects missing and non-exact @laugh-tale package specifiers", async () => {
+  test("rejects missing and non-exact @laugh-tale-island package specifiers", async () => {
     const root = temporaryRoot();
     createControlledProject(root, false);
     const manifestPath = join(root, "package.json");
@@ -249,21 +249,21 @@ describe("generated project validation", () => {
       dependencies: Record<string, string>;
     };
 
-    manifest.dependencies["@laugh-tale/core"] = "^0.1.0";
+    manifest.dependencies["@laugh-tale-island/core"] = "^0.1.0";
     writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
     let result = await runValidation(root, "local", { spawnSync: successfulValidationSpawn() });
     expect(result.findings).toEqual(expect.arrayContaining([
       expect.objectContaining({ severity: "error", code: "project.invalid-package-specifier" }),
     ]));
 
-    manifest.dependencies["@laugh-tale/core"] = "file:../somewhere/core.tgz";
+    manifest.dependencies["@laugh-tale-island/core"] = "file:../somewhere/core.tgz";
     writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
     result = await runValidation(root, "local", { spawnSync: successfulValidationSpawn() });
     expect(result.findings).toEqual(expect.arrayContaining([
       expect.objectContaining({ severity: "error", code: "project.invalid-package-specifier" }),
     ]));
 
-    delete manifest.dependencies["@laugh-tale/core"];
+    delete manifest.dependencies["@laugh-tale-island/core"];
     writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
     result = await runValidation(root, "local", { spawnSync: successfulValidationSpawn() });
     expect(result.findings).toEqual(expect.arrayContaining([

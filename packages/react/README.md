@@ -1,19 +1,19 @@
-# @laugh-tale/react
+# @laugh-tale-island/react
 
-React hooks and prop-getters for map-first travel sites built on `@laugh-tale/core`. Behavior only — this package contains **no components, CSS, icons, design tokens, copy, or fixed page structure**. The consuming site owns every visible element and maps semantic statuses to its own wording.
+React hooks and prop-getters for map-first travel sites built on `@laugh-tale-island/core`. Behavior only — this package contains **no components, CSS, icons, design tokens, copy, or fixed page structure**. The consuming site owns every visible element and maps semantic statuses to its own wording.
 
 ## Install
 
 ```bash
-npm install @laugh-tale/core @laugh-tale/react
+npm install @laugh-tale-island/core @laugh-tale-island/react
 ```
 
-Peer dependencies: `react >=19.2.0 <20` and `@laugh-tale/core 0.1.0` (the exact core version this release is tested against). Node.js `>=22.13.0` for building and testing. ESM only. The single documented entry point is `@laugh-tale/react`.
+Peer dependencies: `react >=19.2.0 <20` and `@laugh-tale-island/core 0.1.0` (the exact core version this release is tested against). Node.js `>=22.13.0` for building and testing. ESM only. The single documented entry point is `@laugh-tale-island/react`.
 
 ## Hooks
 
 - `useTripSelection` — automatic/current vs. manual selection ownership with return-to-now.
-- `useTripProgress` — strict progress hydration, pending-write sequencing, cross-tab updates, and trip-scoped actions through an injected `ProgressStore` (see `@laugh-tale/core/browser`); a refused write downgrades to the semantic `"memory-only"` status without losing in-session progress.
+- `useTripProgress` — strict progress hydration, pending-write sequencing, cross-tab updates, and trip-scoped actions through an injected `ProgressStore` (see `@laugh-tale-island/core/browser`); a refused write downgrades to the semantic `"memory-only"` status without losing in-session progress.
 - `useRouteStates` — per-owner route loading, cancellation, stale-request protection, normalized results, and retry; adapter failures surface provider data, with site-injected fallback wording via `adapterErrorReason`.
 - `useUserLocation` — explicit watch lifecycle, one-time first focus, recenter, denial and unavailability statuses, stale-callback protection.
 - `useCandidateDecision` — committed choice stays with the caller's progress; draft preview, confirm, cancel, reopen, session-scoped map overrides, and trigger focus restoration live here.

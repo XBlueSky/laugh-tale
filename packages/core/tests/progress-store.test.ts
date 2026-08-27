@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createLocalStorageProgressStore,
   type ProgressStore,
-} from "@laugh-tale/core/browser";
+} from "@laugh-tale-island/core/browser";
 
 type StorageStub = Pick<Storage, "getItem" | "setItem">;
 

@@ -4,7 +4,7 @@ import {
   clampSheetHeight,
   nearestSheetSnap,
   resolveSheetGeometry,
-} from "@laugh-tale/core";
+} from "@laugh-tale-island/core";
 
 describe("sheet geometry", () => {
   it("uses one safe-area-aware ceiling for every snap on a short screen", () => {

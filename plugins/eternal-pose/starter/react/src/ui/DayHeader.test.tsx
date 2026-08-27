@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { TripDay } from "@laugh-tale/core";
+import type { TripDay } from "@laugh-tale-island/core";
 import { DayHeader } from "./DayHeader";
 
 afterEach(cleanup);

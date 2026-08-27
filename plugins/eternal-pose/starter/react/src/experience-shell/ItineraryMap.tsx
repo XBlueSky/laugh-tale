@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
-import type { MapPadding, MapPresentation } from "@laugh-tale/core";
-import type { MapAdapter } from "@laugh-tale/core/browser";
+import type { MapPadding, MapPresentation } from "@laugh-tale-island/core";
+import type { MapAdapter } from "@laugh-tale-island/core/browser";
 
 export interface ItineraryMapProps {
   adapter: MapAdapter;

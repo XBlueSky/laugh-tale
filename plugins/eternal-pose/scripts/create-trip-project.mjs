@@ -557,7 +557,7 @@ export async function createTripProject({ pluginRoot, targetDir, recipe, starter
       if (dependencies !== null && typeof dependencies === "object" && !Array.isArray(dependencies)) {
         starterPackages = Object.fromEntries(
           Object.entries(dependencies).filter(
-            ([name, version]) => name.startsWith("@laugh-tale/") && typeof version === "string",
+            ([name, version]) => name.startsWith("@laugh-tale-island/") && typeof version === "string",
           ),
         );
       }

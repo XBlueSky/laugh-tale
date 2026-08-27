@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { Coordinates } from "@laugh-tale/core";
-import { USER_LOCATION_OWNER_ID } from "@laugh-tale/core";
-import { type MapAdapter } from "@laugh-tale/core/browser";
+import type { Coordinates } from "@laugh-tale-island/core";
+import { USER_LOCATION_OWNER_ID } from "@laugh-tale-island/core";
+import { type MapAdapter } from "@laugh-tale-island/core/browser";
 
 export type UserLocationStatus =
   | "idle"

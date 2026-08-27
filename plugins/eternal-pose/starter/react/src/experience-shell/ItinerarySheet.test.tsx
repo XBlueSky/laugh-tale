@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ItinerarySheet } from "./ItinerarySheet";
-import type { SheetGeometry } from "@laugh-tale/core";
+import type { SheetGeometry } from "@laugh-tale-island/core";
 
 const baseCss = readFileSync(
   resolve(process.cwd(), "src/ui/styles/base.css"),

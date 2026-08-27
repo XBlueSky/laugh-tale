@@ -1,4 +1,4 @@
-import type { Trip } from "@laugh-tale/core";
+import type { Trip } from "@laugh-tale-island/core";
 
 export const completeTrip: Trip = {
   id: "trip-complete",

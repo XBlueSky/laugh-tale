@@ -17,8 +17,8 @@ The common contract is a real persistent map, a synchronized mobile itinerary, i
 ## Three ways to use Laugh Tale
 
 1. **Generate or evolve a complete site with Eternal Pose.** Install the plugin and describe your trip in natural language; you get an independent React repository you own outright.
-2. **Build a custom React site on the packages.** `@laugh-tale/core` (framework-neutral trip behavior) and `@laugh-tale/react` (behavior hooks and prop-getters) are designed for direct installation — see `packages/core/README.md` and `packages/react/README.md`. Neither ships a visual system; your site owns every visible element.
-3. **Contribute to this repository.** See “Develop and contribute” below. Releases run on three SemVer lines — the Eternal Pose plugin, `@laugh-tale/core`, and `@laugh-tale/react` — and `RELEASING.md` gates every external action behind explicit approval.
+2. **Build a custom React site on the packages.** `@laugh-tale-island/core` (framework-neutral trip behavior) and `@laugh-tale-island/react` (behavior hooks and prop-getters) are designed for direct installation — see `packages/core/README.md` and `packages/react/README.md`. Neither ships a visual system; your site owns every visible element.
+3. **Contribute to this repository.** See “Develop and contribute” below. Releases run on three SemVer lines — the Eternal Pose plugin, `@laugh-tale-island/core`, and `@laugh-tale-island/react` — and `RELEASING.md` gates every external action behind explicit approval.
 
 ## Install from a local checkout
 
@@ -66,7 +66,7 @@ npm --prefix tmp/staged-starter exec playwright install chromium
 npm run test:e2e:staged
 ```
 
-Until `@laugh-tale/core` is published, starter checks run against a staged copy in `tmp/staged-starter` whose dependencies install from locally packed tarballs; `npm run stage:starter` builds and refreshes it.
+Until `@laugh-tale-island/core` is published, starter checks run against a staged copy in `tmp/staged-starter` whose dependencies install from locally packed tarballs; `npm run stage:starter` builds and refreshes it.
 
 Marketplace presentation source lives in `.cc-marketspec/catalog.yaml` and `.cc-marketspec/entries/`. `npm run check:marketplace` validates without writing; `npm run build:marketplace` produces the ignored `.cc-marketspec/dist/manifest.json` only when a consumer needs it. Contributions should preserve the map-first/mobile-first experience contract, keep provider calls fake in tests, and include focused regression coverage.
 

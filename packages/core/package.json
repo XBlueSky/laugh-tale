@@ -1,8 +1,29 @@
 {
-  "name": "@laugh-tale/core",
+  "name": "@laugh-tale-island/core",
   "version": "0.1.0",
   "description": "Framework-neutral trip model, validation, scheduling, progress, routes, and presentation selectors for map-first travel sites.",
   "license": "MIT",
+  "author": "XBlueSky",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/XBlueSky/laugh-tale.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/XBlueSky/laugh-tale#readme",
+  "bugs": {
+    "url": "https://github.com/XBlueSky/laugh-tale/issues"
+  },
+  "keywords": [
+    "travel",
+    "itinerary",
+    "trip",
+    "headless",
+    "scheduling",
+    "map"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "sideEffects": false,
   "engines": {

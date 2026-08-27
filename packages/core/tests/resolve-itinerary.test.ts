@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import type { RouteEdge, Trip } from "@laugh-tale/core";
-import { emptyTripProgress, nodeCompletionKey } from "@laugh-tale/core";
-import { resolveEffectiveItinerary } from "@laugh-tale/core";
+import type { RouteEdge, Trip } from "@laugh-tale-island/core";
+import { emptyTripProgress, nodeCompletionKey } from "@laugh-tale-island/core";
+import { resolveEffectiveItinerary } from "@laugh-tale-island/core";
 
 function deepFreeze<T>(value: T): T {
   if (typeof value === "object" && value !== null && !Object.isFrozen(value)) {

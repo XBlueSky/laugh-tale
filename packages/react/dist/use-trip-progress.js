@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { collectDayProgressScope, emptyTripProgress, parseTripProgress, tripProgressReducer, } from "@laugh-tale/core";
+import { collectDayProgressScope, emptyTripProgress, parseTripProgress, tripProgressReducer, } from "@laugh-tale-island/core";
 const PROGRESS_KEYS = new Set([
     "version",
     "selectedCandidateIds",

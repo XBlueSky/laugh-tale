@@ -1,6 +1,6 @@
-import type { RouteEdge } from "@laugh-tale/core";
-import type { RouteResult } from "@laugh-tale/core";
-import type { RouteAdapter } from "@laugh-tale/core/browser";
+import type { RouteEdge } from "@laugh-tale-island/core";
+import type { RouteResult } from "@laugh-tale-island/core";
+import type { RouteAdapter } from "@laugh-tale-island/core/browser";
 export type RouteLoadState = RouteResult | {
     status: "loading";
 };

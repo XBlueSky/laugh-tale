@@ -1,6 +1,6 @@
-import type { RouteRequest, RouteResult } from "@laugh-tale/core";
-import type { RouteAdapter } from "@laugh-tale/core/browser";
-import type { Coordinates, RouteMode } from "@laugh-tale/core";
+import type { RouteRequest, RouteResult } from "@laugh-tale-island/core";
+import type { RouteAdapter } from "@laugh-tale-island/core/browser";
+import type { Coordinates, RouteMode } from "@laugh-tale-island/core";
 import { normalizeProviderLocation } from "./provider-location";
 
 const ROUTES_ENDPOINT =

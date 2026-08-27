@@ -6,7 +6,7 @@ import {
   LocateFixed,
 } from "lucide-react";
 
-import type { TripDay } from "@laugh-tale/core";
+import type { TripDay } from "@laugh-tale-island/core";
 
 export interface DayHeaderProps {
   tripTitle: string;

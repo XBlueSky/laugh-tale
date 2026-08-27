@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef } from "react";
 
-import type { RouteEdge, ShoppingStatus } from "@laugh-tale/core";
-import type { EffectiveDay, EffectiveNode, EffectiveTrip } from "@laugh-tale/core";
-import type { TripSelection } from "@laugh-tale/react";
-import type { NavigationAdapter } from "@laugh-tale/core/browser";
+import type { RouteEdge, ShoppingStatus } from "@laugh-tale-island/core";
+import type { EffectiveDay, EffectiveNode, EffectiveTrip } from "@laugh-tale-island/core";
+import type { TripSelection } from "@laugh-tale-island/react";
+import type { NavigationAdapter } from "@laugh-tale-island/core/browser";
 import { rendererFor } from "./renderers/CustomEntry";
 import { RouteConnector, type RouteConnectorState } from "./timeline/RouteConnector";
 import { TimelineEntry, type TimelineNodeState } from "./timeline/TimelineEntry";
-import { buildTimelineEntries, type NodeEntry } from "@laugh-tale/core";
+import { buildTimelineEntries, type NodeEntry } from "@laugh-tale-island/core";
 
 export interface ItineraryTimelineProps {
   nodes: readonly EffectiveNode[];

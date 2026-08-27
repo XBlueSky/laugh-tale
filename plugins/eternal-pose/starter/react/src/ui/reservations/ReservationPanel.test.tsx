@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Reservation } from "@laugh-tale/core";
+import type { Reservation } from "@laugh-tale-island/core";
 import { ReservationPanel } from "./ReservationPanel";
 
 const reservations: Reservation[] = [

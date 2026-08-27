@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 describe("package entry points", () => {
   it("exposes the root entry without browser globals", async () => {
-    const root = await import("@laugh-tale/core");
+    const root = await import("@laugh-tale-island/core");
     expect(typeof root.validateTrip).toBe("function");
     expect(typeof root.resolveSheetGeometry).toBe("function");
     expect(typeof root.buildMapPresentation).toBe("function");
@@ -11,7 +11,7 @@ describe("package entry points", () => {
   });
 
   it("exposes the browser subpath", async () => {
-    const browser = await import("@laugh-tale/core/browser");
+    const browser = await import("@laugh-tale-island/core/browser");
     expect(browser).toBeDefined();
   });
 });

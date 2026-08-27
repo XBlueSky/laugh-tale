@@ -2,8 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { RouteEdge } from "@laugh-tale/core";
-import type { RoutePresentation } from "@laugh-tale/core";
+import type { RouteEdge } from "@laugh-tale-island/core";
+import type { RoutePresentation } from "@laugh-tale-island/core";
 import { RouteConnector } from "./RouteConnector";
 
 function routePresentation(

@@ -1,6 +1,6 @@
-import type { PlaceRequest, PlaceResult } from "@laugh-tale/core";
-import type { PlaceAdapter } from "@laugh-tale/core/browser";
-import type { PlaceRef } from "@laugh-tale/core";
+import type { PlaceRequest, PlaceResult } from "@laugh-tale-island/core";
+import type { PlaceAdapter } from "@laugh-tale-island/core/browser";
+import type { PlaceRef } from "@laugh-tale-island/core";
 import { normalizeProviderLocation } from "./provider-location";
 
 const PLACES_BASE_URL = "https://places.googleapis.com/v1";

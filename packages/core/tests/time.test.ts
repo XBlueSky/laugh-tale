@@ -1,8 +1,8 @@
 import { Temporal } from "@js-temporal/polyfill";
 import { describe, expect, it } from "vitest";
 
-import type { Timing, Trip, TripNode } from "@laugh-tale/core";
-import { findLiveState, resolveSchedule } from "@laugh-tale/core";
+import type { Timing, Trip, TripNode } from "@laugh-tale-island/core";
+import { findLiveState, resolveSchedule } from "@laugh-tale-island/core";
 
 function sightseeingNode(id: string, dayId: string, timing: Timing): TripNode {
   return {

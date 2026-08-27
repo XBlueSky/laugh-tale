@@ -24,8 +24,8 @@ describe("stage-starter-consumer", () => {
     const manifest = JSON.parse(readFileSync(join(stagedRoot, "package.json"), "utf8")) as {
       dependencies: Record<string, string>;
     };
-    expect(manifest.dependencies["@laugh-tale/core"]).toMatch(
-      /^file:.*laugh-tale-core-0\.1\.0\.tgz$/,
+    expect(manifest.dependencies["@laugh-tale-island/core"]).toMatch(
+      /^file:.*laugh-tale-island-core-0\.1\.0\.tgz$/,
     );
     expect(existsSync(join(stagedRoot, "src/App.tsx"))).toBe(true);
     expect(existsSync(join(stagedRoot, "package-lock.json"))).toBe(false);

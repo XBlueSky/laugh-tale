@@ -13,7 +13,7 @@ import {
   nearestSheetSnap,
   type SheetGeometry,
   type SheetSnap,
-} from "@laugh-tale/core";
+} from "@laugh-tale-island/core";
 
 export interface UseItinerarySheetOptions {
   /** Controlled snap; the hook never stores its own. */

@@ -2,8 +2,8 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { SheetGeometry, SheetSnap } from "@laugh-tale/core";
-import { useItinerarySheet, type UseItinerarySheetOptions } from "@laugh-tale/react";
+import type { SheetGeometry, SheetSnap } from "@laugh-tale-island/core";
+import { useItinerarySheet, type UseItinerarySheetOptions } from "@laugh-tale-island/react";
 
 afterEach(cleanup);
 

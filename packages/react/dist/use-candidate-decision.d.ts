@@ -1,5 +1,5 @@
 import { type RefCallback } from "react";
-import { type CandidateGroup, type CandidateMapOverride, type CandidatePreviewRequest } from "@laugh-tale/core";
+import { type CandidateGroup, type CandidateMapOverride, type CandidatePreviewRequest } from "@laugh-tale-island/core";
 export interface UseCandidateDecisionOptions {
     group: CandidateGroup;
     /**

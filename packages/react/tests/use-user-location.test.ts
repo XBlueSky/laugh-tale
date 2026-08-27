@@ -3,8 +3,8 @@ import { createElement, StrictMode, type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { FakeMapAdapter } from "./helpers/fake-map-adapter.js";
-import { USER_LOCATION_OWNER_ID } from "@laugh-tale/core";
-import { useUserLocation } from "@laugh-tale/react";
+import { USER_LOCATION_OWNER_ID } from "@laugh-tale-island/core";
+import { useUserLocation } from "@laugh-tale-island/react";
 
 afterEach(cleanup);
 

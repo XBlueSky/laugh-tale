@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { completeTrip } from "./fixtures/complete-trip.js";
-import type { Trip } from "@laugh-tale/core";
-import { assertValidTrip, validateTrip } from "@laugh-tale/core";
+import type { Trip } from "@laugh-tale-island/core";
+import { assertValidTrip, validateTrip } from "@laugh-tale-island/core";
 
 const cloneTrip = (): Trip => structuredClone(completeTrip);
 

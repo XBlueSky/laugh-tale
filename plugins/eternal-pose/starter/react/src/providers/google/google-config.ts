@@ -1,5 +1,5 @@
 import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
-import type { MapAdapter } from "@laugh-tale/core/browser";
+import type { MapAdapter } from "@laugh-tale-island/core/browser";
 import { GoogleMapAdapter } from "./GoogleMapAdapter";
 
 export interface GoogleMapsRuntime {

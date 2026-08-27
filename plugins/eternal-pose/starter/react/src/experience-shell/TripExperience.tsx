@@ -11,13 +11,13 @@ import {
 } from "react";
 
 import { GoogleNavigationAdapter } from "../providers/google/google-maps-url";
-import type { CandidateGroup, Trip, TripNode } from "@laugh-tale/core";
-import { emptyTripProgress, nodeCompletionKey, tripProgressReducer } from "@laugh-tale/core";
-import { resolveEffectiveItinerary, type EffectiveDay, type EffectiveNode } from "@laugh-tale/core";
-import { findLiveState, resolveSchedule } from "@laugh-tale/core";
+import type { CandidateGroup, Trip, TripNode } from "@laugh-tale-island/core";
+import { emptyTripProgress, nodeCompletionKey, tripProgressReducer } from "@laugh-tale-island/core";
+import { resolveEffectiveItinerary, type EffectiveDay, type EffectiveNode } from "@laugh-tale-island/core";
+import { findLiveState, resolveSchedule } from "@laugh-tale-island/core";
 import { DayHeader } from "../ui/DayHeader";
 import { ItineraryTimeline } from "../ui/ItineraryTimeline";
-import type { CandidateMapOverride, CandidatePreviewRequest } from "@laugh-tale/core";
+import type { CandidateMapOverride, CandidatePreviewRequest } from "@laugh-tale-island/core";
 import { CandidateDecision } from "../ui/decisions/CandidateDecision";
 import {
   resolveShoppingStatus,
@@ -29,16 +29,16 @@ import "../ui/styles/recipe.css";
 import { TaskWidget } from "../ui/tasks/TaskWidget";
 import { ItineraryMap } from "./ItineraryMap";
 import { ItinerarySheet } from "./ItinerarySheet";
-import { buildMapPresentation } from "@laugh-tale/core";
-import { decodeMapPlaceOwnerId, candidateMapOwnerId, nodeMapOwnerId, type MapFocusTarget, type MapPadding, type MapPresentation } from "@laugh-tale/core";
-import { type MapAdapter, type RouteAdapter } from "@laugh-tale/core/browser";
-import { resolveSheetGeometry, type SheetSnap } from "@laugh-tale/core";
+import { buildMapPresentation } from "@laugh-tale-island/core";
+import { decodeMapPlaceOwnerId, candidateMapOwnerId, nodeMapOwnerId, type MapFocusTarget, type MapPadding, type MapPresentation } from "@laugh-tale-island/core";
+import { type MapAdapter, type RouteAdapter } from "@laugh-tale-island/core/browser";
+import { resolveSheetGeometry, type SheetSnap } from "@laugh-tale-island/core";
 import {
   useRouteStates,
   useTripSelection,
   useUserLocation,
   type TripProgressController,
-} from "@laugh-tale/react";
+} from "@laugh-tale-island/react";
 
 import { routeAdapterErrorReason, USER_LOCATION_LABELS } from "../ui/labels";
 

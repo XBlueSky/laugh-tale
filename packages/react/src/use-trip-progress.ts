@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { ShoppingStatus, Trip, TripProgressV1 } from "@laugh-tale/core";
+import type { ShoppingStatus, Trip, TripProgressV1 } from "@laugh-tale-island/core";
 import {
   collectDayProgressScope,
   emptyTripProgress,
   parseTripProgress,
   tripProgressReducer,
-} from "@laugh-tale/core";
-import type { ProgressStore } from "@laugh-tale/core/browser";
+} from "@laugh-tale-island/core";
+import type { ProgressStore } from "@laugh-tale-island/core/browser";
 
 export type ProgressPersistenceStatus = "persistent" | "memory-only";
 

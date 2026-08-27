@@ -15,3 +15,4 @@ plugins/eternal-pose/starter/react/playwright-report/
 plugins/eternal-pose/starter/react/.env.local
 plugins/eternal-pose/starter/react/.DS_Store
 plugins/eternal-pose/starter/react/*.tsbuildinfo
+docs/superpowers/

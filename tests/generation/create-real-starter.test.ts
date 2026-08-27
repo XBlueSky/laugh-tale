@@ -169,8 +169,8 @@ describe("real starter generation", () => {
     expect(metadata.generatorVersion).toBe("0.1.0");
     expect(metadata.recipe).toBe(recipe);
     expect(metadata.packages).toEqual({
-      "@laugh-tale/core": "0.1.0",
-      "@laugh-tale/react": "0.1.0",
+      "@laugh-tale-island/core": "0.1.0",
+      "@laugh-tale-island/react": "0.1.0",
     });
 
     const paths = walk(targetDir);

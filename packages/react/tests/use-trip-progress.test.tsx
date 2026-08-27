@@ -3,10 +3,10 @@ import { userEvent } from "@testing-library/user-event";
 import { StrictMode, useEffect, useMemo } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Trip } from "@laugh-tale/core";
-import { checklistCompletionKey, emptyTripProgress, nodeCompletionKey, taskCompletionKey, type TripProgressV1 } from "@laugh-tale/core";
-import { createLocalStorageProgressStore } from "@laugh-tale/core/browser";
-import { useTripProgress, type TripProgressController } from "@laugh-tale/react";
+import type { Trip } from "@laugh-tale-island/core";
+import { checklistCompletionKey, emptyTripProgress, nodeCompletionKey, taskCompletionKey, type TripProgressV1 } from "@laugh-tale-island/core";
+import { createLocalStorageProgressStore } from "@laugh-tale-island/core/browser";
+import { useTripProgress, type TripProgressController } from "@laugh-tale-island/react";
 
 function tripProgressStorageKey(tripId: string): string {
   return `eternal-pose:trip-progress:v1:${tripId}`;

@@ -15,7 +15,7 @@ import {
   type CandidateMapOverride,
   type CandidatePreviewRequest,
   type CandidateSessionState,
-} from "@laugh-tale/core";
+} from "@laugh-tale-island/core";
 
 export interface UseCandidateDecisionOptions {
   group: CandidateGroup;

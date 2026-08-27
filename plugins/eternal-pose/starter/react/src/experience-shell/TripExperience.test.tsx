@@ -15,9 +15,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FakeMapAdapter } from "../providers/fake/FakeMapAdapter";
 import { FakeRouteAdapter } from "../providers/fake/FakeRouteAdapter";
-import type { Trip } from "@laugh-tale/core";
-import { candidateMapOwnerId, nodeMapOwnerId, type MapFocusTarget, type MapPresentation, USER_LOCATION_OWNER_ID } from "@laugh-tale/core";
-import { type MapEvents } from "@laugh-tale/core/browser";
+import type { Trip } from "@laugh-tale-island/core";
+import { candidateMapOwnerId, nodeMapOwnerId, type MapFocusTarget, type MapPresentation, USER_LOCATION_OWNER_ID } from "@laugh-tale-island/core";
+import { type MapEvents } from "@laugh-tale-island/core/browser";
 import { TripExperience } from "./TripExperience";
 
 const baseCss = readFileSync(

@@ -1,6 +1,6 @@
-import type { Coordinates } from "@laugh-tale/core";
-import type { MapFocusTarget, MapPadding, MapPresentation } from "@laugh-tale/core";
-import type { MapAdapter, MapEvents } from "@laugh-tale/core/browser";
+import type { Coordinates } from "@laugh-tale-island/core";
+import type { MapFocusTarget, MapPadding, MapPresentation } from "@laugh-tale-island/core";
+import type { MapAdapter, MapEvents } from "@laugh-tale-island/core/browser";
 
 function clonePresentation(presentation: MapPresentation): MapPresentation {
   return {
