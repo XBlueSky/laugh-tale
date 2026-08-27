@@ -30,6 +30,7 @@
     "test:e2e": "npm --prefix plugins/eternal-pose/starter/react run test:e2e"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@semantic-release/changelog": "^7.0.0",
     "@semantic-release/exec": "^7.1.0",
     "@semantic-release/git": "^11.0.1",

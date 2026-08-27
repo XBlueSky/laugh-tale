@@ -1191,7 +1191,7 @@ function vueDirectiveDescriptor(name) {
   const normalized = stripDirectiveModifiers(name);
   if ([":", "@", "v-bind:", "v-on:"].includes(normalized)) return { malformed: true };
   let directive;
-  let argument = "";
+  let argument;
   if (normalized.startsWith(":")) {
     directive = "bind";
     argument = normalized.slice(1);
@@ -2014,10 +2014,9 @@ function parseYamlFlowMapping(contents, start, state, depth) {
   while (cursor < contents.length && !state.malformed && !state.analysisLimited) {
     const key = parseYamlFlowNode(contents, cursor, state, depth);
     cursor = skipYamlFlowTrivia(contents, key.end);
-    let value = { end: cursor, scalar: null };
     if (contents[cursor] === ":") {
       cursor = skipYamlFlowTrivia(contents, cursor + 1);
-      value = { end: cursor, scalar: null };
+      let value = { end: cursor, scalar: null };
       if (contents[cursor] !== "," && contents[cursor] !== "}") {
         value = parseYamlFlowNode(contents, cursor, state, depth);
         cursor = skipYamlFlowTrivia(contents, value.end);

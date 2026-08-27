@@ -129,8 +129,8 @@ describe("real starter generation", () => {
     const consoleLog = vi.spyOn(console, "log").mockImplementation(() => undefined);
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const captureProbe = "generator-output-capture-probe";
-    let capturedLog = "";
-    let capturedError = "";
+    let capturedLog: string;
+    let capturedError: string;
     try {
       console.log(captureProbe);
       console.error(captureProbe);

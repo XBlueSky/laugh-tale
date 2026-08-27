@@ -17,9 +17,11 @@ export default tseslint.config(
       "packages/*/node_modules/**",
       ".cc-marketspec/dist/**",
       "plugins/eternal-pose/vendor/**",
-      "plugins/eternal-pose/starter/react/node_modules/**",
-      "plugins/eternal-pose/starter/react/dist/**",
-      "plugins/eternal-pose/starter/react/test-results/**",
+      // The starter is an independent project with its own eslint setup;
+      // its lint runs inside the staged starter check. ESLint 10 resolves the
+      // nearest config per file, so linting it from here would load the
+      // starter's own toolchain.
+      "plugins/eternal-pose/starter/react/**",
     ],
   },
   eslint.configs.recommended,
