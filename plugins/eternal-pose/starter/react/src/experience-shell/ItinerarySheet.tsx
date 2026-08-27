@@ -6,15 +6,10 @@ import {
   LocateFixed,
   RotateCcw,
 } from "lucide-react";
-import {
-  useRef,
-  useState,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
-  type ReactNode,
-} from "react";
+import { type ReactNode } from "react";
 
-import { clampSheetHeight, nearestSheetSnap, type SheetGeometry, type SheetSnap } from "@laugh-tale/core";
+import type { SheetGeometry, SheetSnap } from "@laugh-tale/core";
+import { useItinerarySheet } from "@laugh-tale/react";
 
 export interface ItineraryRouteStatus {
   state: "loading" | "error";
@@ -33,26 +28,6 @@ export interface ItinerarySheetProps {
   children: ReactNode;
 }
 
-interface DragSample {
-  pointerId: number;
-  startY: number;
-  startHeight: number;
-  geometry: SheetGeometry;
-  lastY: number;
-  lastTime: number;
-}
-
-interface DragFrame {
-  height: number;
-  ceiling: number;
-}
-
-function snapHeight(snap: SheetSnap, geometry: SheetGeometry): number {
-  return geometry[snap];
-}
-
-const SNAP_ORDER: readonly SheetSnap[] = ["collapsed", "half", "expanded"];
-
 export function ItinerarySheet({
   snap,
   geometry,
@@ -63,126 +38,28 @@ export function ItinerarySheet({
   routeStatus,
   children,
 }: ItinerarySheetProps) {
-  const sheetRef = useRef<HTMLElement>(null);
-  const dragRef = useRef<DragSample | null>(null);
-  const [dragFrame, setDragFrame] = useState<DragFrame | null>(null);
-  const dragging = dragFrame !== null;
-
-  const beginDrag = (event: ReactPointerEvent<HTMLButtonElement>): void => {
-    const renderedHeight = sheetRef.current?.getBoundingClientRect().height ?? 0;
-    const startHeight = clampSheetHeight(
-      renderedHeight > 0 ? renderedHeight : snapHeight(snap, geometry),
-      { min: geometry.collapsed, max: geometry.ceiling },
-    );
-    dragRef.current = {
-      pointerId: event.pointerId,
-      startY: event.clientY,
-      startHeight,
-      geometry: { ...geometry },
-      lastY: event.clientY,
-      lastTime: event.timeStamp,
-    };
-    setDragFrame({ height: startHeight, ceiling: geometry.ceiling });
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-  };
-
-  const moveDrag = (event: ReactPointerEvent<HTMLButtonElement>): void => {
-    const sample = dragRef.current;
-    if (sample === null || sample.pointerId !== event.pointerId) {
-      return;
-    }
-    const height = clampSheetHeight(
-      sample.startHeight + sample.startY - event.clientY,
-      { min: sample.geometry.collapsed, max: sample.geometry.ceiling },
-    );
-    sample.lastY = event.clientY;
-    sample.lastTime = event.timeStamp;
-    setDragFrame({ height, ceiling: sample.geometry.ceiling });
-  };
-
-  const finishDrag = (event: ReactPointerEvent<HTMLButtonElement>): void => {
-    const sample = dragRef.current;
-    if (sample === null || sample.pointerId !== event.pointerId) {
-      return;
-    }
-    const height = clampSheetHeight(
-      sample.startHeight + sample.startY - event.clientY,
-      { min: sample.geometry.collapsed, max: sample.geometry.ceiling },
-    );
-    const elapsed = event.timeStamp - sample.lastTime;
-    const velocityY = elapsed > 0 ? (event.clientY - sample.lastY) / elapsed : 0;
-    dragRef.current = null;
-    setDragFrame(null);
-    onSnapChange(nearestSheetSnap(height, sample.geometry, velocityY));
-    if (
-      event.currentTarget.hasPointerCapture?.(event.pointerId) !== false
-    ) {
-      event.currentTarget.releasePointerCapture?.(event.pointerId);
-    }
-  };
-
-  const cancelDrag = (event: ReactPointerEvent<HTMLButtonElement>): void => {
-    const sample = dragRef.current;
-    if (sample === null || sample.pointerId !== event.pointerId) {
-      return;
-    }
-    dragRef.current = null;
-    setDragFrame(null);
-  };
-
-  const moveWithKeyboard = (
-    event: ReactKeyboardEvent<HTMLButtonElement>,
-  ): void => {
-    const currentIndex = SNAP_ORDER.indexOf(snap);
-    const nextSnap =
-      event.key === "ArrowUp"
-        ? SNAP_ORDER[Math.min(currentIndex + 1, SNAP_ORDER.length - 1)]
-        : event.key === "ArrowDown"
-          ? SNAP_ORDER[Math.max(currentIndex - 1, 0)]
-          : event.key === "Home"
-            ? "collapsed"
-            : event.key === "End"
-              ? "expanded"
-              : undefined;
-    if (nextSnap === undefined || nextSnap === snap) {
-      return;
-    }
-    event.preventDefault();
-    onSnapChange(nextSnap);
-  };
-
-  const targetHeight = dragFrame?.height ?? snapHeight(snap, geometry);
-  const targetCeiling = dragFrame?.ceiling ?? geometry.ceiling;
+  const sheet = useItinerarySheet({ snap, geometry, onSnapChange });
+  const sheetProps = sheet.getSheetProps();
   const expanded = snap === "expanded";
   const collapsed = snap === "collapsed";
 
   return (
     <section
-      ref={sheetRef}
+      {...sheetProps}
       className="itinerary-sheet"
       aria-label="Itinerary"
-      data-dragging={dragging ? "true" : "false"}
-      data-snap={snap}
       style={{
+        ...sheetProps.style,
         bottom: "var(--safe-area-bottom)",
-        height: `${targetHeight}px`,
-        maxHeight: `${targetCeiling}px`,
         paddingBottom: "0px",
-        transitionDuration: dragging ? "0ms" : undefined,
       }}
     >
       <button
         type="button"
         className="itinerary-sheet__drag-handle"
         aria-label="Drag itinerary sheet"
-        aria-keyshortcuts="ArrowUp ArrowDown Home End"
         data-touch-target="44"
-        onKeyDown={moveWithKeyboard}
-        onPointerDown={beginDrag}
-        onPointerMove={moveDrag}
-        onPointerUp={finishDrag}
-        onPointerCancel={cancelDrag}
-        onLostPointerCapture={cancelDrag}
+        {...sheet.getHandleProps()}
       >
         <GripHorizontal aria-hidden="true" size={22} strokeWidth={1.8} />
       </button>
@@ -217,7 +94,7 @@ export function ItinerarySheet({
           aria-label={expanded ? "Collapse itinerary" : "Expand itinerary"}
           data-icon-control="true"
           data-touch-target="44"
-          onClick={() => onSnapChange(expanded ? "half" : "expanded")}
+          onClick={() => sheet.setSnap(expanded ? "half" : "expanded")}
         >
           {expanded ? (
             <ChevronDown aria-hidden="true" size={20} strokeWidth={1.8} />

@@ -19,3 +19,10 @@ export {
   type UserLocationController,
   type UserLocationStatus,
 } from "./use-user-location.js";
+export {
+  useItinerarySheet,
+  type ItinerarySheetController,
+  type SheetHandleProps,
+  type SheetProps,
+  type UseItinerarySheetOptions,
+} from "./use-itinerary-sheet.js";
