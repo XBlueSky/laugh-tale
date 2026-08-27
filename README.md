@@ -14,6 +14,12 @@ Laugh Tale is the open-source toolkit and marketplace. Eternal Pose is its Claud
 
 The common contract is a real persistent map, a synchronized mobile itinerary, independent route edges, candidate comparison on the main map, safe drag behavior, and provider-neutral trip data. Generated information architecture, home pages, type renderers, and visual systems remain yours to change.
 
+## Three ways to use Laugh Tale
+
+1. **Generate or evolve a complete site with Eternal Pose.** Install the plugin and describe your trip in natural language; you get an independent React repository you own outright.
+2. **Build a custom React site on the packages.** `@laugh-tale/core` (framework-neutral trip behavior) and `@laugh-tale/react` (behavior hooks and prop-getters) are designed for direct installation — see `packages/core/README.md` and `packages/react/README.md`. Neither ships a visual system; your site owns every visible element.
+3. **Contribute to this repository.** See “Develop and contribute” below. Releases run on three SemVer lines — the Eternal Pose plugin, `@laugh-tale/core`, and `@laugh-tale/react` — and `RELEASING.md` gates every external action behind explicit approval.
+
 ## Install from a local checkout
 
 This repository does not claim a published marketplace release. Clone or open a trusted local checkout, change into its root, and add that checkout explicitly.
