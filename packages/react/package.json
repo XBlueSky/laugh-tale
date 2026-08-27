@@ -1,0 +1,41 @@
+{
+  "name": "@laugh-tale/react",
+  "version": "0.1.0",
+  "description": "React hooks and prop-getters for map-first travel sites built on @laugh-tale/core.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "peerDependencies": {
+    "@laugh-tale/core": "0.1.0",
+    "react": ">=19.2.0 <20"
+  },
+  "devDependencies": {
+    "@laugh-tale/core": "0.1.0",
+    "@testing-library/react": "16.3.2",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "jsdom": "30.0.1",
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
+  }
+}
