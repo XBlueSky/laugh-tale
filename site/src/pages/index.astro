@@ -10,190 +10,200 @@ const groupLabel = (id) => groups.find((g) => g.id === id)?.label ?? id
 const groupNote = (id) => groups.find((g) => g.id === id)?.note
 
 const repoUrl = 'https://github.com/XBlueSky/laugh-tale'
+
+// Concentration-line burst (集中線): tapered rays pointing at the logo.
+// Deterministic — ray width and inner gap vary by index, not by randomness.
+const RAY_COUNT = 56
+const burstRays = Array.from({ length: RAY_COUNT }, (_, i) => {
+  const angle = (i / RAY_COUNT) * Math.PI * 2
+  const halfWidth = 0.010 + (i % 3) * 0.007
+  const inner = 215 + (i % 4) * 22
+  const outer = 720
+  const px = (a, r) => (500 + Math.cos(a) * r).toFixed(1)
+  const py = (a, r) => (500 + Math.sin(a) * r).toFixed(1)
+  return [
+    `${px(angle - halfWidth, outer)},${py(angle - halfWidth, outer)}`,
+    `${px(angle + halfWidth, outer)},${py(angle + halfWidth, outer)}`,
+    `${px(angle, inner)},${py(angle, inner)}`,
+  ].join(' ')
+})
 ---
 
 <Base title="Laugh Tale — map-first travel-site toolkit" description={marketplace.description}>
-  <div class="wrap">
-    <header class="masthead">
+  <header class="masthead-bar">
+    <div class="wrap masthead">
       <a class="wordmark" href="/">Laugh Tale</a>
       <nav>
         <a href={repoUrl}>GitHub</a>
         <a href="https://www.npmjs.com/package/@laugh-tale-island/core">npm</a>
       </nav>
-    </header>
+    </div>
+  </header>
 
-    <section class="hero">
-      <Image
-        class="hero-logo"
-        src={logo}
-        alt="Laugh Tale — a laughing, mustached mouth with an island seascape inside"
-        widths={[240, 480, 720]}
-        sizes="(max-width: 44rem) 176px, 304px"
-      />
-      <div>
-        <p class="kicker">An open-source marketplace for coding agents</p>
-        <h1>Laugh Tale</h1>
-        <div class="divider" aria-hidden="true">
-          <span class="bar"></span>
-          <span class="gem"></span>
-          <svg width="34" height="34" viewBox="0 0 132 132" fill="none">
-            <path d="M66 4 L80 52 L66 66 L52 52 Z" fill="currentcolor" />
-            <path d="M66 128 L52 80 L66 66 L80 80 Z" fill="currentcolor" opacity="0.65" />
-            <path d="M4 66 L52 52 L66 66 L52 80 Z" fill="currentcolor" opacity="0.65" />
-            <path d="M128 66 L80 80 L66 66 L80 52 Z" fill="currentcolor" opacity="0.65" />
-            <circle cx="66" cy="66" r="26" stroke="currentcolor" stroke-width="5" opacity="0.7" />
-            <circle cx="66" cy="66" r="6" fill="currentcolor" />
-          </svg>
-          <span class="gem"></span>
-          <span class="bar"></span>
-        </div>
-        <p class="lede">
-          <strong>Chart the trip. Own the site.</strong>{' '}
-          {marketplace.description} Describe a real itinerary — prose, CSV, Markdown, documents,
-          links — and get an independent React travel site that never needs the plugin at runtime.
-        </p>
-        <p class="eternal">Eternal Pose</p>
-        <div class="hero-links">
-          <a href={repoUrl}>XBlueSky/laugh-tale</a>
-          <a href="https://www.npmjs.com/package/@laugh-tale-island/core">@laugh-tale-island/core</a>
-          <a href="https://www.npmjs.com/package/@laugh-tale-island/react">@laugh-tale-island/react</a>
-        </div>
+  <main class="wrap">
+    <section class="titlepage">
+      <p class="caption-box">An open-source marketplace for coding agents</p>
+      <div class="burst-wrap">
+        <svg class="burst" viewBox="0 0 1000 1000" aria-hidden="true">
+          {burstRays.map((points) => <polygon points={points} fill="currentcolor" opacity="0.14" />)}
+        </svg>
+        <Image
+          class="hero-logo"
+          src={logo}
+          alt="Laugh Tale — a laughing, mustached mouth with an island seascape inside"
+          widths={[240, 480, 720]}
+          sizes="(max-width: 44rem) 176px, 272px"
+        />
+        <p class="don" aria-hidden="true">DON!!</p>
+      </div>
+      <h1>Laugh Tale</h1>
+      <p class="lede">
+        <strong>Chart the trip. Own the site.</strong>{' '}
+        {marketplace.description} Describe a real itinerary — prose, CSV, Markdown, documents,
+        links — and get an independent React travel site that never needs the plugin at runtime.
+      </p>
+      <p class="eternal">Eternal Pose</p>
+      <div class="hero-links">
+        <a href={repoUrl}>XBlueSky/laugh-tale</a>
+        <a href="https://www.npmjs.com/package/@laugh-tale-island/core">@laugh-tale-island/core</a>
+        <a href="https://www.npmjs.com/package/@laugh-tale-island/react">@laugh-tale-island/react</a>
       </div>
     </section>
 
-    <div class="route">
-      <section class="leg" aria-labelledby="quickstart">
-        <p class="leg-label">§ 01 · Set sail</p>
-        <h2 id="quickstart">Install Eternal Pose from a local checkout</h2>
-        <p>
-          There is no published marketplace release yet. Clone or open a trusted checkout of the
-          repository, change into its root, and add that checkout explicitly.
-        </p>
-        <div class="helm">
-          <figure class="console">
-            <figcaption>Claude Code</figcaption>
-            <pre><code><span class="prompt">$ </span>claude plugin marketplace add "$PWD"
+    <section class="chapter" aria-labelledby="quickstart">
+      <p class="chapter-no" aria-hidden="true">CH.01</p>
+      <h2 id="quickstart">Install Eternal Pose from a local checkout</h2>
+      <p>
+        There is no published marketplace release yet. Clone or open a trusted checkout of the
+        repository, change into its root, and add that checkout explicitly.
+      </p>
+      <div class="helm">
+        <figure class="console">
+          <figcaption>Claude Code</figcaption>
+          <pre><code><span class="prompt">$ </span>claude plugin marketplace add "$PWD"
 <span class="prompt">$ </span>claude plugin install eternal-pose@laugh-tale</code></pre>
-          </figure>
-          <figure class="console">
-            <figcaption>Codex</figcaption>
-            <pre><code><span class="prompt">$ </span>codex plugin marketplace add "$PWD"
+        </figure>
+        <figure class="console">
+          <figcaption>Codex</figcaption>
+          <pre><code><span class="prompt">$ </span>codex plugin marketplace add "$PWD"
 <span class="prompt">$ </span>codex plugin add eternal-pose@laugh-tale</code></pre>
-          </figure>
-        </div>
-        <p class="then">
-          Then just describe the trip:
-          <em>“turn these itinerary notes into a map-first mobile trip site.”</em>
-        </p>
-      </section>
+        </figure>
+      </div>
+      <p class="then">
+        Then just describe the trip:
+        <em>“turn these itinerary notes into a map-first mobile trip site.”</em>
+      </p>
+    </section>
 
-      <section class="leg" aria-labelledby="marketplace">
-        <p class="leg-label">§ 02 · The marketplace</p>
-        <h2 id="marketplace">One shared skill, honestly described</h2>
-        {
-          plugins.map((plugin) => (
-            <article>
-              {groupNote(plugin.group) && (
-                <p class="group-note">
-                  {groupLabel(plugin.group)} — {groupNote(plugin.group)}
-                </p>
-              )}
-              <div class="plugin">
-                <div>
-                  <div class="plugin-id">
-                    <h3>{plugin.name}</h3>
-                    <span class="stamp">v{plugin.version}</span>
-                  </div>
-                  <p class="tagline">{plugin.tagline}</p>
-                  <p class="intro">{plugin.intro}</p>
-                  {plugin.keywords?.length > 0 && (
-                    <ul class="tags">
-                      {plugin.keywords.map((keyword) => (
-                        <li>{keyword}</li>
+    <section class="chapter" aria-labelledby="marketplace">
+      <p class="chapter-no" aria-hidden="true">CH.02</p>
+      <h2 id="marketplace">One shared skill, honestly described</h2>
+      {
+        plugins.map((plugin) => (
+          <article>
+            {groupNote(plugin.group) && (
+              <p class="group-note">
+                {groupLabel(plugin.group)} — {groupNote(plugin.group)}
+              </p>
+            )}
+            <div class="plugin">
+              <div>
+                <div class="plugin-id">
+                  <h3>{plugin.name}</h3>
+                  <span class="stamp">v{plugin.version}</span>
+                </div>
+                <p class="tagline">{plugin.tagline}</p>
+                <p class="intro">{plugin.intro}</p>
+                {plugin.keywords?.length > 0 && (
+                  <ul class="tags">
+                    {plugin.keywords.map((keyword) => (
+                      <li>{keyword}</li>
+                    ))}
+                    <li>{plugin.license}</li>
+                  </ul>
+                )}
+              </div>
+              {plugin.skills.map((skill) => (
+                <div class="skill">
+                  <h4>When the skill triggers</h4>
+                  <p class="trigger">{skill.trigger}</p>
+                  {skill.examples?.length > 0 && (
+                    <ul class="examples">
+                      {skill.examples.map((example) => (
+                        <li>{example}</li>
                       ))}
-                      <li>{plugin.license}</li>
                     </ul>
                   )}
                 </div>
-                {plugin.skills.map((skill) => (
-                  <div class="skill">
-                    <h4>When the skill triggers</h4>
-                    <p class="trigger">{skill.trigger}</p>
-                    {skill.examples?.length > 0 && (
-                      <ul class="examples">
-                        {skill.examples.map((example) => (
-                          <li>{example}</li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </article>
-          ))
-        }
-      </section>
+              ))}
+            </div>
+          </article>
+        ))
+      }
+    </section>
 
-      <section class="leg" aria-labelledby="packages">
-        <p class="leg-label">§ 03 · Headless packages</p>
-        <h2 id="packages">Build a custom site on the same behavior</h2>
-        <p>
-          The packages carry the tested trip behavior without a visual system — your site owns
-          every visible element.
-        </p>
-        <div class="packages">
-          <div class="package">
-            <a href="https://www.npmjs.com/package/@laugh-tale-island/core">@laugh-tale-island/core</a>
-            <p>Framework-neutral trip behavior: the semantic model, candidate decisions, route lifecycles.</p>
-          </div>
-          <div class="package">
-            <a href="https://www.npmjs.com/package/@laugh-tale-island/react">@laugh-tale-island/react</a>
-            <p>React behavior hooks and prop-getters over the same core.</p>
-          </div>
+    <section class="chapter" aria-labelledby="packages">
+      <p class="chapter-no" aria-hidden="true">CH.03</p>
+      <h2 id="packages">Build a custom site on the same behavior</h2>
+      <p>
+        The packages carry the tested trip behavior without a visual system — your site owns
+        every visible element.
+      </p>
+      <div class="packages">
+        <div class="package">
+          <a href="https://www.npmjs.com/package/@laugh-tale-island/core">@laugh-tale-island/core</a>
+          <p>Framework-neutral trip behavior: the semantic model, candidate decisions, route lifecycles.</p>
         </div>
-        <figure class="console install-line">
-          <pre><code><span class="prompt">$ </span>npm install @laugh-tale-island/core @laugh-tale-island/react</code></pre>
-        </figure>
-      </section>
-
-      <section class="leg" aria-labelledby="recipes">
-        <p class="leg-label">§ 04 · Design recipes</p>
-        <h2 id="recipes">Three compile-time starting points</h2>
-        <div class="recipes">
-          <div class="swatch swatch-quiet-wood">
-            <strong>Quiet Wood</strong>
-            <p>Warm, restrained, and softly tactile.</p>
-          </div>
-          <div class="swatch swatch-sticker-brutalist">
-            <strong>Sticker Brutalist</strong>
-            <p>High-contrast editorial labels and crisp borders.</p>
-          </div>
-          <div class="swatch swatch-native-minimal">
-            <strong>Native Minimal</strong>
-            <p>Neutral, platform-minded clarity.</p>
-          </div>
+        <div class="package">
+          <a href="https://www.npmjs.com/package/@laugh-tale-island/react">@laugh-tale-island/react</a>
+          <p>React behavior hooks and prop-getters over the same core.</p>
         </div>
-        <p class="recipes-note">
-          Recipes are starting points, not lock-in: generated information architecture, home pages,
-          type renderers, and visual systems remain yours to change.
-        </p>
-      </section>
+      </div>
+      <figure class="console install-line">
+        <pre><code><span class="prompt">$ </span>npm install @laugh-tale-island/core @laugh-tale-island/react</code></pre>
+      </figure>
+    </section>
 
-      <section class="leg" aria-labelledby="privacy">
-        <p class="leg-label">§ 05 · Local first</p>
-        <h2 id="privacy">Nothing leaves your machine without you</h2>
-        <ul class="pledge">
-          <li>Work stays local and private by default.</li>
-          <li>Eternal Pose does not invent coordinates, reservations, routes, or other facts.</li>
-          <li>
-            It does not create a remote, make a repository public, push, publish, or deploy without
-            explicit approval for that action.
-          </li>
-        </ul>
-      </section>
-    </div>
+    <section class="chapter" aria-labelledby="recipes">
+      <p class="chapter-no" aria-hidden="true">CH.04</p>
+      <h2 id="recipes">Three compile-time starting points</h2>
+      <div class="recipes">
+        <div class="swatch swatch-quiet-wood">
+          <strong>Quiet Wood</strong>
+          <p>Warm, restrained, and softly tactile.</p>
+        </div>
+        <div class="swatch swatch-sticker-brutalist">
+          <strong>Sticker Brutalist</strong>
+          <p>High-contrast editorial labels and crisp borders.</p>
+        </div>
+        <div class="swatch swatch-native-minimal">
+          <strong>Native Minimal</strong>
+          <p>Neutral, platform-minded clarity.</p>
+        </div>
+      </div>
+      <p class="recipes-note">
+        Recipes are starting points, not lock-in: generated information architecture, home pages,
+        type renderers, and visual systems remain yours to change.
+      </p>
+    </section>
 
-    <footer class="colophon">
+    <section class="chapter" aria-labelledby="privacy">
+      <p class="chapter-no" aria-hidden="true">CH.05</p>
+      <h2 id="privacy">Nothing leaves your machine without you</h2>
+      <ul class="pledge">
+        <li>Work stays local and private by default.</li>
+        <li>Eternal Pose does not invent coordinates, reservations, routes, or other facts.</li>
+        <li>
+          It does not create a remote, make a repository public, push, publish, or deploy without
+          explicit approval for that action.
+        </li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="colophon-bar">
+    <div class="wrap colophon">
+      <p class="tbc">To be continued…</p>
       <p class="legal">
         MIT licensed. Laugh Tale and Eternal Pose are unofficial, non-commercial fan tributes to
         nautical and navigation ideas associated with <i>ONE PIECE</i> — not affiliated with,
@@ -205,6 +215,6 @@ const repoUrl = 'https://github.com/XBlueSky/laugh-tale'
         <a href={`${repoUrl}/blob/main/CONTRIBUTING.md`}>Contributing</a>
         <a href={`${repoUrl}/blob/main/LICENSE`}>License</a>
       </nav>
-    </footer>
-  </div>
+    </div>
+  </footer>
 </Base>
