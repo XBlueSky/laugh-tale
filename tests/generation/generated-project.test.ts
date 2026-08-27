@@ -44,7 +44,8 @@ interface ValidationResult {
 
 const RESULT_PREFIX = "ETERNAL_POSE_VALIDATION_RESULT ";
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
-const starterRoot = join(repoRoot, "plugins/eternal-pose/starter/react");
+const starterRoot =
+  process.env.LAUGH_TALE_STARTER_ROOT ?? join(repoRoot, "plugins/eternal-pose/starter/react");
 const validator = join(repoRoot, "plugins/eternal-pose/scripts/validate-trip-project.mjs");
 interface ValidationTestOperations {
   lstat?: (path: string) => Promise<Stats>;

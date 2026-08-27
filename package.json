@@ -23,6 +23,9 @@
     "check:marketplace": "cc-marketspec --check",
     "build:marketplace": "cc-marketspec",
     "check": "npm run validate:plugins && npm run check:marketplace && npm run build:packages && npm test && npm run test:packages && npm run type-check && npm run type-check:packages && npm run lint && npm run lint:packages",
+    "stage:starter": "node scripts/stage-starter-consumer.mjs",
+    "test:starter:staged": "npm --prefix tmp/staged-starter run check",
+    "test:e2e:staged": "npm --prefix tmp/staged-starter run test:e2e",
     "test:starter": "npm --prefix plugins/eternal-pose/starter/react run check",
     "test:e2e": "npm --prefix plugins/eternal-pose/starter/react run test:e2e"
   },

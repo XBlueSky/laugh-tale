@@ -17,8 +17,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm --prefix plugins/eternal-pose/starter/react ci
+      - run: npm run stage:starter
       - run: npm run check
-      - run: npm run test:starter
-      - run: npm --prefix plugins/eternal-pose/starter/react exec playwright install --with-deps chromium
-      - run: npm run test:e2e
+        env:
+          LAUGH_TALE_STARTER_ROOT: ${{ github.workspace }}/tmp/staged-starter
+      - run: npm run test:starter:staged
+      - run: npm --prefix tmp/staged-starter exec playwright install --with-deps chromium
+      - run: npm run test:e2e:staged

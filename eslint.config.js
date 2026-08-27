@@ -12,6 +12,9 @@ export default tseslint.config(
     ignores: [
       "node_modules/**",
       "coverage/**",
+      "tmp/**",
+      "packages/*/dist/**",
+      "packages/*/node_modules/**",
       ".cc-marketspec/dist/**",
       "plugins/eternal-pose/vendor/**",
       "plugins/eternal-pose/starter/react/node_modules/**",
