@@ -213,6 +213,45 @@ describe("assertMapVisualProfile", () => {
     ).toThrow(new RegExp(expected, "i"));
   });
 
+  it.each([
+    ["fallback fill", "  UrL ( https://attacker.invalid/fill.svg#paint )  "],
+    ["fallback stroke", "\turl(https://attacker.invalid/stroke.svg#paint)\n"],
+    ["fallback fill", `#ffffff\u0000`],
+    ["fallback stroke", `rgb(1 2 3)\u000B`],
+  ] as const)("rejects an unsafe %s paint", (field, paint) => {
+    const profile = validProfile({
+      marker: () => {
+        const visual = markerVisual();
+        return {
+          ...visual,
+          fallback: {
+            ...visual.fallback,
+            [field === "fallback fill" ? "fill" : "stroke"]: paint,
+          },
+        };
+      },
+    });
+
+    expect(() => assertMapVisualProfile(profile)).toThrow(
+      new RegExp(`${field}.*safe paint`, "i"),
+    );
+  });
+
+  it("accepts standard concrete CSS fallback colors containing url-like letters", () => {
+    const profile = validProfile({
+      marker: () => ({
+        ...markerVisual(),
+        fallback: {
+          fill: "burlywood",
+          stroke: "rgb(17 24 39 / 80%)",
+          text: "1",
+        },
+      }),
+    });
+
+    expect(() => assertMapVisualProfile(profile)).not.toThrow();
+  });
+
   it("validates user-location marker colors, classes, and labels", () => {
     const profile = validProfile({
       userLocation: () => ({ ...markerVisual(), label: " " }),

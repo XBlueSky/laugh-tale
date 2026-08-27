@@ -11,6 +11,10 @@ import type {
   MapRouteVisual,
   MapVisualProfile,
 } from "../../controllers/presentation-contract";
+import {
+  resolveMapFallbackPaint,
+  SAFE_MAP_FALLBACK_PAINT,
+} from "../../controllers/map-fallback-paint";
 import type { GoogleMapsRuntime } from "./google-config";
 import { normalizeProviderLocation } from "./provider-location";
 
@@ -60,8 +64,12 @@ function escapeXmlAttribute(value: string): string {
 }
 
 function classicMarkerIcon(visual: MapMarkerVisual): string {
-  const fill = escapeXmlAttribute(visual.fallback.fill);
-  const stroke = escapeXmlAttribute(visual.fallback.stroke);
+  const fill = escapeXmlAttribute(
+    resolveMapFallbackPaint(visual.fallback.fill) ?? SAFE_MAP_FALLBACK_PAINT,
+  );
+  const stroke = escapeXmlAttribute(
+    resolveMapFallbackPaint(visual.fallback.stroke) ?? SAFE_MAP_FALLBACK_PAINT,
+  );
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="${fill}" stroke="${stroke}" stroke-width="3"/></svg>`;
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }

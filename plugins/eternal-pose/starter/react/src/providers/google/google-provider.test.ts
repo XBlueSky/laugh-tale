@@ -1592,6 +1592,44 @@ describe("GoogleMapAdapter lifecycle", () => {
     ).toBeNull();
   });
 
+  it("fails closed when unvalidated classic-marker paints contain URLs or controls", async () => {
+    const profile: MapVisualProfile = {
+      ...googleMapProfile,
+      id: "unsafe-classic-marker-paint-profile",
+      marker: (place, index) => ({
+        ...googleMapProfile.marker(place, index),
+        fallback: {
+          fill: "  UrL ( https://attacker.invalid/pattern.svg#p )  ",
+          stroke: `#654321\u0000`,
+          text: "",
+        },
+      }),
+    };
+    const adapter = createGoogleMapAdapter({ development: false, profile });
+    await adapter.mount(document.createElement("div"), {
+      onPlaceSelect: vi.fn(),
+      onRouteSelect: vi.fn(),
+    });
+
+    adapter.render({ places: presentation.places.slice(0, 1), routes: [] });
+
+    const icon = FakeClassicMarker.instances[0]?.icon;
+    expect(typeof icon).toBe("string");
+    if (typeof icon !== "string") {
+      throw new Error("Expected a classic SVG marker icon");
+    }
+    const svg = decodeURIComponent(icon.slice(icon.indexOf(",") + 1));
+    const documentNode = new DOMParser().parseFromString(svg, "image/svg+xml");
+    const circle = documentNode.querySelector("circle");
+
+    expect(documentNode.querySelector("parsererror")).toBeNull();
+    expect(circle?.getAttribute("fill")).toBe("#000000");
+    expect(circle?.getAttribute("stroke")).toBe("#000000");
+    expect(svg).not.toMatch(/url\s*\(/i);
+    expect(svg).not.toContain("attacker.invalid");
+    expect(svg).not.toContain("\u0000");
+  });
+
   it("resolves selected, default, recomposed, and uncertain route effects through the profile", async () => {
     const receivedRoutes: MapRoutePresentation[] = [];
     const profile: MapVisualProfile = {

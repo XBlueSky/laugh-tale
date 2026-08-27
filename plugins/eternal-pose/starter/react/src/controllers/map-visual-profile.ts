@@ -9,6 +9,7 @@ import type {
   MapRouteVisual,
   MapVisualProfile,
 } from "./presentation-contract";
+import { resolveMapFallbackPaint } from "./map-fallback-paint";
 
 export type {
   MapMarkerPart,
@@ -98,6 +99,13 @@ function assertPositive(value: unknown, label: string): asserts value is number 
   }
 }
 
+function assertFallbackPaint(value: unknown, label: string): asserts value is string {
+  assertNonBlank(value, label);
+  if (resolveMapFallbackPaint(value) === undefined) {
+    throw new Error(`Map visual profile ${label} must be a safe paint value`);
+  }
+}
+
 function assertMarkerVisual(visual: MapMarkerVisual, label: string): void {
   if (visual === null || typeof visual !== "object") {
     throw new Error(`Map visual profile ${label} must return a marker visual`);
@@ -125,8 +133,8 @@ function assertMarkerVisual(visual: MapMarkerVisual, label: string): void {
   if (visual.fallback === null || typeof visual.fallback !== "object") {
     throw new Error(`Map visual profile ${label} fallback must be an object`);
   }
-  assertNonBlank(visual.fallback.fill, `${label} fallback fill`);
-  assertNonBlank(visual.fallback.stroke, `${label} fallback stroke`);
+  assertFallbackPaint(visual.fallback.fill, `${label} fallback fill`);
+  assertFallbackPaint(visual.fallback.stroke, `${label} fallback stroke`);
   if (typeof visual.fallback.text !== "string") {
     throw new Error(`Map visual profile ${label} fallback text must be a string`);
   }
