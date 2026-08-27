@@ -1,0 +1,76 @@
+# Gate the website build on every PR and push to main; build or test failure
+# blocks merge. Deploy is NOT here: the Cloudflare Pages Git integration owns
+# deploy (same split as cc-uplink and cc-marketspec).
+#
+# Because deploy lives entirely in the Cloudflare Pages dashboard, this comment
+# is the record of what that project must be configured with:
+#   Production branch:      main
+#   Root directory:         site
+#   Build command:          npm run build
+#   Build output directory: dist
+#   Environment variable:   NODE_VERSION = 22
+#     (Astro 7 needs Node >= 22.12; the Pages builder does not read a repo-root
+#     version file when Root directory is set to site.)
+#   Build watch paths:      leave UNSET — the marketplace data the site renders
+#     lives outside site/ (.cc-marketspec/, plugins/), so every push to main
+#     must build.
+name: Site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - '.cc-marketspec/**'
+      - '.claude-plugin/**'
+      - 'plugins/**'
+      - '.github/workflows/site.yml'
+  pull_request:
+    paths:
+      - 'site/**'
+      - '.cc-marketspec/**'
+      - '.claude-plugin/**'
+      - 'plugins/**'
+      - '.github/workflows/site.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: site-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Validate the marketplace before building anything from it
+        run: npx @xbluesky/cc-marketspec@1 --check
+
+      - run: npm --prefix site ci
+
+      - run: npm --prefix site run build
+
+      - name: Test (post-build guards must not be skipped)
+        run: |
+          set -eo pipefail
+          npm --prefix site run test:ci 2>&1 | tee /tmp/site-test.log
+          grep -qE '^# pass [1-9]' /tmp/site-test.log \
+            || { echo "::error::the site test suite ran zero tests"; exit 1; }
+          if grep -qE '^# skipped [1-9]' /tmp/site-test.log; then
+            echo "::error::tests were skipped; dist-dependent suites must run after a build"
+            exit 1
+          fi
+
+      - name: Verify the build produced the page we expect
+        run: test -f site/dist/index.html
