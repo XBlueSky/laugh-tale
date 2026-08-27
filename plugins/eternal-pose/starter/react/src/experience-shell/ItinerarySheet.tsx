@@ -14,12 +14,7 @@ import {
   type ReactNode,
 } from "react";
 
-import {
-  clampSheetHeight,
-  nearestSheetSnap,
-  type SheetGeometry,
-  type SheetSnap,
-} from "./sheet-geometry";
+import { clampSheetHeight, nearestSheetSnap, type SheetGeometry, type SheetSnap } from "@laugh-tale/core";
 
 export interface ItineraryRouteStatus {
   state: "loading" | "error";

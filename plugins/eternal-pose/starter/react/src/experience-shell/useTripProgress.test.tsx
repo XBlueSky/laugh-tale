@@ -3,14 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { StrictMode, useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Trip } from "../trip-core/model";
-import {
-  checklistCompletionKey,
-  emptyTripProgress,
-  nodeCompletionKey,
-  taskCompletionKey,
-  type TripProgressV1,
-} from "../trip-core/progress";
+import type { Trip } from "@laugh-tale/core";
+import { checklistCompletionKey, emptyTripProgress, nodeCompletionKey, taskCompletionKey, type TripProgressV1 } from "@laugh-tale/core";
 import {
   tripProgressStorageKey,
   useTripProgress,

@@ -1,10 +1,10 @@
 import { useState } from "react";
 
 import { TripExperience } from "./experience-shell/TripExperience";
-import type { MapAdapter, RouteAdapter } from "./experience-shell/provider-contracts";
+import type { MapAdapter, RouteAdapter } from "@laugh-tale/core/browser";
 import { useTripProgress } from "./experience-shell/useTripProgress";
 import { trip as configuredTrip } from "./trip-content/trip";
-import type { Trip } from "./trip-core/model";
+import type { Trip } from "@laugh-tale/core";
 import { SetupRequired, type SetupIssue } from "./ui/SetupRequired";
 import { TripHome } from "./ui/home/TripHome";
 

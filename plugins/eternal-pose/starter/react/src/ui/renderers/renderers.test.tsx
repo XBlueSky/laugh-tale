@@ -2,7 +2,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { completeTrip } from "../../trip-content/fixtures/complete-trip";
-import type { TripNode } from "../../trip-core/model";
+import type { TripNode } from "@laugh-tale/core";
 import type { TimelineNodeState } from "../timeline/TimelineEntry";
 import { TimelineEntry } from "../timeline/TimelineEntry";
 import {

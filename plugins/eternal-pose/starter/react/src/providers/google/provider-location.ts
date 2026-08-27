@@ -1,4 +1,4 @@
-import type { Coordinates } from "../../trip-core/model";
+import type { Coordinates } from "@laugh-tale/core";
 
 function finiteCoordinate(
   value: unknown,

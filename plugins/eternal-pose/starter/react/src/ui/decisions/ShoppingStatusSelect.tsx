@@ -1,9 +1,6 @@
 import { ChevronDown } from "lucide-react";
 
-import type {
-  ShoppingItem,
-  ShoppingStatus,
-} from "../../trip-core/model";
+import type { ShoppingItem, ShoppingStatus } from "@laugh-tale/core";
 
 const STATUS_OPTIONS: readonly {
   value: ShoppingStatus;

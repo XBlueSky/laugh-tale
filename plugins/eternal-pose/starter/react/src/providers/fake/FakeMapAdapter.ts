@@ -1,11 +1,6 @@
-import type { Coordinates } from "../../trip-core/model";
-import type {
-  MapAdapter,
-  MapEvents,
-  MapFocusTarget,
-  MapPadding,
-  MapPresentation,
-} from "../../experience-shell/provider-contracts";
+import type { Coordinates } from "@laugh-tale/core";
+import type { MapFocusTarget, MapPadding, MapPresentation } from "@laugh-tale/core";
+import type { MapAdapter, MapEvents } from "@laugh-tale/core/browser";
 
 function clonePresentation(presentation: MapPresentation): MapPresentation {
   return {

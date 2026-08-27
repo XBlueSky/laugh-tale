@@ -1,13 +1,6 @@
-import type { Coordinates } from "../../trip-core/model";
-import {
-  USER_LOCATION_OWNER_ID,
-  type MapAdapter,
-  type MapEvents,
-  type MapFocusTarget,
-  type MapPadding,
-  type MapPlacePresentation,
-  type MapPresentation,
-} from "../../experience-shell/provider-contracts";
+import type { Coordinates } from "@laugh-tale/core";
+import { USER_LOCATION_OWNER_ID, type MapFocusTarget, type MapPadding, type MapPlacePresentation, type MapPresentation } from "@laugh-tale/core";
+import { type MapAdapter, type MapEvents } from "@laugh-tale/core/browser";
 import type { GoogleMapsRuntime } from "./google-config";
 import { normalizeProviderLocation } from "./provider-location";
 

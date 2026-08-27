@@ -6,7 +6,7 @@ import {
   useState,
 } from "react";
 
-import type { CandidateGroup, CandidateOption } from "../../trip-core/model";
+import type { CandidateGroup, CandidateOption } from "@laugh-tale/core";
 
 export interface CandidateMapOverride {
   group: CandidateGroup;

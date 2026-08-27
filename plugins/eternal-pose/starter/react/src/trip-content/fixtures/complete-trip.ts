@@ -1,4 +1,4 @@
-import type { Trip } from "../../trip-core/model";
+import type { Trip } from "@laugh-tale/core";
 
 export const completeTrip: Trip = {
   id: "trip-complete",

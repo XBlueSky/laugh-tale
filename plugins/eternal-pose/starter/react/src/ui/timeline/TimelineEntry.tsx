@@ -6,12 +6,7 @@ import {
   type ReactElement,
 } from "react";
 
-import type {
-  Booking,
-  ShoppingStatus,
-  Timing,
-  TripNode,
-} from "../../trip-core/model";
+import type { Booking, ShoppingStatus, Timing, TripNode } from "@laugh-tale/core";
 import { formatTimingLabel } from "../timing-label";
 
 export interface TimelineNodeState {

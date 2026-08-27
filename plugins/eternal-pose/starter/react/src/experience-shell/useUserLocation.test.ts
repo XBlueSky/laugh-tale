@@ -3,7 +3,7 @@ import { createElement, StrictMode, type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { FakeMapAdapter } from "../providers/fake/FakeMapAdapter";
-import { USER_LOCATION_OWNER_ID } from "./provider-contracts";
+import { USER_LOCATION_OWNER_ID } from "@laugh-tale/core";
 import { useUserLocation } from "./useUserLocation";
 
 afterEach(cleanup);

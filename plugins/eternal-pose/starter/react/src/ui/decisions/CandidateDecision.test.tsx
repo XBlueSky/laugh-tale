@@ -5,21 +5,12 @@ import { useCallback, useMemo, useState } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { ItineraryMap } from "../../experience-shell/ItineraryMap";
-import { buildMapPresentation } from "../../experience-shell/map-presentation";
-import {
-  candidateMapOwnerId,
-  decodeMapPlaceOwnerId,
-  nodeMapOwnerId,
-  type MapPresentation,
-} from "../../experience-shell/provider-contracts";
+import { buildMapPresentation } from "@laugh-tale/core";
+import { candidateMapOwnerId, decodeMapPlaceOwnerId, nodeMapOwnerId, type MapPresentation } from "@laugh-tale/core";
 import { FakeMapAdapter } from "../../providers/fake/FakeMapAdapter";
-import type { CandidateGroup, Trip } from "../../trip-core/model";
-import {
-  emptyTripProgress,
-  tripProgressReducer,
-  type TripProgressV1,
-} from "../../trip-core/progress";
-import { resolveEffectiveItinerary } from "../../trip-core/resolve-itinerary";
+import type { CandidateGroup, Trip } from "@laugh-tale/core";
+import { emptyTripProgress, tripProgressReducer, type TripProgressV1 } from "@laugh-tale/core";
+import { resolveEffectiveItinerary } from "@laugh-tale/core";
 import {
   CandidateDecision,
   type CandidateMapOverride,

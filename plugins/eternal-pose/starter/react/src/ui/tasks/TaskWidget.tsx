@@ -7,11 +7,8 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 
-import type { TripTask } from "../../trip-core/model";
-import {
-  checklistCompletionKey,
-  taskCompletionKey,
-} from "../../trip-core/progress";
+import type { TripTask } from "@laugh-tale/core";
+import { checklistCompletionKey, taskCompletionKey } from "@laugh-tale/core";
 
 export interface TaskWidgetProps {
   dayTitle: string;

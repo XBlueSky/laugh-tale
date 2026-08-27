@@ -1,8 +1,0 @@
-export * from "@laugh-tale/core";
-export type {
-  MapAdapter,
-  MapEvents,
-  NavigationAdapter,
-  PlaceAdapter,
-  RouteAdapter,
-} from "@laugh-tale/core/browser";

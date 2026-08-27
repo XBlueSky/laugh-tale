@@ -1,14 +1,6 @@
-import type {
-  MapAdapter,
-  MapEvents,
-  MapFocusTarget,
-  MapPadding,
-  MapPresentation,
-  RouteAdapter,
-  RouteRequest,
-  RouteResult,
-} from "../../../src/experience-shell/provider-contracts";
-import type { Coordinates, RouteEdge, Trip, TripNode } from "../../../src/trip-core/model";
+import type { MapFocusTarget, MapPadding, MapPresentation, RouteRequest, RouteResult } from "@laugh-tale/core";
+import type { MapAdapter, MapEvents, RouteAdapter } from "@laugh-tale/core/browser";
+import type { Coordinates, RouteEdge, Trip, TripNode } from "@laugh-tale/core";
 
 declare global {
   interface Window {

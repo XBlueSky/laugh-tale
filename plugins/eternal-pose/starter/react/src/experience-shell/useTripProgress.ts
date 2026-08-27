@@ -1,13 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { ShoppingStatus, Trip } from "../trip-core/model";
-import {
-  collectDayProgressScope,
-  emptyTripProgress,
-  parseTripProgress,
-  tripProgressReducer,
-  type TripProgressV1,
-} from "../trip-core/progress";
+import type { ShoppingStatus, Trip } from "@laugh-tale/core";
+import { collectDayProgressScope, emptyTripProgress, parseTripProgress, tripProgressReducer, type TripProgressV1 } from "@laugh-tale/core";
 
 const STORAGE_PREFIX = "eternal-pose:trip-progress:v1:";
 

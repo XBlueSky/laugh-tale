@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { Coordinates } from "../trip-core/model";
-import {
-  USER_LOCATION_OWNER_ID,
-  type MapAdapter,
-} from "./provider-contracts";
+import type { Coordinates } from "@laugh-tale/core";
+import { USER_LOCATION_OWNER_ID } from "@laugh-tale/core";
+import { type MapAdapter } from "@laugh-tale/core/browser";
 
 export type UserLocationStatus =
   | "idle"

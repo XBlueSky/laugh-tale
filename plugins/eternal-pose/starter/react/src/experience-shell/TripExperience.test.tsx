@@ -15,15 +15,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FakeMapAdapter } from "../providers/fake/FakeMapAdapter";
 import { FakeRouteAdapter } from "../providers/fake/FakeRouteAdapter";
-import type { Trip } from "../trip-core/model";
-import {
-  candidateMapOwnerId,
-  nodeMapOwnerId,
-  type MapEvents,
-  type MapFocusTarget,
-  type MapPresentation,
-  USER_LOCATION_OWNER_ID,
-} from "./provider-contracts";
+import type { Trip } from "@laugh-tale/core";
+import { candidateMapOwnerId, nodeMapOwnerId, type MapFocusTarget, type MapPresentation, USER_LOCATION_OWNER_ID } from "@laugh-tale/core";
+import { type MapEvents } from "@laugh-tale/core/browser";
 import { TripExperience } from "./TripExperience";
 
 const baseCss = readFileSync(

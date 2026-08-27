@@ -1,7 +1,5 @@
-import type {
-  NavigationAdapter,
-  NavigationInput,
-} from "../../experience-shell/provider-contracts";
+import type { NavigationInput } from "@laugh-tale/core";
+import type { NavigationAdapter } from "@laugh-tale/core/browser";
 
 export function createGoogleMapsUrl(input: NavigationInput): string {
   return (

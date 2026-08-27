@@ -7,11 +7,9 @@ import {
   useState,
 } from "react";
 
-import type { RouteEdge } from "../trip-core/model";
-import type {
-  RouteAdapter,
-  RouteResult,
-} from "./provider-contracts";
+import type { RouteEdge } from "@laugh-tale/core";
+import type { RouteResult } from "@laugh-tale/core";
+import type { RouteAdapter } from "@laugh-tale/core/browser";
 
 export type RouteLoadState = RouteResult | { status: "loading" };
 

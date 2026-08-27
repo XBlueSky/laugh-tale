@@ -1,12 +1,9 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 
-import type { RouteEdge } from "../trip-core/model";
-import type {
-  RouteAdapter,
-  RouteRequest,
-  RouteResult,
-} from "./provider-contracts";
+import type { RouteEdge } from "@laugh-tale/core";
+import type { RouteRequest, RouteResult } from "@laugh-tale/core";
+import type { RouteAdapter } from "@laugh-tale/core/browser";
 import { useRouteStates } from "./useRouteStates";
 
 function route(id: string, fromNodeId = `${id}-from`, toNodeId = `${id}-to`): RouteEdge {

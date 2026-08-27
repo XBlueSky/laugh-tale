@@ -7,10 +7,10 @@ import {
 import { motion } from "motion/react";
 import { useEffect, useId, useState, type Ref } from "react";
 
-import type { Timing } from "../../trip-core/model";
-import type { RoutePresentation } from "../../trip-core/routes";
+import type { Timing } from "@laugh-tale/core";
+import type { RoutePresentation } from "@laugh-tale/core";
 import { formatTimingLabel } from "../timing-label";
-import type { RouteResult } from "../../experience-shell/provider-contracts";
+import type { RouteResult } from "@laugh-tale/core";
 
 export type RouteConnectorState = RouteResult | { status: "loading" };
 

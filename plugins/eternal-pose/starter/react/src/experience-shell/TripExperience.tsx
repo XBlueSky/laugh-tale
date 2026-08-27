@@ -11,18 +11,10 @@ import {
 } from "react";
 
 import { GoogleNavigationAdapter } from "../providers/google/google-maps-url";
-import type { CandidateGroup, Trip, TripNode } from "../trip-core/model";
-import {
-  emptyTripProgress,
-  nodeCompletionKey,
-  tripProgressReducer,
-} from "../trip-core/progress";
-import {
-  resolveEffectiveItinerary,
-  type EffectiveDay,
-  type EffectiveNode,
-} from "../trip-core/resolve-itinerary";
-import { findLiveState, resolveSchedule } from "../trip-core/time";
+import type { CandidateGroup, Trip, TripNode } from "@laugh-tale/core";
+import { emptyTripProgress, nodeCompletionKey, tripProgressReducer } from "@laugh-tale/core";
+import { resolveEffectiveItinerary, type EffectiveDay, type EffectiveNode } from "@laugh-tale/core";
+import { findLiveState, resolveSchedule } from "@laugh-tale/core";
 import { DayHeader } from "../ui/DayHeader";
 import { ItineraryTimeline } from "../ui/ItineraryTimeline";
 import {
@@ -40,21 +32,10 @@ import "../ui/styles/recipe.css";
 import { TaskWidget } from "../ui/tasks/TaskWidget";
 import { ItineraryMap } from "./ItineraryMap";
 import { ItinerarySheet } from "./ItinerarySheet";
-import { buildMapPresentation } from "./map-presentation";
-import {
-  decodeMapPlaceOwnerId,
-  candidateMapOwnerId,
-  nodeMapOwnerId,
-  type MapAdapter,
-  type MapFocusTarget,
-  type MapPadding,
-  type MapPresentation,
-  type RouteAdapter,
-} from "./provider-contracts";
-import {
-  resolveSheetGeometry,
-  type SheetSnap,
-} from "./sheet-geometry";
+import { buildMapPresentation } from "@laugh-tale/core";
+import { decodeMapPlaceOwnerId, candidateMapOwnerId, nodeMapOwnerId, type MapFocusTarget, type MapPadding, type MapPresentation } from "@laugh-tale/core";
+import { type MapAdapter, type RouteAdapter } from "@laugh-tale/core/browser";
+import { resolveSheetGeometry, type SheetSnap } from "@laugh-tale/core";
 import { useTripSelection } from "./useTripSelection";
 import type { TripProgressController } from "./useTripProgress";
 import { useRouteStates } from "./useRouteStates";

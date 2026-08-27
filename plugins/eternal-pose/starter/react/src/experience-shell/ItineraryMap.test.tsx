@@ -4,11 +4,8 @@ import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { FakeMapAdapter } from "../providers/fake/FakeMapAdapter";
-import {
-  nodeMapOwnerId,
-  type MapEvents,
-  type MapPresentation,
-} from "./provider-contracts";
+import { nodeMapOwnerId, type MapPresentation } from "@laugh-tale/core";
+import { type MapEvents } from "@laugh-tale/core/browser";
 import { ItineraryMap } from "./ItineraryMap";
 
 afterEach(cleanup);

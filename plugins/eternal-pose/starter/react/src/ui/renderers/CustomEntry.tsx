@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 
-import type { TripNode } from "../../trip-core/model";
+import type { TripNode } from "@laugh-tale/core";
 import type { RendererProps } from "../timeline/TimelineEntry";
 import { DiningEntry } from "./DiningEntry";
 import { ExperienceEntry } from "./ExperienceEntry";

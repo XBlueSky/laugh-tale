@@ -1,9 +1,6 @@
-import type {
-  PlaceAdapter,
-  PlaceRequest,
-  PlaceResult,
-} from "../../experience-shell/provider-contracts";
-import type { PlaceRef } from "../../trip-core/model";
+import type { PlaceRequest, PlaceResult } from "@laugh-tale/core";
+import type { PlaceAdapter } from "@laugh-tale/core/browser";
+import type { PlaceRef } from "@laugh-tale/core";
 import { normalizeProviderLocation } from "./provider-location";
 
 const PLACES_BASE_URL = "https://places.googleapis.com/v1";

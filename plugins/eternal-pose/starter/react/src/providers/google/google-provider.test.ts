@@ -1,14 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  candidateMapOwnerId,
-  decodeMapPlaceOwnerId,
-  nodeMapOwnerId,
-  USER_LOCATION_OWNER_ID,
-  type MapPresentation,
-  type RouteRequest,
-  type RouteResult,
-} from "../../experience-shell/provider-contracts";
-import type { RouteEdge } from "../../trip-core/model";
+import { candidateMapOwnerId, decodeMapPlaceOwnerId, nodeMapOwnerId, USER_LOCATION_OWNER_ID, type MapPresentation, type RouteRequest, type RouteResult } from "@laugh-tale/core";
+import type { RouteEdge } from "@laugh-tale/core";
 import { FakeRouteAdapter } from "../fake/FakeRouteAdapter";
 import {
   configureGoogleMaps,

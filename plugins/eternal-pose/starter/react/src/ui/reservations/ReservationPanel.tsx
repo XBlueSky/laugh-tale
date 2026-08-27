@@ -7,7 +7,7 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 
-import type { Booking, Reservation } from "../../trip-core/model";
+import type { Booking, Reservation } from "@laugh-tale/core";
 
 export interface ReservationPanelProps {
   reservations: readonly Reservation[];

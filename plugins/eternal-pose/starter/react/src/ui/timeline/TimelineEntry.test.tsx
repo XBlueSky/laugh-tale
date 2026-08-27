@@ -2,8 +2,8 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { TripNode } from "../../trip-core/model";
-import type { EffectiveNode } from "../../trip-core/resolve-itinerary";
+import type { TripNode } from "@laugh-tale/core";
+import type { EffectiveNode } from "@laugh-tale/core";
 import { rendererFor } from "../renderers/CustomEntry";
 import { ItineraryTimeline } from "../ItineraryTimeline";
 import {

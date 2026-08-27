@@ -1,4 +1,4 @@
-import type { Timing } from "../trip-core/model";
+import type { Timing } from "@laugh-tale/core";
 
 export function formatTimingLabel(timing: Timing): string {
   if (timing.certainty === "unknown" || timing.start === undefined) {
