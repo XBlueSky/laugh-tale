@@ -48,7 +48,7 @@ class ControlledRouteAdapter implements RouteAdapter {
 
 describe("useRouteStates", () => {
   test("keeps authored route context static and performs zero provider work without a factory", () => {
-    let factoryCalls = 0;
+    const factoryCalls = 0;
     const { result } = renderHook(() =>
       useRouteStates([route("route-a")], undefined),
     );
@@ -57,7 +57,6 @@ describe("useRouteStates", () => {
     expect(Object.keys(result.current.states)).toEqual([]);
     expect(Object.keys(result.current.mapResults)).toEqual([]);
     expect(result.current.retry("route-a")).toBe(false);
-    factoryCalls += 0;
   });
 
   test("loads each stable owner once and ignores equivalent rerendered edge objects", async () => {

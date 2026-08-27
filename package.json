@@ -30,6 +30,7 @@
     "test:e2e": "npm --prefix plugins/eternal-pose/starter/react run test:e2e"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@semantic-release/changelog": "^7.0.0",
     "@semantic-release/exec": "^7.1.0",
     "@semantic-release/git": "^11.0.1",
@@ -37,7 +38,7 @@
     "@semantic-release/npm": "^13.1.5",
     "@types/node": "^22.19.19",
     "@xbluesky/cc-marketspec": "1.0.0",
-    "eslint": "^9.39.4",
+    "eslint": "^10.9.0",
     "semantic-release": "^25.0.9",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.67.0",

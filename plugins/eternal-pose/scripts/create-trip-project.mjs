@@ -199,7 +199,7 @@ async function acquireOwnershipMarker(ownership, removeRootOnFailure, operations
       try {
         await assertOwnedDirectoryIdentity(ownership, operations);
         if ((await operations.readdir(ownership.path)).length !== 0) {
-          throw new Error(`${ownership.label} inventory changed`);
+          throw new Error(`${ownership.label} inventory changed`, { cause: error });
         }
         if (removeRootOnFailure) {
           await operations.rmdir(ownership.path);
