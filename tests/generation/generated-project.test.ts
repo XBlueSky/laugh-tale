@@ -95,7 +95,7 @@ function createControlledProject(root: string, tripReady: boolean): void {
     private: true,
     type: "module",
     scripts,
-    dependencies: { "@laugh-tale/core": "0.1.0" },
+    dependencies: { "@laugh-tale/core": "0.1.0", "@laugh-tale/react": "0.1.0" },
   };
   const packageLock = {
     name: packageJson.name,
@@ -113,7 +113,6 @@ function createControlledProject(root: string, tripReady: boolean): void {
   for (const directory of [
     "docs",
     "src/trip-content",
-    "src/experience-shell",
     "src/providers/google",
     "src/ui",
     "tests/e2e",

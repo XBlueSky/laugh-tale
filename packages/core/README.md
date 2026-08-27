@@ -1,6 +1,6 @@
 # @laugh-tale/core
 
-Framework-neutral trip behavior for map-first travel sites: the semantic trip model, validation, timezone-aware scheduling, device progress, effective-itinerary and candidate resolution, route-edge composition, pure map/timeline presentation builders, stable owner identifiers, and sheet snap geometry.
+Framework-neutral trip behavior for map-first travel sites: the semantic trip model, validation, timezone-aware scheduling, device progress, effective-itinerary and candidate resolution, candidate comparison-session transitions, route-edge composition, pure map/timeline presentation builders, stable owner identifiers, and sheet snap geometry.
 
 This package contains **no finished visual system** — no components, CSS, icons, wording, or page structure. A consuming site owns all of those; the package protects the behavior invariants underneath them.
 

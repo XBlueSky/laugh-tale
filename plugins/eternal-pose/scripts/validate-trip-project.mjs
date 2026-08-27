@@ -37,13 +37,12 @@ const REQUIRED_FILES = [
 ];
 const REQUIRED_DIRECTORIES = [
   "src/trip-content",
-  "src/experience-shell",
   "src/providers/google",
   "src/ui",
   "tests/e2e",
 ];
 const REQUIRED_SCRIPTS = ["build", "lint", "test", "type-check"];
-const REQUIRED_PACKAGE_DEPENDENCIES = ["@laugh-tale/core"];
+const REQUIRED_PACKAGE_DEPENDENCIES = ["@laugh-tale/core", "@laugh-tale/react"];
 const EXACT_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?$/;
 const RESULT_PREFIX = "ETERNAL_POSE_VALIDATION_RESULT ";
 const COMMANDS = [

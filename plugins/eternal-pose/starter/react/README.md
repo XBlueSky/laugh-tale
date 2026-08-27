@@ -10,7 +10,7 @@ npm ci
 npm run dev
 ```
 
-`npm ci` installs the exact pinned `@laugh-tale/core` version from the public npm registry.
+`npm ci` installs the exact pinned `@laugh-tale/core` and `@laugh-tale/react` versions from the public npm registry.
 
 Add your itinerary in `src/trip-content/trip.ts`, then set `VITE_GOOGLE_MAPS_API_KEY` in `.env.local`. Missing trip content or a missing key intentionally renders a configuration-required screen; it never substitutes a fake map or claims Google is connected.
 
