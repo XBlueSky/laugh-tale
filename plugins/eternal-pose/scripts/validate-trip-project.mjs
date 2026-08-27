@@ -37,13 +37,14 @@ const REQUIRED_FILES = [
 ];
 const REQUIRED_DIRECTORIES = [
   "src/trip-content",
-  "src/trip-core",
   "src/experience-shell",
   "src/providers/google",
   "src/ui",
   "tests/e2e",
 ];
 const REQUIRED_SCRIPTS = ["build", "lint", "test", "type-check"];
+const REQUIRED_PACKAGE_DEPENDENCIES = ["@laugh-tale/core"];
+const EXACT_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?$/;
 const RESULT_PREFIX = "ETERNAL_POSE_VALIDATION_RESULT ";
 const COMMANDS = [
   { command: "npm test", arguments: ["test"] },
@@ -143,6 +144,27 @@ export async function validateTripProject(rootDir) {
         if (typeof packageJson.scripts[script] !== "string" || packageJson.scripts[script].trim() === "") {
           findings.push(
             projectFinding("project.missing-script", "package.json", `Required generated-project script "${script}" is missing.`),
+          );
+        }
+      }
+      const dependencies = isPlainObject(packageJson.dependencies) ? packageJson.dependencies : {};
+      for (const dependencyName of REQUIRED_PACKAGE_DEPENDENCIES) {
+        const specifier = dependencies[dependencyName];
+        if (typeof specifier !== "string" || specifier.trim() === "") {
+          findings.push(
+            projectFinding(
+              "project.missing-package-dependency",
+              "package.json",
+              `Generated project must declare "${dependencyName}" as a dependency.`,
+            ),
+          );
+        } else if (!EXACT_VERSION_PATTERN.test(specifier)) {
+          findings.push(
+            projectFinding(
+              "project.invalid-package-specifier",
+              "package.json",
+              `Dependency "${dependencyName}" must pin an exact registry version, not "${specifier}".`,
+            ),
           );
         }
       }

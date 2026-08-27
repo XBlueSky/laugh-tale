@@ -155,7 +155,7 @@ function createValidGeneratedProject(root: string): void {
     "CLAUDE.md": "Read docs/trip-experience-contract.md.\n",
     ".env.example": "GOOGLE_MAPS_API_KEY=\n",
     ".gitignore": ".env.local\ndist/\ncoverage/\n",
-    "package.json": `${JSON.stringify({ scripts: { build: "node scripts/build.mjs", lint: "node scripts/pass.mjs", test: "node scripts/pass.mjs", "type-check": "node scripts/pass.mjs" } }, null, 2)}\n`,
+    "package.json": `${JSON.stringify({ scripts: { build: "node scripts/build.mjs", lint: "node scripts/pass.mjs", test: "node scripts/pass.mjs", "type-check": "node scripts/pass.mjs" }, dependencies: { "@laugh-tale/core": "0.1.0" } }, null, 2)}\n`,
     "package-lock.json": "{}\n",
     "docs/trip-experience-contract.md": "# Contract\n",
     "scripts/pass.mjs": "// Synthetic validation fixture command.\n",
@@ -173,7 +173,6 @@ function createValidGeneratedProject(root: string): void {
   for (const [relativePath, contents] of Object.entries(files)) writeFixture(root, relativePath, contents);
   for (const relativePath of [
     "src/trip-content",
-    "src/trip-core",
     "src/experience-shell",
     "src/providers/google",
     "src/ui",
@@ -2967,12 +2966,12 @@ describe("generated-project validation", () => {
     const root = createTemporaryRoot();
     createValidGeneratedProject(root);
     rmSync(join(root, "AGENTS.md"));
-    rmSync(join(root, "src/trip-core"), { recursive: true });
+    rmSync(join(root, "src/ui"), { recursive: true });
 
     const findings = await validateTripProject(root);
 
     expect(findingAt(findings, "AGENTS.md", "project.missing-file")).toBe(true);
-    expect(findingAt(findings, "src/trip-core", "project.missing-directory")).toBe(true);
+    expect(findingAt(findings, "src/ui", "project.missing-directory")).toBe(true);
   });
 
   test("warning-only validation emits JSON and exits zero", () => {

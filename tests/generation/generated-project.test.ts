@@ -95,6 +95,7 @@ function createControlledProject(root: string, tripReady: boolean): void {
     private: true,
     type: "module",
     scripts,
+    dependencies: { "@laugh-tale/core": "0.1.0" },
   };
   const packageLock = {
     name: packageJson.name,
@@ -112,7 +113,6 @@ function createControlledProject(root: string, tripReady: boolean): void {
   for (const directory of [
     "docs",
     "src/trip-content",
-    "src/trip-core",
     "src/experience-shell",
     "src/providers/google",
     "src/ui",
@@ -233,6 +233,45 @@ afterEach(() => {
 });
 
 describe("generated project validation", () => {
+  test("accepts a generated site without src/trip-core", async () => {
+    const root = temporaryRoot();
+    createControlledProject(root, false);
+
+    const result = await runValidation(root, "local", { spawnSync: successfulValidationSpawn() });
+
+    expect(result.findings.filter((finding) => finding.code === "project.missing-directory")).toEqual([]);
+  });
+
+  test("rejects missing and non-exact @laugh-tale package specifiers", async () => {
+    const root = temporaryRoot();
+    createControlledProject(root, false);
+    const manifestPath = join(root, "package.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+      dependencies: Record<string, string>;
+    };
+
+    manifest.dependencies["@laugh-tale/core"] = "^0.1.0";
+    writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+    let result = await runValidation(root, "local", { spawnSync: successfulValidationSpawn() });
+    expect(result.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ severity: "error", code: "project.invalid-package-specifier" }),
+    ]));
+
+    manifest.dependencies["@laugh-tale/core"] = "file:../somewhere/core.tgz";
+    writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+    result = await runValidation(root, "local", { spawnSync: successfulValidationSpawn() });
+    expect(result.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ severity: "error", code: "project.invalid-package-specifier" }),
+    ]));
+
+    delete manifest.dependencies["@laugh-tale/core"];
+    writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+    result = await runValidation(root, "local", { spawnSync: successfulValidationSpawn() });
+    expect(result.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ severity: "error", code: "project.missing-package-dependency" }),
+    ]));
+  });
+
   test("provisionally owns a new temp root before the first identity read and preserves uncertainty", async () => {
     const root = temporaryRoot();
     createControlledProject(root, true);
