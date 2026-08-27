@@ -1,8 +1,8 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { FakeMapAdapter } from "./providers/fake/FakeMapAdapter";
-import { completeTrip } from "./trip-content/fixtures/complete-trip";
+import { FakeMapAdapter } from "../providers/fake/FakeMapAdapter";
+import { completeTrip } from "../trip-content/fixtures/complete-trip";
 import { App } from "./App";
 
 afterEach(cleanup);

@@ -6,7 +6,11 @@ import type {
   CandidateMapOverride,
   CandidatePreviewRequest,
 } from "@laugh-tale-island/core";
-import { useCandidateDecision } from "@laugh-tale-island/react";
+import {
+  useCandidateDecision,
+  useOptionalCandidateDecision,
+  type UseCandidateDecisionOptions,
+} from "@laugh-tale-island/react";
 
 afterEach(cleanup);
 
@@ -17,6 +21,16 @@ const group: CandidateGroup = {
   options: [
     { id: "dinner-a", title: "Dinner A" },
     { id: "dinner-b", title: "Dinner B" },
+  ],
+};
+
+const secondGroup: CandidateGroup = {
+  id: "lunch-group",
+  parentNodeId: "lunch",
+  mode: "single",
+  options: [
+    { id: "lunch-a", title: "Lunch A" },
+    { id: "lunch-b", title: "Lunch B" },
   ],
 };
 
@@ -143,5 +157,136 @@ describe("useCandidateDecision", () => {
     await act(async () => Promise.resolve());
     expect(document.activeElement).toBe(trigger);
     trigger.remove();
+  });
+});
+
+describe("useOptionalCandidateDecision", () => {
+  function optionalOptions(
+    candidateGroup: CandidateGroup,
+    callbacks: Pick<
+      UseCandidateDecisionOptions,
+      "onMapOverrideChange" | "onConfirm"
+    >,
+    extra: Partial<UseCandidateDecisionOptions> = {},
+  ): UseCandidateDecisionOptions {
+    return {
+      group: candidateGroup,
+      ...callbacks,
+      ...extra,
+    };
+  }
+
+  it("transitions null to a group, reinitializes for a different group, and clears on null", () => {
+    const onMapOverrideChange = vi.fn();
+    const onConfirm = vi.fn();
+    const callbacks = { onMapOverrideChange, onConfirm };
+    const view = renderHook<
+      ReturnType<typeof useOptionalCandidateDecision>,
+      { options: UseCandidateDecisionOptions | null }
+    >(
+      ({ options }: { options: UseCandidateDecisionOptions | null }) =>
+        useOptionalCandidateDecision(options),
+      { initialProps: { options: null } },
+    );
+    expect(view.result.current).toBeNull();
+
+    view.rerender({
+      options: optionalOptions(group, callbacks, {
+        committedOptionId: "dinner-b",
+      }),
+    });
+    expect(view.result.current).toMatchObject({
+      open: false,
+      draftOptionId: "dinner-b",
+    });
+    act(() => view.result.current?.openComparison());
+    expect(onMapOverrideChange.mock.calls.at(-1)?.[0]).toMatchObject({
+      group,
+      activeOptionId: "dinner-b",
+    });
+
+    view.rerender({
+      options: optionalOptions(secondGroup, callbacks, {
+        committedOptionId: "lunch-a",
+      }),
+    });
+    expect(view.result.current).toMatchObject({
+      open: false,
+      sessionId: null,
+      draftOptionId: "lunch-a",
+    });
+    expect(onMapOverrideChange.mock.calls.at(-1)?.[0]).toBeNull();
+
+    view.rerender({ options: null });
+    expect(view.result.current).toBeNull();
+    expect(onMapOverrideChange.mock.calls.at(-1)?.[0]).toBeNull();
+  });
+
+  it("restores the active group's trigger focus but emits no stale focus after removal", async () => {
+    const onMapOverrideChange = vi.fn();
+    const options = optionalOptions(group, {
+      onMapOverrideChange,
+      onConfirm: vi.fn(),
+    });
+    const view = renderHook<
+      ReturnType<typeof useOptionalCandidateDecision>,
+      { value: UseCandidateDecisionOptions | null }
+    >(
+      ({ value }: { value: UseCandidateDecisionOptions | null }) =>
+        useOptionalCandidateDecision(value),
+      { initialProps: { value: options } },
+    );
+    const trigger = document.createElement("button");
+    const unrelated = document.createElement("button");
+    document.body.append(trigger, unrelated);
+    view.result.current?.getTriggerProps().ref(trigger);
+
+    act(() => view.result.current?.openComparison());
+    act(() => view.result.current?.closeComparison());
+    await act(async () => Promise.resolve());
+    expect(document.activeElement).toBe(trigger);
+
+    unrelated.focus();
+    view.rerender({ value: null });
+    await act(async () => Promise.resolve());
+    expect(document.activeElement).toBe(unrelated);
+    trigger.remove();
+    unrelated.remove();
+  });
+
+  it("rejects a stale preview from the prior group and clears override/ref state on cleanup", () => {
+    const onMapOverrideChange = vi.fn();
+    const callbacks = { onMapOverrideChange, onConfirm: vi.fn() };
+    const view = renderHook<
+      ReturnType<typeof useOptionalCandidateDecision>,
+      { value: UseCandidateDecisionOptions | null }
+    >(
+      ({ value }: { value: UseCandidateDecisionOptions | null }) =>
+        useOptionalCandidateDecision(value),
+      {
+        initialProps: {
+          value: optionalOptions(group, callbacks),
+        },
+      },
+    );
+    act(() => view.result.current?.openComparison());
+    const staleSessionId = view.result.current?.sessionId ?? -1;
+
+    view.rerender({
+      value: optionalOptions(secondGroup, callbacks, {
+        committedOptionId: "lunch-a",
+        mapPreviewRequest: {
+          groupId: group.id,
+          sessionId: staleSessionId,
+          optionId: "dinner-b",
+          requestId: 19,
+        },
+      }),
+    });
+    expect(view.result.current?.draftOptionId).toBe("lunch-a");
+    expect(view.result.current?.sessionId).toBeNull();
+
+    view.unmount();
+    expect(onMapOverrideChange.mock.calls.at(-1)?.[0]).toBeNull();
   });
 });

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../../App";
 import { candidateMapOwnerId, decodeMapPlaceOwnerId, nodeMapOwnerId } from "@laugh-tale-island/core";
-import { tripProgressStorageKey } from "../../experience-shell/progress-storage";
+import { tripProgressStorageKey } from "../../controllers/progress-storage";
 import { FakeMapAdapter } from "../../providers/fake/FakeMapAdapter";
 import type { Trip } from "@laugh-tale-island/core";
 import { checklistCompletionKey, emptyTripProgress, taskCompletionKey, type TripProgressV1 } from "@laugh-tale-island/core";
@@ -210,7 +210,7 @@ class MemoryStorage implements Storage {
 function mountBaseStyles(): void {
   const style = document.createElement("style");
   style.dataset.task9TestStyle = "true";
-  style.textContent = readFileSync("src/ui/styles/base.css", "utf8");
+  style.textContent = readFileSync("src/presentation/styles/base.css", "utf8");
   document.head.append(style);
 }
 

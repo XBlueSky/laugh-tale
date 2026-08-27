@@ -6,10 +6,14 @@ import {
   LocateFixed,
   RotateCcw,
 } from "lucide-react";
-import { type ReactNode } from "react";
+import type { ReactNode } from "react";
 
-import type { SheetGeometry, SheetSnap } from "@laugh-tale-island/core";
-import { useItinerarySheet } from "@laugh-tale-island/react";
+import type { SheetSnap } from "@laugh-tale-island/core";
+
+import type {
+  ExperienceBindings,
+  ExperienceViewModel,
+} from "../../controllers/presentation-contract";
 
 export interface ItineraryRouteStatus {
   state: "loading" | "error";
@@ -17,9 +21,9 @@ export interface ItineraryRouteStatus {
   onRetry?: () => void;
 }
 
-export interface ItinerarySheetProps {
-  snap: SheetSnap;
-  geometry: SheetGeometry;
+export interface ItinerarySheetViewProps {
+  sheet: ExperienceViewModel["sheet"];
+  binding: ExperienceBindings["sheet"];
   dayTitle: string;
   itineraryCount: number;
   onSnapChange: (snap: SheetSnap) => void;
@@ -28,20 +32,19 @@ export interface ItinerarySheetProps {
   children: ReactNode;
 }
 
-export function ItinerarySheet({
-  snap,
-  geometry,
+export function ItinerarySheetView({
+  sheet,
+  binding,
   dayTitle,
   itineraryCount,
   onSnapChange,
   onReturnToNow,
   routeStatus,
   children,
-}: ItinerarySheetProps) {
-  const sheet = useItinerarySheet({ snap, geometry, onSnapChange });
-  const sheetProps = sheet.getSheetProps();
-  const expanded = snap === "expanded";
-  const collapsed = snap === "collapsed";
+}: ItinerarySheetViewProps) {
+  const sheetProps = binding.getSheetProps();
+  const expanded = sheet.snap === "expanded";
+  const collapsed = sheet.snap === "collapsed";
 
   return (
     <section
@@ -59,7 +62,7 @@ export function ItinerarySheet({
         className="itinerary-sheet__drag-handle"
         aria-label="Drag itinerary sheet"
         data-touch-target="44"
-        {...sheet.getHandleProps()}
+        {...binding.getHandleProps()}
       >
         <GripHorizontal aria-hidden="true" size={22} strokeWidth={1.8} />
       </button>
@@ -94,7 +97,7 @@ export function ItinerarySheet({
           aria-label={expanded ? "Collapse itinerary" : "Expand itinerary"}
           data-icon-control="true"
           data-touch-target="44"
-          onClick={() => sheet.setSnap(expanded ? "half" : "expanded")}
+          onClick={() => onSnapChange(expanded ? "half" : "expanded")}
         >
           {expanded ? (
             <ChevronDown aria-hidden="true" size={20} strokeWidth={1.8} />

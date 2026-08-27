@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { dirname, join, relative, resolve, sep } from "node:path";
 
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ComponentType } from "react";
@@ -75,6 +76,8 @@ function createPresentation(home: ComponentType<HomeViewProps>): TripPresentatio
     mapProfile: {
       id: "test-profile",
       basemap: { mode: "neutral", density: "low", contrast: "soft", poi: "minimal" },
+      candidateTitle: (sequenceNumber, index, option) =>
+        `${sequenceNumber}:${index}:${option.title}`,
       marker: (place, index) => ({
         title: place.label,
         className: `marker-${index}`,
@@ -110,17 +113,23 @@ function HomeControllerHarness({
   return <presentation.Home {...props} />;
 }
 
-function controllerSourceFiles(directory: string): string[] {
+function sourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) {
-      return controllerSourceFiles(path);
+      return sourceFiles(path);
     }
     return (entry.name.endsWith(".ts") || entry.name.endsWith(".tsx")) &&
       !entry.name.includes(".test.")
       ? [path]
       : [];
   });
+}
+
+function importSpecifiers(source: string): string[] {
+  return [...source.matchAll(/(?:\bfrom\s+|\bimport\s*)["']([^"']+)["']/g)].map(
+    (match) => match[1] ?? "",
+  );
 }
 
 describe("local presentation contract", () => {
@@ -223,8 +232,8 @@ describe("local presentation contract", () => {
   });
 
   it("keeps controller source free of visible presentation and provider imports", () => {
-    const controllerDirectory = dirname(new URL(import.meta.url).pathname);
-    const sourceFiles = controllerSourceFiles(controllerDirectory);
+    const controllerDirectory = dirname(fileURLToPath(import.meta.url));
+    const controllerFiles = sourceFiles(controllerDirectory);
     const forbidden = [
       /import\s+.*\.css["']/,
       /lucide/i,
@@ -234,10 +243,82 @@ describe("local presentation contract", () => {
       /Trip overview|Trip content required|Map configuration required|Map unavailable/,
     ];
 
-    for (const file of sourceFiles) {
+    for (const file of controllerFiles) {
       const source = readFileSync(file, "utf8");
       for (const pattern of forbidden) {
         expect(source, `${file} must not match ${pattern}`).not.toMatch(pattern);
+      }
+    }
+  });
+
+  it("keeps controllers and providers independent from local presentation modules", () => {
+    const controllerDirectory = dirname(fileURLToPath(import.meta.url));
+    const providerDirectory = resolve(controllerDirectory, "../providers");
+    const presentationDirectory = resolve(controllerDirectory, "../presentation");
+
+    for (const file of [
+      ...sourceFiles(controllerDirectory),
+      ...sourceFiles(providerDirectory),
+    ]) {
+      for (const specifier of importSpecifiers(readFileSync(file, "utf8"))) {
+        const target = resolve(dirname(file), specifier);
+        expect(
+          target === presentationDirectory ||
+            target.startsWith(`${presentationDirectory}${sep}`),
+          `${file} must not import presentation`,
+        ).toBe(false);
+      }
+    }
+  });
+
+  it("keeps package sources independent from starter implementation files", () => {
+    const controllerDirectory = dirname(fileURLToPath(import.meta.url));
+    const repositoryDirectory = resolve(controllerDirectory, "../../../../../..");
+    const packagesDirectory = join(repositoryDirectory, "packages");
+    const packageFiles = readdirSync(packagesDirectory, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .flatMap((entry) => sourceFiles(join(packagesDirectory, entry.name, "src")));
+
+    for (const file of packageFiles) {
+      expect(readFileSync(file, "utf8"), `${file} must not import the starter`).not.toMatch(
+        /plugins\/eternal-pose\/starter\/react|starter\/react\/src/,
+      );
+    }
+  });
+
+  it("contains every CSS and icon import within the presentation directory", () => {
+    const controllerDirectory = dirname(fileURLToPath(import.meta.url));
+    const sourceDirectory = resolve(controllerDirectory, "..");
+
+    for (const file of sourceFiles(sourceDirectory)) {
+      const hasVisualImport = importSpecifiers(readFileSync(file, "utf8")).some(
+        (specifier) => specifier.endsWith(".css") || specifier === "lucide-react",
+      );
+      if (hasVisualImport) {
+        expect(relative(sourceDirectory, file).startsWith(`presentation${sep}`)).toBe(true);
+      }
+    }
+  });
+
+  it("routes production presentation imports through the presentation index", () => {
+    const controllerDirectory = dirname(fileURLToPath(import.meta.url));
+    const sourceDirectory = resolve(controllerDirectory, "..");
+    const presentationDirectory = join(sourceDirectory, "presentation");
+
+    for (const file of sourceFiles(sourceDirectory)) {
+      if (file.startsWith(`${presentationDirectory}${sep}`)) continue;
+      for (const specifier of importSpecifiers(readFileSync(file, "utf8"))) {
+        const target = resolve(dirname(file), specifier);
+        if (
+          target !== presentationDirectory &&
+          !target.startsWith(`${presentationDirectory}${sep}`)
+        ) {
+          continue;
+        }
+        expect(
+          target,
+          `${file} must import the presentation index rather than a view module`,
+        ).toBe(presentationDirectory);
       }
     }
   });

@@ -37,12 +37,12 @@ let closeSpy: ReturnType<typeof vi.fn>;
 function mountBaseStyles(): void {
   const style = document.createElement("style");
   style.dataset.task9TestStyle = "true";
-  style.textContent = readFileSync("src/ui/styles/base.css", "utf8");
+  style.textContent = readFileSync("src/presentation/styles/base.css", "utf8");
   document.head.append(style);
 }
 
 function expectAsymmetricSafeDialogGeometry(selector: string): void {
-  const css = readFileSync("src/ui/styles/base.css", "utf8");
+  const css = readFileSync("src/presentation/styles/base.css", "utf8");
   const rule = css.match(
     /\.task-widget__dialog,\s*\.reservation-panel__dialog\s*\{([\s\S]*?)\n\}/,
   );

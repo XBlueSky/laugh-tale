@@ -39,12 +39,12 @@ let closeSpy: ReturnType<typeof vi.fn>;
 function mountBaseStyles(): void {
   const style = document.createElement("style");
   style.dataset.task9TestStyle = "true";
-  style.textContent = readFileSync("src/ui/styles/base.css", "utf8");
+  style.textContent = readFileSync("src/presentation/styles/base.css", "utf8");
   document.head.append(style);
 }
 
 function expectAsymmetricSafeDialogGeometry(selector: string): void {
-  const css = readFileSync("src/ui/styles/base.css", "utf8");
+  const css = readFileSync("src/presentation/styles/base.css", "utf8");
   const rule = css.match(
     /\.task-widget__dialog,\s*\.reservation-panel__dialog\s*\{([\s\S]*?)\n\}/,
   );
@@ -152,7 +152,7 @@ describe("ReservationPanel", () => {
     expect(bookingLink).toHaveAttribute("href", "https://example.test/reservations/observatory");
     expect(bookingLink).toHaveAttribute("data-touch-target", "44");
     expect(getComputedStyle(bookingLink).minHeight).toBe("44px");
-    const dialogRule = readFileSync("src/ui/styles/base.css", "utf8").match(
+    const dialogRule = readFileSync("src/presentation/styles/base.css", "utf8").match(
       /\.task-widget__dialog,[\s\S]*?\n}/,
     )?.[0];
     expect(dialogRule).toContain("env(safe-area-inset-top)");

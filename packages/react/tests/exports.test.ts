@@ -4,5 +4,7 @@ describe("package entry points", () => {
   it("exposes the hooks entry", async () => {
     const root = await import("@laugh-tale-island/react");
     expect(root).toBeDefined();
+    expect(typeof root.useCandidateDecision).toBe("function");
+    expect(typeof root.useOptionalCandidateDecision).toBe("function");
   });
 });

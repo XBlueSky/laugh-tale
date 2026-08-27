@@ -36,6 +36,13 @@ export interface CandidateDecisionController {
     registerOption: (optionId: string) => RefCallback<HTMLElement>;
 }
 /**
+ * Optional candidate comparison ownership. All hooks remain mounted while a
+ * selected node gains, changes, or loses a candidate group. Group changes
+ * start closed from the new committed option and invalidate prior sessions,
+ * preview requests, focus targets, and map overrides.
+ */
+export declare function useOptionalCandidateDecision(options: UseCandidateDecisionOptions | null): CandidateDecisionController | null;
+/**
  * Candidate comparison ownership: committed choice stays with the caller's
  * progress store, draft preview and the comparison session live here, and
  * map overrides always carry the live session id so stale map interactions

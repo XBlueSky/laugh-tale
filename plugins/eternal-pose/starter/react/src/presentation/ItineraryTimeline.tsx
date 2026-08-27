@@ -1,21 +1,35 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo } from "react";
 
-import type { RouteEdge, ShoppingStatus } from "@laugh-tale-island/core";
-import type { EffectiveDay, EffectiveNode, EffectiveTrip } from "@laugh-tale-island/core";
+import {
+  buildTimelineEntries,
+  type EffectiveDay,
+  type EffectiveNode,
+  type EffectiveTrip,
+  type NodeEntry,
+  type RouteEdge,
+  type ShoppingStatus,
+} from "@laugh-tale-island/core";
 import type { TripSelection } from "@laugh-tale-island/react";
-import type { NavigationAdapter } from "@laugh-tale-island/core/browser";
+
+import type {
+  ExperienceBindings,
+  ExperienceRouteViewModel,
+} from "../controllers/presentation-contract";
 import { rendererFor } from "./renderers/CustomEntry";
-import { RouteConnector, type RouteConnectorState } from "./timeline/RouteConnector";
+import {
+  RouteConnector,
+  type RouteConnectorState,
+} from "./timeline/RouteConnector";
 import { TimelineEntry, type TimelineNodeState } from "./timeline/TimelineEntry";
-import { buildTimelineEntries, type NodeEntry } from "@laugh-tale-island/core";
 
 export interface ItineraryTimelineProps {
   nodes: readonly EffectiveNode[];
-  routes: readonly RouteEdge[];
+  routes: readonly (RouteEdge | ExperienceRouteViewModel)[];
   selection: TripSelection;
   onNodeSelect: (nodeId: string) => void;
+  ownerBindings?: ExperienceBindings["owners"];
   routeStates?: Readonly<Record<string, RouteConnectorState>>;
-  navigationAdapter?: NavigationAdapter;
+  navigationHrefs?: Readonly<Record<string, string>>;
   onRouteSelect?: (routeId: string) => void;
   onRouteRetry?: (routeId: string) => void;
   dayDate?: string;
@@ -25,7 +39,16 @@ export interface ItineraryTimelineProps {
   currentNodeId?: string | null;
   selectedRouteId?: string | null;
   routeSelectionSource?: "list" | "map" | null;
-  routeSelectionRequestId?: number;
+}
+
+function isRouteViewModel(
+  route: RouteEdge | ExperienceRouteViewModel,
+): route is ExperienceRouteViewModel {
+  return "edge" in route;
+}
+
+function ownValue<T>(record: Readonly<Record<string, T>>, key: string): T | undefined {
+  return Object.hasOwn(record, key) ? record[key] : undefined;
 }
 
 function projection(
@@ -48,47 +71,14 @@ function projection(
   };
 }
 
-function buildNavigationHrefs(
-  entries: readonly ReturnType<typeof buildTimelineEntries>[number][],
-  adapter: NavigationAdapter | undefined,
-): Map<string, string> {
-  const hrefs = new Map<string, string>();
-  if (adapter === undefined) {
-    return hrefs;
-  }
-  for (const entry of entries) {
-    if (entry.kind !== "route") {
-      continue;
-    }
-    const { mode, navigation } = entry.route.edge;
-    if (navigation === undefined || mode === "flight") {
-      continue;
-    }
-    const origin = navigation.origin.trim();
-    const destination = navigation.destination.trim();
-    if (origin.length === 0 || destination.length === 0) {
-      continue;
-    }
-    try {
-      hrefs.set(entry.id, adapter.directions({
-        origin,
-        destination,
-        travelMode: mode,
-      }));
-    } catch {
-      // External navigation is optional; a faulty adapter cannot hide the itinerary.
-    }
-  }
-  return hrefs;
-}
-
 export function ItineraryTimeline({
   nodes,
   routes,
   selection,
   onNodeSelect,
+  ownerBindings,
   routeStates = {},
-  navigationAdapter,
+  navigationHrefs = {},
   onRouteSelect,
   onRouteRetry,
   dayDate,
@@ -98,25 +88,42 @@ export function ItineraryTimeline({
   currentNodeId = null,
   selectedRouteId = null,
   routeSelectionSource = null,
-  routeSelectionRequestId = 0,
 }: ItineraryTimelineProps) {
-  const nodeElementsRef = useRef(new Map<string, HTMLLIElement>());
-  const routeElementsRef = useRef(new Map<string, HTMLButtonElement>());
+  const routeViewModels = useMemo<readonly ExperienceRouteViewModel[]>(
+    () =>
+      routes.map((route) =>
+        isRouteViewModel(route)
+          ? route
+          : (() => {
+              const loadState = ownValue(routeStates, route.id);
+              const navigationHref = ownValue(navigationHrefs, route.id);
+              return {
+              edge: route,
+              ...(loadState === undefined ? {} : { loadState }),
+              selected: selectedRouteId === route.id,
+              selectionSource:
+                selectedRouteId === route.id ? routeSelectionSource : null,
+              ...(navigationHref === undefined ? {} : { navigationHref }),
+            };
+          })(),
+      ),
+    [navigationHrefs, routeSelectionSource, routeStates, routes, selectedRouteId],
+  );
+  const edges = useMemo(
+    () => routeViewModels.map(({ edge }) => edge),
+    [routeViewModels],
+  );
+  const routeModelsById = useMemo(
+    () => new Map(routeViewModels.map((route) => [route.edge.id, route])),
+    [routeViewModels],
+  );
   const timelineProjection = useMemo(
-    () => projection(nodes, routes, dayDate),
-    [dayDate, nodes, routes],
+    () => projection(nodes, edges, dayDate),
+    [dayDate, edges, nodes],
   );
   const entries = useMemo(
     () => buildTimelineEntries(timelineProjection.day, timelineProjection.trip),
     [timelineProjection],
-  );
-  const routeStatesById = useMemo(
-    () => new Map(Object.entries(routeStates)),
-    [routeStates],
-  );
-  const navigationHrefsById = useMemo(
-    () => buildNavigationHrefs(entries, navigationAdapter),
-    [entries, navigationAdapter],
   );
   const effectiveNodesById = useMemo(
     () => new Map(nodes.map((node) => [node.sourceNodeId, node])),
@@ -138,22 +145,6 @@ export function ItineraryTimeline({
     });
     return output;
   }, [nodes]);
-
-  useEffect(() => {
-    if (selection.nodeId === null) {
-      return;
-    }
-    nodeElementsRef.current
-      .get(selection.nodeId)
-      ?.scrollIntoView?.({ block: "nearest" });
-  }, [selection.nodeId]);
-
-  useEffect(() => {
-    if (selectedRouteId === null || routeSelectionSource !== "map") return;
-    const routeElement = routeElementsRef.current.get(selectedRouteId);
-    routeElement?.scrollIntoView?.({ block: "nearest" });
-    routeElement?.focus({ preventScroll: true });
-  }, [routeSelectionRequestId, routeSelectionSource, selectedRouteId]);
 
   const renderNode = (entry: NodeEntry) => {
     const effective = effectiveNodesById.get(entry.id);
@@ -186,20 +177,21 @@ export function ItineraryTimeline({
       {entries.map((entry) => {
         if (entry.kind === "route") {
           const destination = effectiveNodesById.get(entry.route.edge.toNodeId);
+          const routeModel = routeModelsById.get(entry.id);
           return (
-            <li key={`route:${entry.id}`} className="itinerary-timeline__entry itinerary-timeline__route">
+            <li
+              key={`route:${entry.id}`}
+              className="itinerary-timeline__entry itinerary-timeline__route"
+            >
               <RouteConnector
                 route={entry.route}
-                state={routeStatesById.get(entry.id)}
-                selected={selectedRouteId === entry.id}
-                controlRef={(element) => {
-                  if (element === null) routeElementsRef.current.delete(entry.id);
-                  else routeElementsRef.current.set(entry.id, element);
-                }}
+                state={routeModel?.loadState}
+                selected={routeModel?.selected ?? false}
+                controlRef={ownerBindings?.routeRef(entry.id)}
                 destinationTiming={destination?.node.timing}
                 onRouteSelect={onRouteSelect}
                 onRetry={onRouteRetry}
-                navigationHref={navigationHrefsById.get(entry.id)}
+                navigationHref={routeModel?.navigationHref}
                 reducedMotion={reducedMotion}
               />
             </li>
@@ -219,13 +211,7 @@ export function ItineraryTimeline({
                     <li
                       key={`node:${child.id}`}
                       className="itinerary-timeline__entry"
-                      ref={(element) => {
-                        if (element === null) {
-                          nodeElementsRef.current.delete(child.id);
-                        } else {
-                          nodeElementsRef.current.set(child.id, element);
-                        }
-                      }}
+                      ref={ownerBindings?.nodeRef(child.id)}
                     >
                       {renderNode(child)}
                     </li>
@@ -239,13 +225,7 @@ export function ItineraryTimeline({
         return (
           <li
             key={`node:${entry.id}`}
-            ref={(element) => {
-              if (element === null) {
-                nodeElementsRef.current.delete(entry.id);
-              } else {
-                nodeElementsRef.current.set(entry.id, element);
-              }
-            }}
+            ref={ownerBindings?.nodeRef(entry.id)}
             className="itinerary-timeline__entry"
           >
             {renderNode(entry)}

@@ -1,22 +1,25 @@
-import { useId, useMemo, useState } from "react";
+import { useId, useState } from "react";
+
+import type { CandidateOption } from "@laugh-tale-island/core";
 
 import type {
-  CandidateGroup,
-  CandidateMapOverride,
-  CandidateOption,
-  CandidatePreviewRequest,
-} from "@laugh-tale-island/core";
-import { useCandidateDecision } from "@laugh-tale-island/react";
+  CandidateViewModel,
+  ExperienceActions,
+  ExperienceBindings,
+  MapVisualProfile,
+} from "../../controllers/presentation-contract";
 
 export interface CandidateDecisionProps {
-  group: CandidateGroup;
-  label: string;
-  sequenceNumber: number;
-  committedOptionId?: string;
-  mapPreviewRequest?: CandidatePreviewRequest;
-  onMapOverrideChange: (override: CandidateMapOverride | null) => void;
-  onCommit: (groupId: string, optionId: string) => void;
-  onLocateOption: (optionId: string) => void;
+  model: CandidateViewModel;
+  binding: NonNullable<ExperienceBindings["candidate"]>;
+  actions: Pick<
+    ExperienceActions,
+    | "openCandidate"
+    | "closeCandidate"
+    | "previewCandidate"
+    | "confirmCandidate"
+  >;
+  candidateTitle?: MapVisualProfile["candidateTitle"];
 }
 
 function optionLetter(index: number): string {
@@ -52,64 +55,43 @@ function hasCoordinates(option: CandidateOption): boolean {
 }
 
 export function CandidateDecision({
-  group,
-  label,
-  sequenceNumber,
-  committedOptionId,
-  mapPreviewRequest,
-  onMapOverrideChange,
-  onCommit,
-  onLocateOption,
+  model,
+  binding,
+  actions,
+  candidateTitle = candidateOptionLabel,
 }: CandidateDecisionProps) {
   const radioName = `candidate-decision-${useId().replaceAll(":", "")}`;
   const [announcement, setAnnouncement] = useState("");
-  const committedOption = group.options.find(({ id }) => id === committedOptionId);
-  const numberedGroup = useMemo<CandidateGroup>(
-    () => ({
-      ...group,
-      options: group.options.map((option, index) => ({
-        ...option,
-        title: candidateOptionLabel(sequenceNumber, index, option),
-      })),
-    }),
-    [group, sequenceNumber],
-  );
-  const decision = useCandidateDecision({
+  const {
     group,
-    overrideGroup: numberedGroup,
-    ...(committedOptionId === undefined ? {} : { committedOptionId }),
-    ...(mapPreviewRequest === undefined ? {} : { mapPreviewRequest }),
-    onMapOverrideChange,
-    onConfirm: (optionId) => {
-      const option = group.options.find(({ id }) => id === optionId);
-      onCommit(group.id, optionId);
-      setAnnouncement(`已選擇 ${option?.title ?? ""}`);
-    },
-  });
-  const expanded = decision.open;
-  const draftOptionId = decision.draftOptionId;
-
+    sourceNode,
+    sequenceNumber,
+    committedOptionId,
+    open,
+    draftOptionId,
+  } = model;
+  const committedOption = group.options.find(({ id }) => id === committedOptionId);
   const triggerLabel =
     group.mode === "browse"
-      ? `${expanded ? "收合" : "查看"} ${label} 候選`
-      : expanded
-        ? `收合 ${label}`
+      ? `${open ? "收合" : "查看"} ${sourceNode.title} 候選`
+      : open
+        ? `收合 ${sourceNode.title}`
         : committedOption === undefined
-          ? `比較 ${label}`
-          : `重新比較 ${label}`;
+          ? `比較 ${sourceNode.title}`
+          : `重新比較 ${sourceNode.title}`;
 
   return (
     <section
       className="candidate-decision"
       data-candidate-mode={group.mode}
-      data-expanded={expanded ? "true" : "false"}
+      data-expanded={open ? "true" : "false"}
     >
       <div className="candidate-decision__summary">
         <div>
-          <strong>{label}</strong>
+          <strong>{sourceNode.title}</strong>
           {group.mode === "single" && committedOption !== undefined ? (
             <p className="candidate-decision__committed">
-              {expanded ? "目前已選" : "已選"} · {committedOption.title}
+              {open ? "目前已選" : "已選"} · {committedOption.title}
             </p>
           ) : null}
         </div>
@@ -118,31 +100,26 @@ export function CandidateDecision({
           className="candidate-decision__trigger"
           aria-label={triggerLabel}
           data-touch-target="44"
-          {...decision.getTriggerProps()}
+          {...binding.getTriggerProps()}
         >
           {triggerLabel}
         </button>
       </div>
 
       {group.mode === "single" ? (
-        <fieldset className="candidate-decision__options" hidden={!expanded}>
-          <legend>{label}</legend>
+        <fieldset className="candidate-decision__options" hidden={!open}>
+          <legend>{sourceNode.title}</legend>
           {group.options.map((option, index) => {
-            const optionLabel = candidateOptionLabel(sequenceNumber, index, option);
+            const optionLabel = candidateTitle(sequenceNumber, index, option);
             return (
               <label key={`candidate:${option.id}`} className="candidate-decision__option">
                 <input
-                  ref={decision.registerOption(option.id)}
+                  ref={binding.registerOption(option.id)}
                   type="radio"
                   name={radioName}
                   value={option.id}
                   checked={draftOptionId === option.id}
-                  onChange={() => {
-                    decision.previewOption(option.id);
-                    if (hasCoordinates(option)) {
-                      onLocateOption(option.id);
-                    }
-                  }}
+                  onChange={() => actions.previewCandidate(option.id)}
                 />
                 <span>{optionLabel}</span>
                 {hasCoordinates(option) ? null : (
@@ -156,7 +133,7 @@ export function CandidateDecision({
               type="button"
               data-touch-target="44"
               aria-label="取消候選比較"
-              onClick={decision.closeComparison}
+              onClick={actions.closeCandidate}
             >
               取消
             </button>
@@ -169,7 +146,11 @@ export function CandidateDecision({
                   ? "確認候選選擇"
                   : `確認選擇 ${group.options.find(({ id }) => id === draftOptionId)?.title ?? ""}`
               }
-              onClick={decision.confirmDraft}
+              onClick={() => {
+                const option = group.options.find(({ id }) => id === draftOptionId);
+                actions.confirmCandidate();
+                setAnnouncement(`已選擇 ${option?.title ?? ""}`);
+              }}
             >
               確認
             </button>
@@ -180,20 +161,20 @@ export function CandidateDecision({
       {group.mode === "browse" ? (
         <ul
           className="candidate-decision__browse-list"
-          aria-label={label}
-          hidden={!expanded}
+          aria-label={sourceNode.title}
+          hidden={!open}
         >
           {group.options.map((option, index) => {
-            const optionLabel = candidateOptionLabel(sequenceNumber, index, option);
+            const optionLabel = candidateTitle(sequenceNumber, index, option);
             return (
               <li key={`browse-candidate:${option.id}`}>
                 {hasCoordinates(option) ? (
                   <button
-                    ref={decision.registerOption(option.id)}
+                    ref={binding.registerOption(option.id)}
                     type="button"
                     data-touch-target="44"
                     aria-label={`定位 ${optionLabel}`}
-                    onClick={() => onLocateOption(option.id)}
+                    onClick={() => actions.previewCandidate(option.id)}
                   >
                     {optionLabel}
                   </button>

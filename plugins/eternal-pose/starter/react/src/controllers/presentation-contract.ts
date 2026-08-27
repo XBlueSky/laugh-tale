@@ -7,6 +7,7 @@ import type {
 
 import type {
   CandidateGroup,
+  CandidateOption,
   EffectiveDay,
   MapPlacePresentation,
   MapPresentation,
@@ -26,6 +27,7 @@ import type {
   ProgressPersistenceStatus,
   RouteLoadState,
   TripSelection,
+  UserLocationStatus,
 } from "@laugh-tale-island/react";
 
 export interface TripPresentation {
@@ -57,8 +59,8 @@ export interface HomeViewModel {
 }
 
 export interface HomeActions {
-  setCompleted(id: string, completed: boolean): void;
-  enterDay(dayId: string): void;
+  setCompleted: (id: string, completed: boolean) => void;
+  enterDay: (dayId: string) => void;
 }
 
 export interface PresentationGeometry {
@@ -96,9 +98,14 @@ export interface MapVisualProfile {
     contrast: "soft" | "standard" | "high";
     poi: "minimal" | "standard";
   };
-  marker(place: MapPlacePresentation, index: number): MapMarkerVisual;
-  userLocation(): MapMarkerVisual;
-  route(route: MapRoutePresentation): MapRouteVisual;
+  candidateTitle: (
+    sequenceNumber: number,
+    index: number,
+    option: CandidateOption,
+  ) => string;
+  marker: (place: MapPlacePresentation, index: number) => MapMarkerVisual;
+  userLocation: () => MapMarkerVisual;
+  route: (route: MapRoutePresentation) => MapRouteVisual;
 }
 
 export interface SetupRequiredViewProps {
@@ -111,7 +118,7 @@ export interface LoadingViewProps {
 
 export interface FatalErrorViewProps {
   model: { kind: "render" };
-  actions: { retry(): void };
+  actions: { retry: () => void };
 }
 
 export interface ExperienceViewProps {
@@ -133,6 +140,8 @@ export interface ExperienceViewModel {
   map: { presentation: MapPresentation; status: "mounting" | "ready" | "error" };
   viewport: { width: number; height: number; safeTop: number; safeBottom: number };
   motion: "full" | "reduced";
+  header: { expanded: boolean };
+  location: { status: UserLocationStatus };
   sheet: { snap: SheetSnap; geometry: SheetGeometry };
   candidate: CandidateViewModel | null;
   shopping: ShoppingViewModel | null;
@@ -165,36 +174,37 @@ export interface ShoppingViewModel {
 export interface ExperienceBindings {
   map: { ref: RefCallback<HTMLDivElement> };
   sheet: {
-    getSheetProps(): HTMLAttributes<HTMLElement>;
-    getHandleProps(): ButtonHTMLAttributes<HTMLButtonElement>;
+    getSheetProps: () => HTMLAttributes<HTMLElement>;
+    getHandleProps: () => ButtonHTMLAttributes<HTMLButtonElement>;
   };
   owners: {
-    nodeRef(nodeId: string): RefCallback<HTMLElement>;
-    routeRef(routeId: string): RefCallback<HTMLElement>;
+    nodeRef: (nodeId: string) => RefCallback<HTMLElement>;
+    routeRef: (routeId: string) => RefCallback<HTMLElement>;
   };
   candidate: {
-    getTriggerProps(): CandidateTriggerProps;
-    registerOption(optionId: string): RefCallback<HTMLElement>;
+    getTriggerProps: () => CandidateTriggerProps;
+    registerOption: (optionId: string) => RefCallback<HTMLElement>;
   } | null;
 }
 
 export interface ExperienceActions {
-  selectDay(dayId: string): void;
-  selectNode(nodeId: string): void;
-  selectRoute(routeId: string, source: "list" | "map"): void;
-  returnToNow(): void;
-  returnToLodging(): void;
-  returnHome(): void;
-  retryRoute(routeId: string): void;
-  retryMap(): void;
-  openCandidate(): void;
-  closeCandidate(): void;
-  previewCandidate(optionId: string): void;
-  confirmCandidate(): void;
-  setCompleted(id: string, completed: boolean): void;
-  setShoppingStatus(itemId: string, status: ShoppingStatus): void;
-  startLocation(): void;
-  recenterLocation(): void;
-  stopLocation(): void;
-  setSheetSnap(snap: SheetSnap): void;
+  selectDay: (dayId: string) => void;
+  selectNode: (nodeId: string) => void;
+  selectRoute: (routeId: string, source: "list" | "map") => void;
+  returnToNow: () => void;
+  returnToLodging: () => void;
+  returnHome: () => void;
+  retryRoute: (routeId: string) => void;
+  retryMap: () => void;
+  openCandidate: () => void;
+  closeCandidate: () => void;
+  previewCandidate: (optionId: string) => void;
+  confirmCandidate: () => void;
+  setCompleted: (id: string, completed: boolean) => void;
+  setShoppingStatus: (itemId: string, status: ShoppingStatus) => void;
+  startLocation: () => void;
+  recenterLocation: () => void;
+  stopLocation: () => void;
+  setHeaderExpanded: (expanded: boolean) => void;
+  setSheetSnap: (snap: SheetSnap) => void;
 }

@@ -13,7 +13,7 @@ import {
 function mountBaseStyles(): void {
   const style = document.createElement("style");
   style.dataset.task9TestStyle = "true";
-  style.textContent = readFileSync("src/ui/styles/base.css", "utf8");
+  style.textContent = readFileSync("src/presentation/styles/base.css", "utf8");
   document.head.append(style);
 }
 

@@ -368,10 +368,12 @@ describe("ItineraryTimeline semantic integration", () => {
       <ItineraryTimeline
         nodes={nodes}
         routes={routes}
-        navigationAdapter={{
-          directions: ({ travelMode }) =>
-            `https://directions.example.test/?mode=${travelMode}`,
-        }}
+        navigationHrefs={Object.fromEntries(
+          routes.map(({ id }) => [
+            id,
+            "https://directions.example.test/?mode=transit",
+          ]),
+        )}
         selection={{ nodeId: null, source: "automatic" }}
         onNodeSelect={() => undefined}
       />,
@@ -408,7 +410,7 @@ describe("ItineraryTimeline semantic integration", () => {
           certainty: "confirmed",
           navigation: { origin: "Origin", destination: "Destination" },
         }]}
-        navigationAdapter={{ directions: () => "javascript:alert(1)" }}
+        navigationHrefs={{ "unsafe-route": "javascript:alert(1)" }}
         selection={{ nodeId: null, source: "automatic" }}
         onNodeSelect={() => undefined}
       />,
@@ -421,7 +423,6 @@ describe("ItineraryTimeline semantic integration", () => {
     { endpoint: "empty origin", origin: "", destination: "Destination" },
     { endpoint: "whitespace destination", origin: "Origin", destination: " \t " },
   ])("does not call the navigation adapter for $endpoint", ({ origin, destination }) => {
-    const directions = vi.fn(() => "https://directions.example.test/");
     const nodes: EffectiveNode[] = [
       { sourceNodeId: "origin", completed: false, node: sightseeing({ id: "origin", title: "Origin" }) },
       { sourceNodeId: "destination", completed: false, node: sightseeing({ id: "destination", title: "Destination" }) },
@@ -439,13 +440,11 @@ describe("ItineraryTimeline semantic integration", () => {
           certainty: "confirmed",
           navigation: { origin, destination },
         }]}
-        navigationAdapter={{ directions }}
         selection={{ nodeId: null, source: "automatic" }}
         onNodeSelect={() => undefined}
       />,
     );
 
-    expect(directions).not.toHaveBeenCalled();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
@@ -616,8 +615,7 @@ describe("ItineraryTimeline semantic integration", () => {
     const selectedRoute = screen.getByRole("button", { name: "walking · 4 min" });
     expect(selectedRoute).toHaveAttribute("aria-pressed", "true");
     expect(selectedRoute).toHaveAttribute("data-selected", "true");
-    expect(selectedRoute).toHaveFocus();
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+    expect(selectedRoute).not.toHaveFocus();
   });
 
   it("does not fabricate an absolute date when the timeline was not given one", () => {

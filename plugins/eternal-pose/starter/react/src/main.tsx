@@ -1,8 +1,9 @@
 import { StrictMode, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 
-import { App } from "./App";
+import { App } from "./app/App";
 import type { RouteAdapter } from "@laugh-tale-island/core/browser";
+import { GoogleNavigationAdapter } from "./providers/google/google-maps-url";
 import { trip } from "./trip-content/trip";
 
 const rootElement = document.getElementById("root");
@@ -12,6 +13,7 @@ if (rootElement === null) {
 }
 
 const root = createRoot(rootElement);
+const navigationAdapter = new GoogleNavigationAdapter();
 
 function render(element: ReactElement): void {
   root.render(<StrictMode>{element}</StrictMode>);
@@ -39,6 +41,7 @@ async function start(): Promise<void> {
         tripOverride={fixture.e2eTrip}
         adapterFactory={fixture.createE2EMapAdapter}
         routeAdapterFactory={fixture.createE2ERouteAdapter}
+        navigationAdapter={navigationAdapter}
         clock={fixture.e2eClock}
       />,
     );
@@ -93,6 +96,7 @@ async function start(): Promise<void> {
     <App
       tripOverride={trip}
       adapterFactory={() => configured.adapter}
+      navigationAdapter={navigationAdapter}
       {...(routeAdapterFactory === undefined ? {} : { routeAdapterFactory })}
     />,
   );

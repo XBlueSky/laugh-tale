@@ -416,7 +416,8 @@ async function copyTreeIntoOwnedDirectory(sourceRoot, ownership, context, operat
       await recordCreatedEntry(ownership, destinationPath, "directory", operations);
       await copyTreeIntoOwnedDirectory(sourceRoot, ownership, context, operations, relativePath, options);
     } else if (sourceStats.isFile()) {
-      if (skipStarterRecipe && relativePath === join("src", "ui", "styles", "recipe.css") && context.phase === "stage-copy") continue;
+      // TRANSITIONAL_V1: delete when the public catalog switches to v2 composition.
+      if (skipStarterRecipe && relativePath === join("src", "presentation", "styles", "recipe.css") && context.phase === "stage-copy") continue;
       await copyFileIntoOwnedDirectory(sourcePath, sourceStats, destinationPath, ownership, context, operations);
     } else {
       throw new Error(`source tree entry must be a regular file or directory: ${relativePath}`);
@@ -632,7 +633,8 @@ export async function createTripProject({ pluginRoot, targetDir, recipe, starter
         );
       }
     } else {
-      const recipeTarget = join(stageOwnership.path, "src/ui/styles/recipe.css");
+      // TRANSITIONAL_V1: delete when the public catalog switches to v2 composition.
+      const recipeTarget = join(stageOwnership.path, "src/presentation/styles/recipe.css");
       const recipeDirectory = dirname(recipeTarget);
       await ensureOwnedDirectoryPath(stageOwnership, relative(stageOwnership.path, recipeDirectory), stageContext, operations);
       await copyFileIntoOwnedDirectory(

@@ -158,7 +158,7 @@ describe("real starter generation", () => {
 
     await createTripProject({ pluginRoot, targetDir, recipe });
 
-    expect(readFileSync(join(targetDir, "src/ui/styles/recipe.css"), "utf8")).toBe(
+    expect(readFileSync(join(targetDir, "src/presentation/styles/recipe.css"), "utf8")).toBe(
       readFileSync(join(pluginRoot, "recipes", recipe, "recipe.css"), "utf8"),
     );
     const metadata = JSON.parse(readFileSync(join(targetDir, "eternal-pose.json"), "utf8")) as {

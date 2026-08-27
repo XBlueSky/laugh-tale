@@ -28,6 +28,7 @@ export {
 } from "./use-itinerary-sheet.js";
 export {
   useCandidateDecision,
+  useOptionalCandidateDecision,
   type CandidateDecisionController,
   type CandidateTriggerProps,
   type UseCandidateDecisionOptions,
