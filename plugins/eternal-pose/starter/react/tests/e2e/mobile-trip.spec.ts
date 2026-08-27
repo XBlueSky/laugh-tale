@@ -211,11 +211,13 @@ async function expectLastFieldAtlasDayReachable(page: Page): Promise<void> {
   const experience = page.getByTestId("trip-experience");
   if ((await experience.getAttribute("data-map-chrome-layout")) !== "bounded") return;
 
+  const rail = page.locator(".atlas-day-index__rail");
+  const initialScrollLeft = await rail.evaluate((element) => element.scrollLeft);
   const lastDay = page.locator(".atlas-day-index__rail button:visible").last();
   await lastDay.scrollIntoViewIfNeeded();
   await expect
     .poll(() =>
-      page.evaluate(() => {
+      page.evaluate((startingScrollLeft) => {
         const rail = document.querySelector<HTMLElement>(".atlas-day-index__rail")!;
         const buttons = Array.from(rail.querySelectorAll<HTMLElement>("button")).filter(
           (button) => button.getClientRects().length > 0,
@@ -225,11 +227,14 @@ async function expectLastFieldAtlasDayReachable(page: Page): Promise<void> {
         const railRect = rail.getBoundingClientRect();
         const lastRect = last.getBoundingClientRect();
         return (
+          rail.scrollLeft > startingScrollLeft &&
           lastRect.left >= railRect.left - 1 &&
           lastRect.right <= railRect.right + 1 &&
+          lastRect.width + 0.5 >= 44 &&
+          lastRect.height + 0.5 >= 44 &&
           document.documentElement.scrollWidth <= window.innerWidth
         );
-      }),
+      }, initialScrollLeft),
     )
     .toBe(true);
 }

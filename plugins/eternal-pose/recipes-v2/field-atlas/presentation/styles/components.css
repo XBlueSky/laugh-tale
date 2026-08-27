@@ -917,6 +917,14 @@ gmp-advanced-marker:focus-visible {
 }
 
 @media (max-width: 767px) {
+  .atlas-day-index__rail {
+    scrollbar-width: none;
+  }
+
+  .atlas-day-index__rail::-webkit-scrollbar {
+    display: none;
+  }
+
   .atlas-home__identity {
     border-right: 0;
     border-bottom: var(--atlas-rule-width) solid var(--atlas-rule);

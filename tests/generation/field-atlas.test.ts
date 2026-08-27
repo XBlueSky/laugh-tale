@@ -559,6 +559,9 @@ describe("Field Atlas recipe contract", () => {
     expect(cssSource).toMatch(/\.atlas-day-index__primary strong\s*\{[^}]*white-space:\s*normal/is);
     expect(cssSource).toMatch(/\.atlas-detail-surface__heading strong\s*\{[^}]*white-space:\s*normal/is);
     expect(componentsSource).not.toMatch(/@media\s*\(max-width:\s*30rem\)/i);
+    expect(componentsSource).toMatch(/\.atlas-day-index__rail\s*\{[^}]*overflow-x:\s*auto/is);
+    expect(componentsSource).toMatch(/@media\s*\(max-width:\s*767px\)[^{]*\{[\s\S]*?\.atlas-day-index__rail\s*\{[^}]*scrollbar-width:\s*none/is);
+    expect(componentsSource).toMatch(/@media\s*\(max-width:\s*767px\)[^{]*\{[\s\S]*?\.atlas-day-index__rail::-webkit-scrollbar\s*\{[^}]*display:\s*none/is);
     expect(componentsSource).toMatch(/@media\s*\(min-width:\s*768px\)[^{]*\{[\s\S]*\.atlas-day-index__rail\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/i);
     expect(componentsSource).toMatch(/@container\s+field-atlas\s*\(max-width:\s*15rem\)[^{]*\{[\s\S]*\.atlas-detail-surface__heading[\s\S]*grid-column:\s*1\s*\/\s*-1/i);
     expect(cssSource).toMatch(/container-type:\s*inline-size/i);
@@ -1136,6 +1139,11 @@ describe("Field Atlas recipe contract", () => {
       "144px",
       "160px",
       "Traditional Chinese authored content",
+      "classic-scrollbar pre-fix",
+      "155/144",
+      "156/144",
+      "native scrollbar is visually suppressed",
+      "keyboard, touch, and wheel",
     ]) {
       expect(review).toContain(phrase);
     }

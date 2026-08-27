@@ -49,6 +49,10 @@ The focused presentation fixture also renders Traditional Chinese authored conte
 
 These are automated browser and contract results. The captured controller matrix above predates the four-day fixture; the controller owns the subsequent four-day in-app-browser visual confirmation.
 
+The controller's classic-scrollbar pre-fix recheck of commit `896b326` found a platform-specific containment defect that overlay-scrollbar Chromium did not reproduce. At 320, the `144x61` buttons fit above the `156px` header bottom, but the native scrollbar expanded the `300/576` client/scroll-width rail to `76px` high and a `165px` bottom; the header measured `155/144` scroll/client height. At 390, the `160x61` buttons also fit, but the `370/640` rail reached a `165.5px` bottom and the header measured `156/144`. Label readability and document horizontal overflow remained correct, and 430 plus desktop were contained.
+
+The normal-mobile cross-engine rule now keeps `overflow-x:auto` and scroll snapping while the native scrollbar is visually suppressed. The rail remains keyboard, touch, and wheel scrollable; focus-driven scrolling still moves `scrollLeft` and brings the last `44px`-minimum day target fully into view. The partially visible next day remains the visual affordance. Desktop retains its vertical rail, and the `<=15rem` document-flow override remains unchanged. The controller owns the follow-up classic-scrollbar matrix; the existing captures are unchanged.
+
 ## Grayscale evidence — completed
 
 [Grayscale capture](assets/field-atlas-grayscale.png) applies `grayscale(1)` at the root. The atlas grid composition and monospaced index layer remain legible. The square/double selected marker, route casing, and two dashed route paths remain identifiable without hue, and horizontal overflow remains zero.
