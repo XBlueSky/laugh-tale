@@ -1,20 +1,33 @@
-/* Laugh Tale — nautical chart-journal aesthetic.
-   Single committed light look: warm paper ground, deep-sea ink, brass accents.
-   All text pairs measure ≥ 4.5:1 (AA); brass is decoration and large text only. */
+/* Laugh Tale — vintage engraved nautical poster, after the brand art:
+   aged parchment sheet on a dark chart table, sepia ink, antique gold,
+   double-rule border, Rye display lettering. Single committed look.
+   All body-text pairs measure ≥ 4.5:1 (AA); gold is labels and decoration. */
+
+/* Rye (OFL) self-hosted from Google Fonts — see /fonts/rye-latin.woff2. */
+@font-face {
+  font-family: 'Rye';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/rye-latin.woff2') format('woff2');
+}
 
 :root {
-  --paper: oklch(96% 0.015 85);
-  --paper-deep: oklch(92.5% 0.022 80);
-  --ink: oklch(27% 0.025 60);
-  --ink-soft: oklch(41% 0.022 60);
-  --sea: oklch(42% 0.085 225);
-  --brass: oklch(52% 0.115 65);
-  --line: oklch(82% 0.025 75);
-  --panel: oklch(25% 0.03 240);
-  --panel-edge: oklch(35% 0.04 235);
-  --foam: oklch(93% 0.02 220);
-  --foam-dim: oklch(78% 0.03 225);
+  --table: oklch(20% 0.012 50);
+  --paper: oklch(92% 0.032 85);
+  --paper-deep: oklch(88% 0.04 82);
+  --ink: oklch(24% 0.028 55);
+  --ink-soft: oklch(40% 0.03 58);
+  --umber: oklch(40% 0.065 55);
+  --brass: oklch(48% 0.095 70);
+  --line: oklch(76% 0.04 78);
+  --rule: oklch(42% 0.05 62 / 0.6);
+  --panel: oklch(23% 0.02 50);
+  --panel-edge: oklch(34% 0.03 55);
+  --foam: oklch(90% 0.03 85);
+  --foam-dim: oklch(72% 0.04 80);
 
+  --display: 'Rye', 'Iowan Old Style', Georgia, serif;
   --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, 'Times New Roman', serif;
   --sans: 'Avenir Next', Avenir, Seravek, 'Gill Sans', 'Helvetica Neue', system-ui, sans-serif;
   --mono: ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
@@ -25,22 +38,47 @@
 
 * { box-sizing: border-box; margin: 0; }
 
-html { scroll-behavior: smooth; background: var(--paper); }
+html { scroll-behavior: smooth; background: var(--table); }
 
 body {
-  background: var(--paper);
+  background: var(--table);
   color: var(--ink);
   font-family: var(--serif);
   font-size: 1.0625rem;
   line-height: 1.7;
   -webkit-font-smoothing: antialiased;
+  padding: clamp(0.5rem, 2.5vw, 2.5rem);
 }
 
-a { color: var(--sea); text-decoration-thickness: 1px; text-underline-offset: 3px; }
-a:hover { color: var(--ink); }
-:focus-visible { outline: 2px solid var(--sea); outline-offset: 3px; }
+/* ---------- the parchment sheet ---------- */
 
-::selection { background: color-mix(in oklch, var(--sea) 22%, var(--paper)); }
+.sheet {
+  position: relative;
+  max-width: 76rem;
+  margin-inline: auto;
+  border: 2.5px solid var(--rule);
+  /* engraving-paper texture: grain noise, edge vignette, two faint stains */
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='280' height='280'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='0.05'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='280' height='280' filter='url(%23n)'/%3E%3C/svg%3E"),
+    radial-gradient(120% 100% at 50% 0%, transparent 55%, oklch(50% 0.06 65 / 0.12) 100%),
+    radial-gradient(42% 30% at 88% 12%, oklch(58% 0.07 75 / 0.09), transparent 70%),
+    radial-gradient(36% 26% at 8% 85%, oklch(58% 0.07 75 / 0.08), transparent 70%),
+    var(--paper);
+}
+
+.sheet::after {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border: 1px solid var(--rule);
+  pointer-events: none;
+}
+
+a { color: var(--umber); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+a:hover { color: var(--ink); }
+:focus-visible { outline: 2px solid var(--umber); outline-offset: 3px; }
+
+::selection { background: color-mix(in oklch, var(--brass) 28%, var(--paper)); }
 
 code, pre { font-family: var(--mono); }
 
@@ -57,14 +95,13 @@ code, pre { font-family: var(--mono); }
   align-items: baseline;
   justify-content: space-between;
   gap: 1rem;
-  padding-block: clamp(1.25rem, 3vw, 2rem) 0;
+  padding-block: clamp(1.5rem, 3vw, 2.25rem) 0;
 }
 
 .masthead .wordmark {
-  font-family: var(--sans);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  letter-spacing: 0.18em;
+  font-family: var(--display);
+  font-size: 0.9375rem;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink);
   text-decoration: none;
@@ -78,14 +115,20 @@ code, pre { font-family: var(--mono); }
   letter-spacing: 0.04em;
 }
 
-/* ---------- hero ---------- */
+/* ---------- hero: the brand lockup, after the banner art ---------- */
 
 .hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: clamp(1.5rem, 5vw, 4rem);
-  padding-block: clamp(3.5rem, 9vw, 7.5rem) clamp(3rem, 7vw, 5.5rem);
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(1.5rem, 5vw, 4.5rem);
+  padding-block: clamp(3rem, 8vw, 6.5rem) clamp(3rem, 7vw, 5.5rem);
+}
+
+.hero-logo {
+  width: clamp(11rem, 24vw, 19rem);
+  height: auto;
+  transform: rotate(-3deg);
 }
 
 .hero .kicker {
@@ -95,20 +138,40 @@ code, pre { font-family: var(--mono); }
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--brass);
-  margin-bottom: 1.25rem;
+  margin-bottom: 1rem;
 }
 
 .hero h1 {
-  font-size: clamp(3rem, 9vw, 5.5rem);
+  font-family: var(--display);
+  font-size: clamp(2.75rem, 8vw, 5.25rem);
   font-weight: 400;
   line-height: 1.02;
-  letter-spacing: -0.015em;
+  letter-spacing: 0.015em;
+  text-transform: uppercase;
   text-wrap: balance;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: 24rem;
+  margin-block: 1.5rem 1.75rem;
+  color: var(--brass);
+}
+
+.divider .bar { flex: 1; border-top: 1.5px solid currentcolor; opacity: 0.7; }
+
+.divider .gem {
+  width: 7px;
+  height: 7px;
+  background: currentcolor;
+  transform: rotate(45deg);
+  flex-shrink: 0;
 }
 
 .hero .lede {
   max-width: var(--measure);
-  margin-top: 1.5rem;
   font-size: clamp(1.125rem, 2vw, 1.3125rem);
   line-height: 1.6;
   color: var(--ink-soft);
@@ -117,20 +180,27 @@ code, pre { font-family: var(--mono); }
 
 .hero .lede strong { color: var(--ink); font-weight: 600; }
 
+.eternal {
+  margin-top: 1.25rem;
+  font-style: italic;
+  font-size: 1.0625rem;
+  color: var(--umber);
+}
+
+.eternal::before, .eternal::after { content: ' — '; color: var(--brass); }
+
 .hero-links {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem 1.5rem;
-  margin-top: 2rem;
+  margin-top: 1.75rem;
   font-family: var(--sans);
   font-size: 0.875rem;
 }
 
-.compass { color: var(--brass); flex-shrink: 0; }
-
 @media (max-width: 44rem) {
   .hero { grid-template-columns: 1fr; }
-  .compass { display: none; }
+  .hero-logo { width: clamp(8rem, 38vw, 11rem); }
 }
 
 /* ---------- the route spine ---------- */
@@ -151,10 +221,10 @@ code, pre { font-family: var(--mono); }
   display: flex;
   align-items: baseline;
   gap: 0.75em;
-  font-family: var(--sans);
-  font-size: 0.75rem;
+  font-family: var(--serif);
+  font-size: 0.8125rem;
   font-weight: 600;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--brass);
   margin-bottom: 1.75rem;
@@ -260,7 +330,7 @@ code, pre { font-family: var(--mono); }
   font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0.08em;
-  color: var(--sea);
+  color: var(--umber);
   border: 1.5px solid currentcolor;
   border-radius: 3px;
   padding: 0.1em 0.5em;

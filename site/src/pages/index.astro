@@ -1,5 +1,7 @@
 ---
+import { Image } from 'astro:assets'
 import Base from '../layouts/Base.astro'
+import logo from '../assets/logo.png'
 import manifest from '../data/manifest.json'
 import { validateManifest } from '../lib/manifest.mjs'
 
@@ -21,29 +23,42 @@ const repoUrl = 'https://github.com/XBlueSky/laugh-tale'
     </header>
 
     <section class="hero">
+      <Image
+        class="hero-logo"
+        src={logo}
+        alt="Laugh Tale — a laughing, mustached mouth with an island seascape inside"
+        widths={[240, 480, 720]}
+        sizes="(max-width: 44rem) 176px, 304px"
+      />
       <div>
         <p class="kicker">An open-source marketplace for coding agents</p>
-        <h1>Chart the trip.<br />Own the site.</h1>
+        <h1>Laugh Tale</h1>
+        <div class="divider" aria-hidden="true">
+          <span class="bar"></span>
+          <span class="gem"></span>
+          <svg width="34" height="34" viewBox="0 0 132 132" fill="none">
+            <path d="M66 4 L80 52 L66 66 L52 52 Z" fill="currentcolor" />
+            <path d="M66 128 L52 80 L66 66 L80 80 Z" fill="currentcolor" opacity="0.65" />
+            <path d="M4 66 L52 52 L66 66 L52 80 Z" fill="currentcolor" opacity="0.65" />
+            <path d="M128 66 L80 80 L66 66 L80 52 Z" fill="currentcolor" opacity="0.65" />
+            <circle cx="66" cy="66" r="26" stroke="currentcolor" stroke-width="5" opacity="0.7" />
+            <circle cx="66" cy="66" r="6" fill="currentcolor" />
+          </svg>
+          <span class="gem"></span>
+          <span class="bar"></span>
+        </div>
         <p class="lede">
+          <strong>Chart the trip. Own the site.</strong>{' '}
           {marketplace.description} Describe a real itinerary — prose, CSV, Markdown, documents,
-          links — and get an <strong>independent React travel site</strong> that never needs the
-          plugin at runtime.
+          links — and get an independent React travel site that never needs the plugin at runtime.
         </p>
+        <p class="eternal">Eternal Pose</p>
         <div class="hero-links">
           <a href={repoUrl}>XBlueSky/laugh-tale</a>
           <a href="https://www.npmjs.com/package/@laugh-tale-island/core">@laugh-tale-island/core</a>
           <a href="https://www.npmjs.com/package/@laugh-tale-island/react">@laugh-tale-island/react</a>
         </div>
       </div>
-      <svg class="compass" width="132" height="132" viewBox="0 0 132 132" fill="none" aria-hidden="true">
-        <circle cx="66" cy="66" r="60" stroke="currentcolor" stroke-width="1.5" opacity="0.55" />
-        <circle cx="66" cy="66" r="46" stroke="currentcolor" stroke-width="1" stroke-dasharray="2 5" opacity="0.55" />
-        <path d="M66 14 L72 60 L66 66 L60 60 Z" fill="currentcolor" opacity="0.9" />
-        <path d="M66 118 L60 72 L66 66 L72 72 Z" fill="currentcolor" opacity="0.35" />
-        <path d="M14 66 L60 60 L66 66 L60 72 Z" fill="currentcolor" opacity="0.35" />
-        <path d="M118 66 L72 72 L66 66 L72 60 Z" fill="currentcolor" opacity="0.35" />
-        <circle cx="66" cy="66" r="4" fill="currentcolor" />
-      </svg>
     </section>
 
     <div class="route">
