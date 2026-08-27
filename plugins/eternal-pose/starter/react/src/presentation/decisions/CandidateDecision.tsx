@@ -54,7 +54,7 @@ function hasCoordinates(option: CandidateOption): boolean {
   );
 }
 
-export function CandidateDecision({
+function CandidateDecisionGroup({
   model,
   binding,
   actions,
@@ -197,4 +197,8 @@ export function CandidateDecision({
       </span>
     </section>
   );
+}
+
+export function CandidateDecision(props: CandidateDecisionProps) {
+  return <CandidateDecisionGroup key={props.model.group.id} {...props} />;
 }

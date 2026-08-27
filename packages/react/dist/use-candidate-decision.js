@@ -19,6 +19,9 @@ function stateFor(options) {
             },
         };
 }
+function candidateGroupSignature(group) {
+    return group === undefined ? null : JSON.stringify(group);
+}
 /**
  * Optional candidate comparison ownership. All hooks remain mounted while a
  * selected node gains, changes, or loses a candidate group. Group changes
@@ -30,7 +33,9 @@ export function useOptionalCandidateDecision(options) {
     optionsRef.current = options;
     const activeGroupIdRef = useRef(options?.group.id ?? null);
     activeGroupIdRef.current = options?.group.id ?? null;
-    const lastOptionsRef = useRef(null);
+    const overrideOwnershipRef = useRef(null);
+    const overrideGroupRef = useRef(undefined);
+    overrideGroupRef.current = options?.overrideGroup ?? options?.group;
     const triggerRef = useRef(null);
     const optionRefs = useRef(new Map());
     const handledPreviewKeyRef = useRef(null);
@@ -54,20 +59,41 @@ export function useOptionalCandidateDecision(options) {
     const requestedPreviewKey = hasValidPreviewRequest && mapPreviewRequest !== undefined
         ? `${state.sessionId}:${mapPreviewRequest.requestId}`
         : null;
+    const overrideGroupSignature = candidateGroupSignature(options?.overrideGroup ?? options?.group);
+    const overrideOwner = options?.onMapOverrideChange;
     useEffect(() => {
-        const previous = lastOptionsRef.current;
+        const previous = overrideOwnershipRef.current;
         if (previous !== null &&
-            (options === null || previous.group.id !== options.group.id)) {
+            (nextGroupId === null ||
+                previous.groupId !== nextGroupId ||
+                previous.onMapOverrideChange !== overrideOwner)) {
             previous.onMapOverrideChange(null);
         }
-        lastOptionsRef.current = options;
-        if (options !== null) {
-            options.onMapOverrideChange(candidateMapOverrideFor(options.overrideGroup ?? options.group, state));
+        if (nextGroupId !== null &&
+            overrideOwner !== undefined &&
+            overrideGroupRef.current !== undefined) {
+            overrideOwnershipRef.current = {
+                groupId: nextGroupId,
+                onMapOverrideChange: overrideOwner,
+            };
+            overrideOwner(candidateMapOverrideFor(overrideGroupRef.current, {
+                sessionId: state.sessionId,
+                draftOptionId: state.draftOptionId,
+            }));
         }
-    }, [options, state]);
+        else {
+            overrideOwnershipRef.current = null;
+        }
+    }, [
+        nextGroupId,
+        overrideGroupSignature,
+        overrideOwner,
+        state.draftOptionId,
+        state.sessionId,
+    ]);
     useEffect(() => () => {
-        lastOptionsRef.current?.onMapOverrideChange(null);
-        lastOptionsRef.current = null;
+        overrideOwnershipRef.current?.onMapOverrideChange(null);
+        overrideOwnershipRef.current = null;
         optionRefs.current.clear();
         triggerRef.current = null;
         handledPreviewKeyRef.current = null;
@@ -163,9 +189,12 @@ export function useOptionalCandidateDecision(options) {
             session: candidateSessionReducer(currentOptions.group, current.session, { type: "preview", optionId }),
         }));
     }, []);
+    const triggerGroupId = nextGroupId;
     const setTrigger = useCallback((element) => {
-        triggerRef.current = element;
-    }, []);
+        if (activeGroupIdRef.current === triggerGroupId) {
+            triggerRef.current = element;
+        }
+    }, [triggerGroupId]);
     const open = options !== null && state.sessionId !== null;
     const getTriggerProps = useCallback(() => ({
         ref: setTrigger,
@@ -173,11 +202,13 @@ export function useOptionalCandidateDecision(options) {
         "aria-expanded": open,
     }), [closeComparison, open, openComparison, setTrigger]);
     const registerOption = useCallback((optionId) => (element) => {
+        if (activeGroupIdRef.current !== nextGroupId)
+            return;
         if (element === null)
             optionRefs.current.delete(optionId);
         else
             optionRefs.current.set(optionId, element);
-    }, []);
+    }, [nextGroupId]);
     if (options === null)
         return null;
     return {

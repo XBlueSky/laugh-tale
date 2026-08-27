@@ -158,6 +158,7 @@ export function TripExperienceView({
       >
         {model.candidate === null || bindings.candidate === null ? null : (
           <CandidateDecision
+            key={model.candidate.group.id}
             model={model.candidate}
             binding={bindings.candidate}
             actions={actions}

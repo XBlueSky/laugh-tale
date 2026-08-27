@@ -14,6 +14,7 @@ import type {
   MapAdapter,
   MapEvents,
   NavigationAdapter,
+  RouteAdapter,
 } from "@laugh-tale-island/core/browser";
 
 import { FakeMapAdapter } from "../providers/fake/FakeMapAdapter";
@@ -299,6 +300,14 @@ function setup(
         <ControllerHarness input={next} onValue={onValue} {...owners} />,
       );
     },
+    rerenderOwners(nextOwners: {
+      nodeOwnerId?: string;
+      routeOwnerId?: string;
+    }): void {
+      view.rerender(
+        <ControllerHarness input={input} onValue={onValue} {...nextOwners} />,
+      );
+    },
   };
 }
 
@@ -443,6 +452,43 @@ describe("useTripExperienceController", () => {
     });
     expect(document.activeElement).toHaveTextContent("route owner");
     expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+  });
+
+  it("preserves a blank semantic reason from a non-Error route rejection", async () => {
+    const routeAdapter: RouteAdapter = {
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the regression is specifically for non-Error provider failures.
+      load: () => Promise.reject({ code: "synthetic-provider-failure" }),
+    };
+    const view = setup({ routeAdapterFactory: () => routeAdapter });
+
+    await waitFor(() =>
+      expect(view.current().model.routes[0]?.loadState).toEqual({
+        status: "unavailable",
+        reason: "",
+      }),
+    );
+  });
+
+  it("cancels deferred route focus when a day change invalidates its selection", async () => {
+    const adapter = new FakeMapAdapter();
+    const view = setup({ adapter });
+    const unrelated = document.createElement("button");
+    unrelated.textContent = "unrelated focus owner";
+    document.body.append(unrelated);
+    await waitFor(() => expect(view.current().model.map.status).toBe("ready"));
+
+    act(() => adapter.emitRouteSelect("route-museum-dinner"));
+    expect(view.current().model.routes[0]).toMatchObject({
+      selected: true,
+      selectionSource: "map",
+    });
+    unrelated.focus();
+    act(() => view.current().actions.selectDay("day-two"));
+    expect(view.current().model.routes).toHaveLength(0);
+
+    view.rerenderOwners({ routeOwnerId: "route-museum-dinner" });
+    expect(document.activeElement).toBe(unrelated);
+    unrelated.remove();
   });
 
   it("owns optional candidate preview, decorated map labels, confirmation, and cleanup", async () => {

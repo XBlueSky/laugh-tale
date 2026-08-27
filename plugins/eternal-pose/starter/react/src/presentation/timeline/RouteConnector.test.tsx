@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { RouteEdge } from "@laugh-tale-island/core";
 import type { RoutePresentation } from "@laugh-tale-island/core";
+import { ROUTE_PROVIDER_UNAVAILABLE } from "../labels";
 import { RouteConnector } from "./RouteConnector";
 
 function routePresentation(
@@ -63,6 +64,22 @@ beforeEach(() => {
 });
 
 describe("RouteConnector", () => {
+  it.each(["", "  \t  "])(
+    "renders the presentation fallback for a blank provider reason %#",
+    (reason) => {
+      render(
+        <RouteConnector
+          route={routePresentation()}
+          state={{ status: "unavailable", reason }}
+        />,
+      );
+
+      expect(screen.getByRole("status", { name: "Route unavailable" })).toHaveTextContent(
+        ROUTE_PROVIDER_UNAVAILABLE,
+      );
+    },
+  );
+
   it("keeps a route readable and static until both focusable geometry and a callback exist", () => {
     const { rerender } = render(<RouteConnector route={routePresentation()} />);
 

@@ -1,4 +1,12 @@
-import { act, cleanup, renderHook } from "@testing-library/react";
+import { useState } from "react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -63,6 +71,33 @@ function setup(options: HookOptions = {}) {
 }
 
 describe("useCandidateDecision", () => {
+  it("does not re-emit a fresh override forever when inline options feed a state setter", () => {
+    let renderCount = 0;
+    const view = renderHook(() => {
+      const [override, setOverride] = useState<CandidateMapOverride | null>(
+        null,
+      );
+      renderCount += 1;
+      if (renderCount > 12) {
+        throw new Error("candidate override emission did not stabilize");
+      }
+      const decision = useCandidateDecision({
+        group,
+        onMapOverrideChange: setOverride,
+        onConfirm: () => undefined,
+      });
+      return { decision, override };
+    });
+
+    act(() => view.result.current.decision.openComparison());
+
+    expect(view.result.current.override).toMatchObject({
+      group,
+      activeOptionId: "dinner-a",
+    });
+    expect(renderCount).toBeLessThan(12);
+  });
+
   it("opens with a committed-derived draft and emits a session override", () => {
     const view = setup({ committedOptionId: "dinner-b" });
     expect(view.overrides.at(-1)).toBeNull();
@@ -175,6 +210,80 @@ describe("useOptionalCandidateDecision", () => {
       ...extra,
     };
   }
+
+  it("reattaches focus ownership when a mounted trigger changes groups", async () => {
+    const callbacks = {
+      onMapOverrideChange: vi.fn(),
+      onConfirm: vi.fn(),
+    };
+    const firstOptions = optionalOptions(group, callbacks);
+    const secondOptions = optionalOptions(secondGroup, callbacks);
+
+    function TriggerHarness({ candidateGroupId }: { candidateGroupId: string }) {
+      const decision = useOptionalCandidateDecision(
+        candidateGroupId === group.id ? firstOptions : secondOptions,
+      );
+      if (decision === null) return null;
+      const triggerProps = decision.getTriggerProps();
+      return (
+        <>
+          <button
+            ref={triggerProps.ref}
+            type="button"
+            onClick={triggerProps.onClick}
+            aria-expanded={triggerProps["aria-expanded"]}
+          >
+            {candidateGroupId} trigger
+          </button>
+          {decision.open ? (
+            <button type="button" onClick={decision.closeComparison}>
+              Close comparison
+            </button>
+          ) : null}
+        </>
+      );
+    }
+
+    const view = render(<TriggerHarness candidateGroupId={group.id} />);
+    fireEvent.click(screen.getByRole("button", { name: `${group.id} trigger` }));
+    view.rerender(<TriggerHarness candidateGroupId={secondGroup.id} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: `${secondGroup.id} trigger` }),
+    );
+    const close = screen.getByRole("button", { name: "Close comparison" });
+    close.focus();
+    fireEvent.click(close);
+    await act(async () => Promise.resolve());
+
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: `${secondGroup.id} trigger` }),
+    );
+  });
+
+  it("clears the prior override owner when the callback channel changes", () => {
+    const firstOwner = vi.fn();
+    const secondOwner = vi.fn();
+    const onConfirm = vi.fn();
+    const view = renderHook<
+      ReturnType<typeof useOptionalCandidateDecision>,
+      { onMapOverrideChange: UseCandidateDecisionOptions["onMapOverrideChange"] }
+    >(
+      ({ onMapOverrideChange }) =>
+        useOptionalCandidateDecision({
+          group,
+          onMapOverrideChange,
+          onConfirm,
+        }),
+      { initialProps: { onMapOverrideChange: firstOwner } },
+    );
+    act(() => view.result.current?.openComparison());
+    expect(firstOwner.mock.calls.at(-1)?.[0]).toMatchObject({ group });
+
+    view.rerender({ onMapOverrideChange: secondOwner });
+
+    expect(firstOwner.mock.calls.at(-1)?.[0]).toBeNull();
+    expect(secondOwner.mock.calls.at(-1)?.[0]).toMatchObject({ group });
+  });
 
   it("transitions null to a group, reinitializes for a different group, and clears on null", () => {
     const onMapOverrideChange = vi.fn();

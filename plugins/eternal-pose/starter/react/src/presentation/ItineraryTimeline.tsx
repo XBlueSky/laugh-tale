@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, type RefCallback } from "react";
 
 import {
   buildTimelineEntries,
@@ -89,6 +89,22 @@ export function ItineraryTimeline({
   selectedRouteId = null,
   routeSelectionSource = null,
 }: ItineraryTimelineProps) {
+  const nodeElementsRef = useRef(new Map<string, HTMLElement>());
+  const nodeOwnerRefs = useMemo(
+    () =>
+      new Map(
+        nodes.map(({ sourceNodeId }) => {
+          const ownerRef = ownerBindings?.nodeRef(sourceNodeId);
+          const callback: RefCallback<HTMLElement> = (element) => {
+            if (element === null) nodeElementsRef.current.delete(sourceNodeId);
+            else nodeElementsRef.current.set(sourceNodeId, element);
+            ownerRef?.(element);
+          };
+          return [sourceNodeId, callback] as const;
+        }),
+      ),
+    [nodes, ownerBindings],
+  );
   const routeViewModels = useMemo<readonly ExperienceRouteViewModel[]>(
     () =>
       routes.map((route) =>
@@ -145,6 +161,13 @@ export function ItineraryTimeline({
     });
     return output;
   }, [nodes]);
+
+  useEffect(() => {
+    if (selection.nodeId === null) return;
+    nodeElementsRef.current
+      .get(selection.nodeId)
+      ?.scrollIntoView?.({ block: "nearest" });
+  }, [selection.nodeId]);
 
   const renderNode = (entry: NodeEntry) => {
     const effective = effectiveNodesById.get(entry.id);
@@ -211,7 +234,7 @@ export function ItineraryTimeline({
                     <li
                       key={`node:${child.id}`}
                       className="itinerary-timeline__entry"
-                      ref={ownerBindings?.nodeRef(child.id)}
+                      ref={nodeOwnerRefs.get(child.id)}
                     >
                       {renderNode(child)}
                     </li>
@@ -225,7 +248,7 @@ export function ItineraryTimeline({
         return (
           <li
             key={`node:${entry.id}`}
-            ref={ownerBindings?.nodeRef(entry.id)}
+            ref={nodeOwnerRefs.get(entry.id)}
             className="itinerary-timeline__entry"
           >
             {renderNode(entry)}

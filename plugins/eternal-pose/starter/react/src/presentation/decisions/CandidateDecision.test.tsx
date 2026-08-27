@@ -50,6 +50,25 @@ const sourceNode: TripNode = {
   payload: { candidateGroupId: group.id },
 };
 
+const secondGroup: CandidateGroup = {
+  ...group,
+  id: "supper-options",
+  parentNodeId: "supper",
+  defaultOptionId: "supper-a",
+  options: group.options.map((option, index) => ({
+    ...option,
+    id: `supper-${String.fromCharCode(97 + index)}`,
+    title: `Supper ${String.fromCharCode(65 + index)}`,
+  })),
+};
+
+const secondSourceNode: TripNode = {
+  ...sourceNode,
+  id: "supper",
+  title: "晚餐候選",
+  payload: { candidateGroupId: secondGroup.id },
+};
+
 function model(overrides: Partial<CandidateViewModel> = {}): CandidateViewModel {
   return {
     group,
@@ -123,6 +142,38 @@ describe("CandidateDecision presentation", () => {
     expect(screen.getByRole("status", { name: "候選選擇狀態" })).toHaveTextContent(
       "已選擇 B",
     );
+  });
+
+  it("clears the prior group's announcement when the visible group changes", () => {
+    const view = setup();
+    fireEvent.click(screen.getByRole("button", { name: "確認選擇 A" }));
+    expect(screen.getByRole("status", { name: "候選選擇狀態" })).toHaveTextContent(
+      "已選擇 A",
+    );
+
+    view.rerender(
+      <CandidateDecision
+        model={
+          model({
+            group: secondGroup,
+            sourceNode: secondSourceNode,
+            committedOptionId: "supper-a",
+            draftOptionId: "supper-a",
+          })
+        }
+        binding={{
+          getTriggerProps: () => ({
+            ref: () => undefined,
+            onClick: vi.fn(),
+            "aria-expanded": true,
+          }),
+          registerOption: () => () => undefined,
+        }}
+        actions={view.actions}
+      />,
+    );
+
+    expect(screen.getByRole("status", { name: "候選選擇狀態" })).toBeEmptyDOMElement();
   });
 
   it("keeps browse pools winner-free while forwarding locatable choices", () => {

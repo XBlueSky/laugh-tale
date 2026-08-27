@@ -9,6 +9,7 @@ import { useEffect, useId, useState, type Ref } from "react";
 
 import type { Timing } from "@laugh-tale-island/core";
 import type { RoutePresentation } from "@laugh-tale-island/core";
+import { ROUTE_PROVIDER_UNAVAILABLE } from "../labels";
 import { formatTimingLabel } from "../timing-label";
 import type { RouteResult } from "@laugh-tale-island/core";
 
@@ -181,6 +182,10 @@ export function RouteConnector({
       </div>
     );
   } else if (state?.status === "unavailable") {
+    const reason =
+      state.reason.trim().length > 0
+        ? state.reason
+        : ROUTE_PROVIDER_UNAVAILABLE;
     connector = (
       <div
         className="route-connector"
@@ -194,7 +199,7 @@ export function RouteConnector({
         <span>
           <span>{label}</span>
           {" · "}
-          <span>{state.reason}</span>
+          <span>{reason}</span>
         </span>
         {retryControl}
       </div>

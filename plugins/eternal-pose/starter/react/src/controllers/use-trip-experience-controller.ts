@@ -282,6 +282,7 @@ function useExperienceRoutes(
 function useOwnerBindings(): {
   bindings: ExperienceBindings["owners"];
   focus(kind: OwnerKind, id: string): void;
+  cancelPendingFocus(): void;
 } {
   const nodeElementsRef = useRef(new Map<string, HTMLElement>());
   const routeElementsRef = useRef(new Map<string, HTMLElement>());
@@ -349,9 +350,15 @@ function useOwnerBindings(): {
     },
     [focusElement],
   );
+  const cancelPendingFocus = useCallback((): void => {
+    pendingRef.current = null;
+  }, []);
 
   const bindings = useMemo(() => ({ nodeRef, routeRef }), [nodeRef, routeRef]);
-  return useMemo(() => ({ bindings, focus }), [bindings, focus]);
+  return useMemo(
+    () => ({ bindings, focus, cancelPendingFocus }),
+    [bindings, cancelPendingFocus, focus],
+  );
 }
 
 export function useTripExperienceController({
@@ -723,6 +730,7 @@ export function useTripExperienceController({
       options: { synchronizeDay?: boolean; restoreOwnerFocus?: boolean } = {},
     ): void => {
       if (!availableNodeIds.includes(nodeId)) return;
+      ownerBindings.cancelPendingFocus();
       clearCandidateInteraction();
       setSelectedRouteId(null);
       setRouteSelectionSource(null);
@@ -799,6 +807,7 @@ export function useTripExperienceController({
   const selectRoute = useCallback(
     (routeId: string, source: "list" | "map"): void => {
       if (!routeIsDisplayed(routeId)) return;
+      ownerBindings.cancelPendingFocus();
       clearCandidateInteraction();
       setSelectedRouteId(routeId);
       setRouteSelectionSource(source);
@@ -834,6 +843,7 @@ export function useTripExperienceController({
   const userLocation = useUserLocation(mapLifecycle.readyAdapter);
 
   const returnToNow = useCallback((): void => {
+    ownerBindings.cancelPendingFocus();
     clearCandidateInteraction();
     setSelectedRouteId(null);
     setRouteSelectionSource(null);
@@ -850,6 +860,7 @@ export function useTripExperienceController({
     automaticNodeId,
     clearCandidateInteraction,
     focusMap,
+    ownerBindings,
     selectedEffectiveDay.day.id,
     selection,
     synchronizeDisplayedDay,
@@ -870,6 +881,7 @@ export function useTripExperienceController({
         (candidate) => candidate.day.id === dayId,
       );
       if (day === undefined) return;
+      ownerBindings.cancelPendingFocus();
       clearCandidateInteraction();
       setSelectedRouteId(null);
       setRouteSelectionSource(null);
@@ -880,7 +892,13 @@ export function useTripExperienceController({
         selection.selectManual(firstNode.sourceNodeId);
       }
     },
-    [clearCandidateInteraction, effectiveTrip.days, markDisplayedDayIntent, selection],
+    [
+      clearCandidateInteraction,
+      effectiveTrip.days,
+      markDisplayedDayIntent,
+      ownerBindings,
+      selection,
+    ],
   );
   const returnHome = useCallback((): void => {
     clearCandidateInteraction();

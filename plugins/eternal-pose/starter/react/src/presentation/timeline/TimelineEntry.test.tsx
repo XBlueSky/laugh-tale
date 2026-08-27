@@ -206,6 +206,55 @@ describe("TimelineEntry", () => {
 });
 
 describe("ItineraryTimeline semantic integration", () => {
+  it("scrolls every selected-node transition without moving keyboard focus", () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    const nodes: EffectiveNode[] = [
+      {
+        sourceNodeId: "a",
+        completed: false,
+        node: sightseeing({ id: "a", title: "A" }),
+      },
+      {
+        sourceNodeId: "b",
+        completed: false,
+        node: sightseeing({ id: "b", title: "B" }),
+      },
+    ];
+    const unrelated = document.createElement("button");
+    unrelated.textContent = "current keyboard focus";
+    document.body.append(unrelated);
+    const view = render(
+      <ItineraryTimeline
+        nodes={nodes}
+        routes={[]}
+        selection={{ nodeId: "a", source: "automatic" }}
+        onNodeSelect={() => undefined}
+      />,
+    );
+    scrollIntoView.mockClear();
+    unrelated.focus();
+
+    view.rerender(
+      <ItineraryTimeline
+        nodes={nodes}
+        routes={[]}
+        selection={{ nodeId: "b", source: "automatic" }}
+        onNodeSelect={() => undefined}
+      />,
+    );
+
+    expect(scrollIntoView).toHaveBeenCalledExactlyOnceWith({ block: "nearest" });
+    expect(scrollIntoView.mock.contexts[0]).toBe(
+      screen.getByRole("button", { name: "約 09:00 B" }).closest("li"),
+    );
+    expect(document.activeElement).toBe(unrelated);
+    unrelated.remove();
+  });
+
   it("keeps node, route, group, and child React sibling identities namespaced", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const nodes: EffectiveNode[] = [
