@@ -76,7 +76,7 @@ export function FieldAtlasExperience({
         <p
           className="atlas-persistence"
           role="status"
-          aria-label="旅行進度僅保留在此頁面"
+          aria-label="Trip progress is stored on this page only"
           data-persistence-status="memory-only"
         >
           Progress is stored on this page only.
@@ -152,7 +152,7 @@ export function FieldAtlasExperience({
           </header>
 
           <div className="map-controls atlas-map-controls" role="toolbar" aria-label="Map controls">
-          <button type="button" aria-label="回到旅行首頁" data-touch-target="44" onClick={actions.returnHome}>HOME</button>
+          <button type="button" aria-label="Return to trip home" data-touch-target="44" onClick={actions.returnHome}>HOME</button>
           <AtlasReservationPanel reservations={model.trip.reservations} />
           <button
             type="button"

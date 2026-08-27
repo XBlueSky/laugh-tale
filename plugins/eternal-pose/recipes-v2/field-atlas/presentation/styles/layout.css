@@ -279,10 +279,21 @@
   }
 }
 
+@media (max-width: 430px) {
+  .atlas-day-index__primary .atlas-key {
+    display: none;
+  }
+}
+
 @media (max-width: 360px) {
   .atlas-map-controls__status,
   .atlas-day-index__primary small {
     display: none;
+  }
+
+  .atlas-day-index__primary strong {
+    font-size: 0.875rem;
+    line-height: 1.1;
   }
 }
 

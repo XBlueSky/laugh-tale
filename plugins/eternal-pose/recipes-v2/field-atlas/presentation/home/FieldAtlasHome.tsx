@@ -29,7 +29,7 @@ export function FieldAtlasHome({ model, actions }: HomeViewProps) {
         <p
           className="atlas-persistence"
           role="status"
-          aria-label="旅行進度僅保留在此頁面"
+          aria-label="Trip progress is stored on this page only"
           data-persistence-status="memory-only"
         >
           Progress is stored on this page only.
@@ -79,7 +79,7 @@ export function FieldAtlasHome({ model, actions }: HomeViewProps) {
         </section>
 
         <section className="atlas-home__pretrip" aria-labelledby={`atlas-pretrip-${id}`}>
-          <h2 id={`atlas-pretrip-${id}`}>旅前準備</h2>
+          <h2 id={`atlas-pretrip-${id}`}>Pretrip tasks</h2>
           {pretripTasks.length === 0 ? (
             <p>No pretrip tasks.</p>
           ) : (
@@ -128,9 +128,9 @@ export function FieldAtlasHome({ model, actions }: HomeViewProps) {
         </section>
 
         <section className="atlas-reservation-ledger" aria-label="Reservation ledger">
-          <h2>訂位</h2>
+          <h2>Reservations</h2>
           <p>
-            {model.reservationCounts.confirmed} 已確認 / {model.reservationCounts.pending} 待確認 / {model.reservationCounts.none} 未訂位
+            {model.reservationCounts.confirmed} confirmed / {model.reservationCounts.pending} pending / {model.reservationCounts.none} not booked
           </p>
           <ol>
             {model.trip.reservations.map((reservation) => (
@@ -142,12 +142,12 @@ export function FieldAtlasHome({ model, actions }: HomeViewProps) {
           </ol>
         </section>
 
-        <nav className="atlas-index atlas-home__days" aria-label="進入每日行程">
+        <nav className="atlas-index atlas-home__days" aria-label="Enter daily itinerary">
           {model.trip.days.map((day, index) => (
             <button
               key={day.id}
               type="button"
-              aria-label={`進入 Day ${index + 1} · ${day.title}`}
+              aria-label={`Enter Day ${index + 1} · ${day.title}`}
               data-touch-target="44"
               onClick={() => actions.enterDay(day.id)}
             >

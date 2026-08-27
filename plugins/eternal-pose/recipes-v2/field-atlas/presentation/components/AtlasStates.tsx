@@ -53,7 +53,7 @@ function Loading({ kind }: LoadingViewProps) {
       data-state="loading"
       data-loading-kind={kind}
       role="status"
-      aria-label="正在讀取旅行進度"
+      aria-label="Loading trip progress"
     >
       <section className="atlas-state__panel atlas-state__skeleton" aria-hidden="true">
         <span className="atlas-state__code">SYNC</span>
@@ -61,7 +61,7 @@ function Loading({ kind }: LoadingViewProps) {
         <span />
         <span />
       </section>
-      <span className="atlas-visually-hidden">正在讀取旅行進度</span>
+      <span className="atlas-visually-hidden">Loading trip progress</span>
     </main>
   );
 }

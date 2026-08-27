@@ -46,12 +46,12 @@ export function AtlasCandidateDecision({
   );
   const triggerLabel =
     model.group.mode === "browse"
-      ? `${model.open ? "收合" : "查看"} ${model.sourceNode.title} 候選`
+      ? `${model.open ? "Hide" : "View"} ${model.sourceNode.title} candidates`
       : model.open
-        ? `收合 ${model.sourceNode.title}`
+        ? `Hide ${model.sourceNode.title} candidates`
         : committed === undefined
-          ? `比較 ${model.sourceNode.title}`
-          : `重新比較 ${model.sourceNode.title}`;
+          ? `Compare ${model.sourceNode.title}`
+          : `Compare ${model.sourceNode.title} again`;
 
   return (
     <section
@@ -65,7 +65,7 @@ export function AtlasCandidateDecision({
         <div>
           <strong>{model.sourceNode.title}</strong>
           {model.group.mode === "single" && committed !== undefined ? (
-            <p>{model.open ? "目前已選" : "已選"} · {committed.title}</p>
+            <p>{model.open ? "Currently selected" : "Selected"} · {committed.title}</p>
           ) : null}
         </div>
         <button
@@ -96,7 +96,7 @@ export function AtlasCandidateDecision({
                 />
                 <span className="stop-number">{label.slice(0, label.indexOf(" ·"))}</span>
                 <span>{option.title}</span>
-                {hasCoordinates(option) ? null : <small>尚未定位</small>}
+                {hasCoordinates(option) ? null : <small>Location unavailable</small>}
               </label>
             );
           })}
@@ -104,10 +104,10 @@ export function AtlasCandidateDecision({
             <button
               type="button"
               data-touch-target="44"
-              aria-label="取消候選比較"
+              aria-label="Cancel candidate comparison"
               onClick={actions.closeCandidate}
             >
-              取消
+              Cancel
             </button>
             <button
               type="button"
@@ -115,18 +115,18 @@ export function AtlasCandidateDecision({
               disabled={model.draftOptionId === undefined}
               aria-label={
                 model.draftOptionId === undefined
-                  ? "確認候選選擇"
-                  : `確認選擇 ${model.group.options.find(({ id }) => id === model.draftOptionId)?.title ?? ""}`
+                  ? "Confirm candidate selection"
+                  : `Confirm ${model.group.options.find(({ id }) => id === model.draftOptionId)?.title ?? ""}`
               }
               onClick={() => {
                 const option = model.group.options.find(
                   ({ id }) => id === model.draftOptionId,
                 );
                 actions.confirmCandidate();
-                setAnnouncement(`已選擇 ${option?.title ?? ""}`);
+                setAnnouncement(`Selected ${option?.title ?? ""}`);
               }}
             >
-              確認
+              Confirm
             </button>
           </div>
         </fieldset>
@@ -143,13 +143,13 @@ export function AtlasCandidateDecision({
                     ref={binding.registerOption(option.id)}
                     type="button"
                     data-touch-target="44"
-                    aria-label={`定位 ${label}`}
+                    aria-label={`Locate ${label}`}
                     onClick={() => actions.previewCandidate(option.id)}
                   >
                     {label}
                   </button>
                 ) : (
-                  <span>{label} · 尚未定位</span>
+                  <span>{label} · Location unavailable</span>
                 )}
               </li>
             );
@@ -165,10 +165,10 @@ export function AtlasCandidateDecision({
 }
 
 const shoppingOptions: readonly { value: ShoppingStatus; label: string }[] = [
-  { value: "pending", label: "待採買" },
-  { value: "purchased", label: "已購入" },
-  { value: "unavailable", label: "缺貨" },
-  { value: "skipped", label: "略過" },
+  { value: "pending", label: "Pending" },
+  { value: "purchased", label: "Purchased" },
+  { value: "unavailable", label: "Unavailable" },
+  { value: "skipped", label: "Skipped" },
 ];
 
 interface AtlasShoppingDecisionProps {
@@ -184,7 +184,7 @@ export function AtlasShoppingDecision({
     <section
       className="atlas-decision atlas-shopping"
       data-surface="shopping-progress"
-      aria-label={`${model.node.title} 採買清單`}
+      aria-label={`${model.node.title} shopping list`}
     >
       <header className="atlas-decision__header">
         <span className="atlas-key">SUPPLY</span>
@@ -195,7 +195,7 @@ export function AtlasShoppingDecision({
           <li key={item.id} data-shopping-item={item.id}>
             <span>{item.title}</span>
             <select
-              aria-label={`${item.title} 採買狀態`}
+              aria-label={`${item.title} shopping status`}
               data-touch-target="44"
               value={model.statuses[item.id] ?? item.initialStatus ?? "pending"}
               onChange={(event) =>

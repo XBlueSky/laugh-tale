@@ -294,8 +294,9 @@
 
 .atlas-day-index__rail button {
   display: grid;
-  min-width: 9.5rem;
+  min-width: 0;
   min-height: 56px;
+  flex: 1 1 0;
   grid-template-columns: 2rem minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--atlas-space-2);
@@ -946,9 +947,67 @@ gmp-advanced-marker:focus-visible {
   .route-band {
     padding-left: 4rem;
   }
+
+  .atlas-day-index__rail button {
+    grid-template-columns: 2rem minmax(0, 1fr);
+    padding-block: var(--atlas-space-1);
+    font-size: 0.75rem;
+    line-height: 1.1;
+  }
+
+  .atlas-day-index__primary > div:first-child {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .atlas-day-index__rail time {
+    grid-column: 2;
+  }
 }
 
-@media (max-width: 30rem) {
+@media (min-width: 768px) {
+  .atlas-day-index {
+    display: grid;
+    height: 100%;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .atlas-day-index__primary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    align-content: start;
+  }
+
+  .atlas-day-index__primary > div:first-child {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .atlas-day-index__controls {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(3, minmax(44px, 1fr));
+    border-top: var(--atlas-rule-width) solid var(--atlas-rule);
+  }
+
+  .atlas-day-index__rail {
+    display: grid;
+    width: 100%;
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: minmax(56px, auto);
+    align-content: start;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .atlas-day-index__rail button {
+    width: 100%;
+    border-right: 0;
+    border-bottom: var(--atlas-rule-width) solid var(--atlas-rule);
+  }
+}
+
+@container field-atlas (max-width: 15rem) {
   .atlas-day-index__primary {
     display: grid;
     grid-template-columns: minmax(0, 1fr);

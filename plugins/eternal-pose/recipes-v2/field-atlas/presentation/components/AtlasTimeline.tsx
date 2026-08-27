@@ -27,9 +27,9 @@ import type {
 
 function timingLabel(timing: Timing): string {
   if (timing.certainty === "unknown" || timing.start === undefined) {
-    return "時間未定";
+    return "Time not set";
   }
-  return timing.certainty === "suggested" ? `約 ${timing.start}` : timing.start;
+  return timing.certainty === "suggested" ? `About ${timing.start}` : timing.start;
 }
 
 function absoluteDate(date: string): string | undefined {
@@ -334,12 +334,12 @@ function routeSummary(route: RoutePresentation, readyMinutes: number | undefined
     return `${route.edge.mode} · ${readyMinutes} min`;
   }
   if (route.edge.summary !== undefined) {
-    return route.edge.certainty === "confirmed" || route.edge.summary.trimStart().startsWith("約 ")
+    return route.edge.certainty === "confirmed" || route.edge.summary.trimStart().startsWith("About ")
       ? route.edge.summary
-      : `約 ${route.edge.summary}`;
+      : `About ${route.edge.summary}`;
   }
   if (route.edge.durationMinutes !== undefined) {
-    return `${route.edge.mode} · ${route.edge.certainty === "confirmed" ? "" : "約 "}${route.edge.durationMinutes} min`;
+    return `${route.edge.mode} · ${route.edge.certainty === "confirmed" ? "" : "About "}${route.edge.durationMinutes} min`;
   }
   return route.edge.mode;
 }

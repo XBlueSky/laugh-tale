@@ -16,10 +16,10 @@ import {
 
 function bookingStatusLabel(status: Booking["status"]): string {
   return status === "confirmed"
-    ? "已確認"
+    ? "Confirmed"
     : status === "pending"
-      ? "待確認"
-      : "尚未訂位";
+      ? "Pending"
+      : "Not booked";
 }
 
 function safeHttpsUrl(value: string | undefined): string | undefined {
@@ -77,13 +77,13 @@ export function AtlasReservationPanel({
         ref={triggerRef}
         type="button"
         className="atlas-utility__trigger"
-        aria-label="開啟訂位資訊"
+        aria-label="Open reservation information"
         data-touch-target="44"
         onClick={open}
       >
         <span aria-hidden="true">RSV</span>
       </button>
-      {unsupported ? <span role="status">此瀏覽器無法開啟訂位資訊。</span> : null}
+      {unsupported ? <span role="status">Reservation information cannot open in this browser.</span> : null}
       {/* Native dialog backdrops dispatch their pointer click to the dialog itself. */}
       {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */}
       <dialog
@@ -101,11 +101,11 @@ export function AtlasReservationPanel({
         <section className="atlas-dialog__surface">
           <header>
             <span className="atlas-key">LEDGER</span>
-            <h2 id={`atlas-reservation-${id}`}>訂位資訊</h2>
-            <button type="button" aria-label="關閉訂位資訊" data-touch-target="44" onClick={close}>×</button>
+            <h2 id={`atlas-reservation-${id}`}>Reservation information</h2>
+            <button type="button" aria-label="Close reservation information" data-touch-target="44" onClick={close}>×</button>
           </header>
           {reservations.length === 0 ? (
-            <p>目前沒有訂位資訊</p>
+            <p>No reservation information.</p>
           ) : (
             <ul>
               {reservations.map((reservation) => {
@@ -116,18 +116,18 @@ export function AtlasReservationPanel({
                     <strong>{reservation.title}</strong>
                     <span>{bookingStatusLabel(reservation.booking.status)}</span>
                     {reservation.booking.arrivalBufferMinutes === undefined ? null : (
-                      <span>提前 {reservation.booking.arrivalBufferMinutes} 分鐘抵達</span>
+                      <span>Arrive {reservation.booking.arrivalBufferMinutes} min early</span>
                     )}
                     {reservation.booking.reference === undefined ? null : isRevealed ? (
                       <code>{reservation.booking.reference}</code>
                     ) : (
                       <button
                         type="button"
-                        aria-label={`顯示 ${reservation.title} 訂位代碼`}
+                        aria-label={`Show ${reservation.title} reservation code`}
                         data-touch-target="44"
                         onClick={() => setRevealed((current) => new Set([...current, reservation.id]))}
                       >
-                        顯示訂位代碼
+                        Show reservation code
                       </button>
                     )}
                     {bookingUrl === undefined ? null : (
@@ -135,10 +135,10 @@ export function AtlasReservationPanel({
                         href={bookingUrl}
                         target="_blank"
                         rel="noreferrer noopener"
-                        aria-label={`開啟 ${reservation.title} 訂位頁面`}
+                        aria-label={`Open ${reservation.title} reservation page`}
                         data-touch-target="44"
                       >
-                        開啟訂位頁面
+                        Open reservation page
                       </a>
                     )}
                   </li>
@@ -201,13 +201,13 @@ export function AtlasTaskPanel({
         ref={triggerRef}
         type="button"
         className="atlas-utility__trigger"
-        aria-label={`開啟 ${dayTitle} 當日事項`}
+        aria-label={`Open tasks for ${dayTitle}`}
         data-touch-target="44"
         onClick={open}
       >
         <span aria-hidden="true">TSK</span>
       </button>
-      {unsupported ? <span role="status">此瀏覽器無法開啟當日事項。</span> : null}
+      {unsupported ? <span role="status">Day tasks cannot open in this browser.</span> : null}
       {/* Native dialog backdrops dispatch their pointer click to the dialog itself. */}
       {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */}
       <dialog
@@ -225,8 +225,8 @@ export function AtlasTaskPanel({
         <section className="atlas-dialog__surface">
           <header>
             <span className="atlas-key">TASKS</span>
-            <h2 id={`atlas-task-${id}`}>{dayTitle} 當日事項</h2>
-            <button type="button" aria-label="關閉當日事項" data-touch-target="44" onClick={close}>×</button>
+            <h2 id={`atlas-task-${id}`}>Tasks for {dayTitle}</h2>
+            <button type="button" aria-label="Close day tasks" data-touch-target="44" onClick={close}>×</button>
           </header>
           <ul>
             {tasks.map((task, taskIndex) => {
@@ -251,7 +251,7 @@ export function AtlasTaskPanel({
                     {canDisclose ? (
                       <button
                         type="button"
-                        aria-label={`${expanded ? "隱藏" : "顯示"} ${task.title} 子項`}
+                        aria-label={`${expanded ? "Hide" : "Show"} ${task.title} subtasks`}
                         aria-controls={childrenId}
                         aria-expanded={expanded}
                         data-touch-target="44"

@@ -107,6 +107,16 @@ function contrastRatio(first: string, second: string): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
+function expectEnglishRecipeCopy(container: HTMLElement): void {
+  const accessibleNames = Array.from(
+    container.querySelectorAll<HTMLElement>("[aria-label]"),
+    (element) => element.getAttribute("aria-label") ?? "",
+  ).join("\n");
+  expect(`${container.textContent ?? ""}\n${accessibleNames}`).not.toMatch(
+    /\p{Script=Han}/u,
+  );
+}
+
 const repoRoot = process.cwd();
 const pluginRoot = join(repoRoot, "plugins/eternal-pose");
 const recipeRoot = join(pluginRoot, "recipes-v2/field-atlas");
@@ -530,6 +540,10 @@ describe("Field Atlas recipe contract", () => {
   test("uses a distinct ruled atlas structure with local system-font resources only", () => {
     const presentationSource = combinedSource(recipePresentationRoot, [".ts", ".tsx"]);
     const cssSource = combinedSource(join(recipePresentationRoot, "styles"), [".css"]);
+    const componentsSource = readFileSync(
+      join(recipePresentationRoot, "styles/components.css"),
+      "utf8",
+    );
     const runtimeSource = `${presentationSource}\n${cssSource}`;
 
     expect(runtimeSource).toMatch(/atlas-index/);
@@ -554,11 +568,13 @@ describe("Field Atlas recipe contract", () => {
     expect(cssSource).not.toMatch(/\.atlas-map-surface\s*,\s*\.itinerary-map\s*\{/);
     expect(cssSource).toMatch(/\.atlas-day-index__primary strong\s*\{[^}]*white-space:\s*normal/is);
     expect(cssSource).toMatch(/\.atlas-detail-surface__heading strong\s*\{[^}]*white-space:\s*normal/is);
-    expect(cssSource).toMatch(/@media\s*\(max-width:\s*30rem\)[^{]*\{[\s\S]*\.atlas-day-index__primary[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/i);
-    expect(cssSource).toMatch(/@media\s*\(max-width:\s*30rem\)[^{]*\{[\s\S]*\.atlas-detail-surface__heading[\s\S]*grid-column:\s*1\s*\/\s*-1/i);
+    expect(componentsSource).not.toMatch(/@media\s*\(max-width:\s*30rem\)/i);
+    expect(componentsSource).toMatch(/@media\s*\(min-width:\s*768px\)[^{]*\{[\s\S]*\.atlas-day-index__rail\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/i);
+    expect(componentsSource).toMatch(/@container\s+field-atlas\s*\(max-width:\s*15rem\)[^{]*\{[\s\S]*\.atlas-detail-surface__heading[\s\S]*grid-column:\s*1\s*\/\s*-1/i);
     expect(cssSource).toMatch(/container-type:\s*inline-size/i);
     expect(cssSource).toMatch(/@container\s+field-atlas\s*\(max-width:\s*15rem\)/i);
     expect(presentationSource).toMatch(/className="atlas-responsive-layout"/);
+    expect(presentationSource).not.toMatch(/\p{Script=Han}/u);
 
     const allRecipeSource = collectFiles(recipeRoot)
       .filter((path) => !path.endsWith("README.md"))
@@ -601,7 +617,7 @@ describe("Field Atlas recipe contract", () => {
     expect(view.getByTestId("trip-home")).toHaveClass("atlas-home");
     expect(view.getByRole("heading", { name: completeTrip.title })).toBeVisible();
     expect(view.getAllByText(completeTrip.days[0]?.title ?? "missing").length).toBeGreaterThan(0);
-    expect(view.getByRole("navigation", { name: "進入每日行程" })).toHaveClass(
+    expect(view.getByRole("navigation", { name: "Enter daily itinerary" })).toHaveClass(
       "atlas-index",
     );
     expect(view.getByRole("region", { name: "Route overview" })).toBeVisible();
@@ -611,10 +627,11 @@ describe("Field Atlas recipe contract", () => {
       "data-persistence-status",
       "memory-only",
     );
+    expectEnglishRecipeCopy(view.container);
 
     fireEvent.click(
       view.getByRole("button", {
-        name: new RegExp(`進入 Day 1.*${completeTrip.days[0]?.title ?? ""}`),
+        name: new RegExp(`Enter Day 1.*${completeTrip.days[0]?.title ?? ""}`),
       }),
     );
     expect(enterDay).toHaveBeenCalledWith(completeTrip.days[0]?.id);
@@ -664,12 +681,12 @@ describe("Field Atlas recipe contract", () => {
     ).toHaveAttribute("aria-pressed", "true");
     expect(view.getByRole("radio", { name: /Canal counter/ })).toBeChecked();
     expect(
-      view.getByRole("combobox", { name: "Travel journal 採買狀態" }),
+      view.getByRole("combobox", { name: "Travel journal shopping status" }),
     ).toHaveValue("purchased");
     expect(
-      view.getByRole("button", { name: /開啟.*當日事項/ }),
+      view.getByRole("button", { name: /Open tasks for .*day/ }),
     ).toBeVisible();
-    expect(view.getByRole("button", { name: "開啟訂位資訊" })).toBeVisible();
+    expect(view.getByRole("button", { name: "Open reservation information" })).toBeVisible();
     expect(view.getByText("Synthetic unavailable")).toBeVisible();
     expect(view.getByText("Tuesday, 12 June 2040")).toBeVisible();
     for (const semantic of [
@@ -685,8 +702,9 @@ describe("Field Atlas recipe contract", () => {
     ]) {
       expect(experience.querySelector(`[data-semantic="${semantic}"]`)).not.toBeNull();
     }
+    expectEnglishRecipeCopy(view.container);
 
-    fireEvent.click(view.getByRole("button", { name: "回到旅行首頁" }));
+    fireEvent.click(view.getByRole("button", { name: "Return to trip home" }));
     expect(experienceActions.returnHome).toHaveBeenCalledTimes(1);
     fireEvent.click(view.getByRole("button", { name: "Retry route" }));
     expect(experienceActions.retryRoute).toHaveBeenCalledWith(
@@ -698,10 +716,10 @@ describe("Field Atlas recipe contract", () => {
     expect(experienceActions.setSheetSnap).toHaveBeenNthCalledWith(1, "collapsed");
     expect(experienceActions.setSheetSnap).toHaveBeenNthCalledWith(2, "half");
     expect(experienceActions.setSheetSnap).toHaveBeenNthCalledWith(3, "expanded");
-    fireEvent.click(view.getByRole("button", { name: "確認選擇 Canal counter" }));
+    fireEvent.click(view.getByRole("button", { name: "Confirm Canal counter" }));
     expect(experienceActions.confirmCandidate).toHaveBeenCalledTimes(1);
     fireEvent.change(
-      view.getByRole("combobox", { name: "Travel journal 採買狀態" }),
+      view.getByRole("combobox", { name: "Travel journal shopping status" }),
       { target: { value: "skipped" } },
     );
     expect(experienceActions.setShoppingStatus).toHaveBeenCalledWith(
@@ -853,7 +871,7 @@ describe("Field Atlas recipe contract", () => {
           bindings: ownerBindings(initial),
         }),
       );
-      const home = view.getByRole("button", { name: "回到旅行首頁" });
+      const home = view.getByRole("button", { name: "Return to trip home" });
       home.focus();
       scrollIntoView.mockClear();
 
@@ -972,6 +990,8 @@ describe("Field Atlas recipe contract", () => {
 
     const loading = render(createElement(presentation.Loading, { kind: "progress" }));
     expect(loading.getByRole("status")).toHaveAttribute("data-state", "loading");
+    expect(loading.getByRole("status")).toHaveAccessibleName("Loading trip progress");
+    expectEnglishRecipeCopy(loading.container);
     loading.unmount();
 
     const retry = vi.fn();
