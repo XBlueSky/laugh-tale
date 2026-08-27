@@ -28,31 +28,27 @@ There is no publish path outside that job. Locally you can rehearse with
 
 ## One-time setup (owner actions)
 
-- [ ] Own the `laugh-tale-island` npm organization (free plan; public packages).
-- [ ] Create a **granular npm access token** with read/write on the
+- [x] Own the `laugh-tale-island` npm organization (free plan; public packages).
+- [x] Create a **granular npm access token** with read/write on the
       `@laugh-tale-island` scope, allowed to bypass 2FA for automation, and add
       it to the GitHub repository as the `NPM_TOKEN` Actions secret.
-- [ ] Push the `v0.0.0` baseline tag together with `main`
-      (`git push --follow-tags`). semantic-release otherwise starts at
-      `1.0.0`; from the baseline, the release-setup `feat:` commit computes
-      `0.1.0`, which must match the starter's exact pins.
+- [x] ~~Push the `v0.0.0` baseline tag together with `main`.~~ This step never
+      ran: the baseline tag stayed local, so semantic-release started at
+      `1.0.0` on 2026-08-27. `1.0.0` is therefore the first published version
+      of both packages, and the starter's pins were updated to match it.
 
-## After the first successful publish (still required)
+## After the first successful publish (completed 2026-08-27 for 1.0.0)
 
-1. [ ] Regenerate the starter lockfile from the public registry
-       (`npm --prefix plugins/eternal-pose/starter/react install`) and commit
-       it; restore direct starter installs in CI (`npm ci` in the starter
-       replaces the staged path).
-2. [ ] Generate a clean site through
-       `plugins/eternal-pose/scripts/create-trip-project.mjs`, run `npm ci`
-       and its full checks in that site with no Laugh Tale checkout on any
-       resolution path.
+1. [x] The starter pins the published `1.0.0` packages and its lockfile
+       resolves entirely from the public registry. CI deliberately keeps the
+       staged tarball flow (`npm run stage:starter`) instead of switching to
+       direct starter installs, so every check still exercises unpublished
+       workspace changes the way a consumer would install them.
+2. [x] A clean site generated through
+       `plugins/eternal-pose/scripts/create-trip-project.mjs` passed `npm ci`
+       and its full checks with no Laugh Tale checkout on any resolution path.
 3. [ ] Announcing the package-backed plugin release in any marketplace remains
        separately approval-gated.
-
-> Until those lockfile steps complete, direct `npm ci` inside
-> `plugins/eternal-pose/starter/react` fails; use the staged flow
-> (`npm run stage:starter`) documented in the README.
 
 ## Subsequent releases
 
