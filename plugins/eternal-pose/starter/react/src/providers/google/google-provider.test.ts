@@ -80,6 +80,14 @@ const googleMapProfile: MapVisualProfile = {
       fill: place.tone === "selected" ? "#123456" : "#fefefe",
       stroke: "#654321",
       text: String(index + 1),
+      size: place.tone === "selected" ? 48 : 44,
+      shape:
+        place.tone === "selected"
+          ? "square"
+          : place.tone === "completed"
+            ? "diamond"
+            : "circle",
+      strokeWidth: place.tone === "completed" ? 5 : 3,
     },
   }),
   userLocation: () => ({
@@ -87,7 +95,14 @@ const googleMapProfile: MapVisualProfile = {
     className: "profile-marker profile-marker--location",
     label: "Profile location label",
     parts: [{ className: "profile-marker__location-dot", text: "" }],
-    fallback: { fill: "#2563eb", stroke: "#ffffff", text: "U" },
+    fallback: {
+      fill: "#2563eb",
+      stroke: "#ffffff",
+      text: "U",
+      size: 44,
+      shape: "circle",
+      strokeWidth: 3,
+    },
   }),
   route: () => ({ stroke: "#4b5563", opacity: 0.9, width: 4 }),
 };
@@ -1406,6 +1421,12 @@ describe("GoogleMapAdapter lifecycle", () => {
         coordinates: { lat: 25.03, lng: 121.03 },
         tone: "completed",
       },
+      {
+        ownerId: nodeMapOwnerId("skipped"),
+        label: "Lookout",
+        coordinates: { lat: 25.04, lng: 121.04 },
+        tone: "skipped",
+      },
     ],
     routes: [
       {
@@ -1447,6 +1468,7 @@ describe("GoogleMapAdapter lifecycle", () => {
       "Profile title: Cafe",
       "Profile title: Park",
       "Profile title: Hotel",
+      "Profile title: Lookout",
     ]);
     expect(
       FakeAdvancedMarker.instances.map((marker) =>
@@ -1457,28 +1479,29 @@ describe("GoogleMapAdapter lifecycle", () => {
       "Profile label: Cafe",
       "Profile label: Park",
       "Profile label: Hotel",
+      "Profile label: Lookout",
     ]);
     expect(
       FakeAdvancedMarker.instances.map(({ content }) =>
         content instanceof HTMLElement ? content.getAttribute("aria-label") : null,
       ),
-    ).toEqual([null, null, null, null]);
+    ).toEqual([null, null, null, null, null]);
     expect(
       FakeAdvancedMarker.instances.map(({ content }) =>
         content instanceof HTMLElement ? content.getAttribute("aria-hidden") : null,
       ),
-    ).toEqual(["true", "true", "true", "true"]);
+    ).toEqual(["true", "true", "true", "true", "true"]);
     expect(
       FakeAdvancedMarker.instances.map(({ addedEventNames }) => addedEventNames),
-    ).toEqual([["gmp-click"], ["gmp-click"], ["gmp-click"], ["gmp-click"]]);
+    ).toEqual([["gmp-click"], ["gmp-click"], ["gmp-click"], ["gmp-click"], ["gmp-click"]]);
     expect(
       FakeAdvancedMarker.instances.map(({ gmpClickable }) => gmpClickable),
-    ).toEqual([true, true, true, true]);
+    ).toEqual([true, true, true, true, true]);
     expect(
       FakeAdvancedMarker.instances.map(({ content }) =>
         content instanceof HTMLElement ? content.tagName : null,
       ),
-    ).toEqual(["SPAN", "SPAN", "SPAN", "SPAN"]);
+    ).toEqual(["SPAN", "SPAN", "SPAN", "SPAN", "SPAN"]);
     expect(
       FakeAdvancedMarker.instances.map(({ content }) =>
         content instanceof HTMLElement ? content.className : null,
@@ -1488,6 +1511,7 @@ describe("GoogleMapAdapter lifecycle", () => {
       "profile-marker profile-marker--candidate",
       "profile-marker profile-marker--selected",
       "profile-marker profile-marker--completed",
+      "profile-marker profile-marker--skipped",
     ]);
     expect(
       FakeAdvancedMarker.instances[0]?.content instanceof HTMLElement
@@ -1529,7 +1553,7 @@ describe("GoogleMapAdapter lifecycle", () => {
 
     expect(FakeGoogleMap.instances[0]?.options.mapId).toBeUndefined();
     expect(FakeAdvancedMarker.instances).toHaveLength(0);
-    expect(FakeClassicMarker.instances).toHaveLength(4);
+    expect(FakeClassicMarker.instances).toHaveLength(5);
     expect(FakeClassicMarker.instances[0]).toMatchObject({
       title: "Profile title: Museum",
       label: "1",
@@ -1541,6 +1565,19 @@ describe("GoogleMapAdapter lifecycle", () => {
     }
     expect(decodeURIComponent(classicIcon)).toContain('fill="#fefefe"');
     expect(decodeURIComponent(classicIcon)).toContain('stroke="#654321"');
+    const classicDocuments = FakeClassicMarker.instances.map(({ icon }) => {
+      if (typeof icon !== "string") throw new Error("Expected a classic SVG marker icon");
+      const svg = decodeURIComponent(icon.slice(icon.indexOf(",") + 1));
+      return new DOMParser().parseFromString(svg, "image/svg+xml");
+    });
+    for (const documentNode of classicDocuments) {
+      expect(Number(documentNode.documentElement.getAttribute("width"))).toBeGreaterThanOrEqual(44);
+      expect(Number(documentNode.documentElement.getAttribute("height"))).toBeGreaterThanOrEqual(44);
+    }
+    expect(classicDocuments[0]?.querySelector("circle")).not.toBeNull();
+    expect(classicDocuments[2]?.querySelector("rect")).not.toBeNull();
+    expect(classicDocuments[3]?.querySelector("path")).not.toBeNull();
+    expect(classicDocuments[3]?.querySelector("path")?.getAttribute("stroke-width")).toBe("5");
 
     FakeClassicMarker.instances[0]?.listeners[0]?.emit();
     expect(onPlaceSelect).toHaveBeenCalledWith(nodeMapOwnerId("museum"));
@@ -1561,7 +1598,12 @@ describe("GoogleMapAdapter lifecycle", () => {
       id: "adversarial-classic-marker-profile",
       marker: (place, index) => ({
         ...googleMapProfile.marker(place, index),
-        fallback: { fill, stroke, text: "" },
+        fallback: {
+          ...googleMapProfile.marker(place, index).fallback,
+          fill,
+          stroke,
+          text: "",
+        },
       }),
     };
     const adapter = createGoogleMapAdapter({ development: false, profile });
@@ -1599,6 +1641,7 @@ describe("GoogleMapAdapter lifecycle", () => {
       marker: (place, index) => ({
         ...googleMapProfile.marker(place, index),
         fallback: {
+          ...googleMapProfile.marker(place, index).fallback,
           fill: "  UrL ( https://attacker.invalid/pattern.svg#p )  ",
           stroke: `#654321\u0000`,
           text: "",
@@ -1628,6 +1671,41 @@ describe("GoogleMapAdapter lifecycle", () => {
     expect(svg).not.toMatch(/url\s*\(/i);
     expect(svg).not.toContain("attacker.invalid");
     expect(svg).not.toContain("\u0000");
+  });
+
+  it("fails closed when unvalidated classic-marker geometry bypasses the profile validator", async () => {
+    const profile: MapVisualProfile = {
+      ...googleMapProfile,
+      id: "unsafe-classic-marker-geometry-profile",
+      marker: (place, index) => ({
+        ...googleMapProfile.marker(place, index),
+        fallback: {
+          ...googleMapProfile.marker(place, index).fallback,
+          size: 1_000_000,
+          shape: "star" as "circle",
+          strokeWidth: -10,
+        },
+      }),
+    };
+    const adapter = createGoogleMapAdapter({ development: false, profile });
+    await adapter.mount(document.createElement("div"), {
+      onPlaceSelect: vi.fn(),
+      onRouteSelect: vi.fn(),
+    });
+
+    adapter.render({ places: presentation.places.slice(0, 1), routes: [] });
+
+    const icon = FakeClassicMarker.instances[0]?.icon;
+    expect(typeof icon).toBe("string");
+    if (typeof icon !== "string") throw new Error("Expected a classic SVG marker icon");
+    const documentNode = new DOMParser().parseFromString(
+      decodeURIComponent(icon.slice(icon.indexOf(",") + 1)),
+      "image/svg+xml",
+    );
+    expect(documentNode.documentElement.getAttribute("width")).toBe("44");
+    expect(documentNode.documentElement.getAttribute("height")).toBe("44");
+    expect(documentNode.querySelectorAll("circle")).toHaveLength(1);
+    expect(documentNode.querySelector("circle")?.getAttribute("stroke-width")).toBe("3");
   });
 
   it("resolves selected, default, recomposed, and uncertain route effects through the profile", async () => {
@@ -1787,7 +1865,7 @@ describe("GoogleMapAdapter lifecycle", () => {
       { north: 25.01, south: 25, east: 121.01, west: 121 },
       { top: 10, right: 20, bottom: 30, left: 40 },
     );
-    expect(FakeAdvancedMarker.instances).toHaveLength(4);
+    expect(FakeAdvancedMarker.instances).toHaveLength(5);
     expect(FakePolyline.instances).toHaveLength(1);
   });
 
@@ -1973,6 +2051,6 @@ describe("GoogleMapAdapter lifecycle", () => {
     adapter.render(presentation);
 
     expect(FakeGoogleMap.instances).toHaveLength(2);
-    expect(FakeAdvancedMarker.instances).toHaveLength(4);
+    expect(FakeAdvancedMarker.instances).toHaveLength(5);
   });
 });

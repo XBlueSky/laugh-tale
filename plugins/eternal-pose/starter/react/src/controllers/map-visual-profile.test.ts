@@ -13,7 +13,14 @@ function markerVisual(label = "Marker"): MapMarkerVisual {
     className: "profile-marker",
     label,
     parts: [{ className: "profile-marker__label", text: label }],
-    fallback: { fill: "#ffffff", stroke: "#111827", text: "1" },
+    fallback: {
+      fill: "#ffffff",
+      stroke: "#111827",
+      text: "1",
+      size: 44,
+      shape: "circle",
+      strokeWidth: 3,
+    },
   };
 }
 
@@ -197,20 +204,43 @@ describe("assertMapVisualProfile", () => {
       "fallback fill",
       () => ({
         ...markerVisual(),
-        fallback: { fill: " ", stroke: "#111827", text: "1" },
+        fallback: { ...markerVisual().fallback, fill: " " },
       }),
     ],
     [
       "fallback stroke",
       () => ({
         ...markerVisual(),
-        fallback: { fill: "#ffffff", stroke: " ", text: "1" },
+        fallback: { ...markerVisual().fallback, stroke: " " },
       }),
     ],
   ] as const)("rejects a blank %s", (expected, visual) => {
     expect(() =>
       assertMapVisualProfile(validProfile({ marker: visual })),
     ).toThrow(new RegExp(expected, "i"));
+  });
+
+  it.each([
+    ["fallback size", { size: 43 }],
+    ["fallback size", { size: Number.NaN }],
+    ["fallback shape", { shape: "star" }],
+    ["fallback stroke width", { strokeWidth: 0 }],
+    ["fallback stroke width", { strokeWidth: Number.POSITIVE_INFINITY }],
+    ["fallback stroke width", { strokeWidth: 23 }],
+  ] as const)("rejects invalid %s geometry", (expected, override) => {
+    const profile = validProfile({
+      marker: () => {
+        const visual = markerVisual();
+        return {
+          ...visual,
+          fallback: { ...visual.fallback, ...override },
+        } as MapMarkerVisual;
+      },
+    });
+
+    expect(() => assertMapVisualProfile(profile)).toThrow(
+      new RegExp(expected, "i"),
+    );
   });
 
   it.each([
@@ -242,6 +272,7 @@ describe("assertMapVisualProfile", () => {
       marker: () => ({
         ...markerVisual(),
         fallback: {
+          ...markerVisual().fallback,
           fill: "burlywood",
           stroke: "rgb(17 24 39 / 80%)",
           text: "1",

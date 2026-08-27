@@ -23,6 +23,7 @@ export function AtlasMapSurface({ map, binding, retry }: AtlasMapSurfaceProps) {
         className="itinerary-map atlas-map-canvas"
         data-testid="itinerary-map"
         data-map-canvas="persistent"
+        data-provider-canvas="bounded"
         data-map-status={map.status}
         role="region"
         aria-label="Trip map"

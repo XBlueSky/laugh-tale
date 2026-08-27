@@ -402,7 +402,29 @@ class E2EVisualMapAdapter implements MapAdapter {
       routeControl.addEventListener("click", () => this.events?.onRouteSelect(route.edgeId));
       routes.append(routeControl);
     }
-    element.replaceChildren(label, places, routes);
+    const providerControl = document.createElement("button");
+    providerControl.type = "button";
+    providerControl.dataset.e2eProviderControl = "true";
+    providerControl.setAttribute("aria-label", "Provider default map control");
+    providerControl.textContent = "+";
+    Object.assign(providerControl.style, {
+      position: "absolute",
+      insetBlockStart: "0",
+      insetInlineEnd: "0",
+      inlineSize: "44px",
+      blockSize: "44px",
+    });
+    const attribution = document.createElement("small");
+    attribution.dataset.e2eProviderAttribution = "true";
+    attribution.textContent = "Provider map attribution";
+    Object.assign(attribution.style, {
+      position: "absolute",
+      insetInlineEnd: "0",
+      insetBlockEnd: "0",
+      background: "Canvas",
+      color: "CanvasText",
+    });
+    element.replaceChildren(label, places, routes, providerControl, attribution);
   }
 }
 

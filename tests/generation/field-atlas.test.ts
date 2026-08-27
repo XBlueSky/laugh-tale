@@ -3,6 +3,7 @@
 import {
   existsSync,
   mkdtempSync,
+  mkdirSync,
   readFileSync,
   readdirSync,
   rmSync,
@@ -81,6 +82,7 @@ const repoRoot = process.cwd();
 const pluginRoot = join(repoRoot, "plugins/eternal-pose");
 const recipeRoot = join(pluginRoot, "recipes-v2/field-atlas");
 const recipePresentationRoot = join(recipeRoot, "presentation");
+mkdirSync(join(repoRoot, "tmp"), { recursive: true });
 const composedParent = mkdtempSync(
   join(repoRoot, "tmp/field-atlas-contract-"),
 );
@@ -241,7 +243,7 @@ function syntheticExperience(
     loadState: routeResults[edge.id],
     selected: index === 1,
     selectionSource: index === 1 ? ("map" as const) : null,
-    ...(index === 1
+    ...(index <= 1
       ? { navigationHref: "https://example.test/directions" }
       : {}),
   }));
@@ -284,7 +286,7 @@ function syntheticExperience(
     },
     viewport: { width: 390, height: 844, safeTop: 0, safeBottom: 0 },
     motion: "full",
-    header: { expanded: true },
+    header: { expanded: true, clearance: 148 },
     location: { status: "active" },
     sheet: {
       snap: "half",
@@ -412,6 +414,10 @@ describe("Field Atlas recipe contract", () => {
       header: { expanded: 148, collapsed: 72 },
       sheet: { collapsed: 128, minGap: 24 },
       desktopBreakpoint: 768,
+      map: {
+        mobileProviderClearance: 176,
+        desktopRailInset: true,
+      },
     });
 
     const profile = profileModule.fieldAtlasMapProfile as MapVisualProfile;
@@ -422,40 +428,52 @@ describe("Field Atlas recipe contract", () => {
       contrast: "high",
       poi: "minimal",
     });
-    const defaultMarker = profile.marker(
-      {
-        ownerId: "node:one",
-        label: "Survey stop",
-        coordinates: { lat: 10, lng: 20 },
-        tone: "default",
-      },
-      0,
-    );
-    const selectedMarker = profile.marker(
-      {
-        ownerId: "node:two",
-        label: "Selected stop",
-        coordinates: { lat: 10.1, lng: 20.1 },
-        tone: "selected",
-      },
-      1,
-    );
-    const completedMarker = profile.marker(
-      {
-        ownerId: "node:three",
-        label: "Completed stop",
-        coordinates: { lat: 10.2, lng: 20.2 },
-        tone: "completed",
-      },
-      2,
-    );
+    const tones = ["default", "candidate", "selected", "completed", "skipped"] as const;
+    const markers = Object.fromEntries(
+      tones.map((tone, index) => [
+        tone,
+        profile.marker(
+          {
+            ownerId: `node:${tone}`,
+            label: `${tone} survey stop`,
+            coordinates: { lat: 10 + index / 10, lng: 20 + index / 10 },
+            tone,
+          },
+          index,
+        ),
+      ]),
+    ) as Record<(typeof tones)[number], ReturnType<MapVisualProfile["marker"]>>;
+    const defaultMarker = markers.default;
+    const selectedMarker = markers.selected;
+    const completedMarker = markers.completed;
     expect(defaultMarker.parts.map(({ className }) => className)).toContain("stop-number");
     expect(selectedMarker.className).not.toBe(defaultMarker.className);
     expect(completedMarker.className).not.toBe(defaultMarker.className);
-    expect(selectedMarker.fallback.stroke).not.toBe(defaultMarker.fallback.stroke);
     expect(completedMarker.parts.map(({ className }) => className)).toContain(
       "atlas-marker__completion",
     );
+    for (const marker of Object.values(markers)) {
+      expect(marker.fallback.size).toBeGreaterThanOrEqual(44);
+      expect(marker.fallback.strokeWidth).toBeGreaterThan(0);
+    }
+    expect([
+      selectedMarker.fallback.shape,
+      selectedMarker.fallback.strokeWidth,
+      selectedMarker.fallback.text,
+    ]).not.toEqual([
+      defaultMarker.fallback.shape,
+      defaultMarker.fallback.strokeWidth,
+      defaultMarker.fallback.text,
+    ]);
+    expect([
+      completedMarker.fallback.shape,
+      completedMarker.fallback.strokeWidth,
+      completedMarker.fallback.text,
+    ]).not.toEqual([
+      defaultMarker.fallback.shape,
+      defaultMarker.fallback.strokeWidth,
+      defaultMarker.fallback.text,
+    ]);
 
     const routeBase = {
       edgeId: "route-one",
@@ -494,6 +512,15 @@ describe("Field Atlas recipe contract", () => {
     expect(cssSource).not.toMatch(/beige|terracotta|parchment|paper/i);
     expect(cssSource).toMatch(/ui-monospace/);
     expect(cssSource).toMatch(/system-ui/);
+    expect(cssSource).toMatch(/gmp-advanced-marker[^}]*min-width:\s*44px/is);
+    expect(cssSource).toMatch(/gmp-advanced-marker[^}]*:focus-visible/is);
+    expect(cssSource).toMatch(/\.atlas-marker\s*\{[^}]*min-width:\s*44px[^}]*min-height:\s*44px/is);
+    expect(cssSource).toMatch(/\.itinerary-map\s*\{[^}]*width:\s*auto[^}]*height:\s*auto/is);
+    expect(cssSource).not.toMatch(/\.atlas-map-surface\s*,\s*\.itinerary-map\s*\{/);
+    expect(cssSource).toMatch(/\.atlas-day-index__primary strong\s*\{[^}]*white-space:\s*normal/is);
+    expect(cssSource).toMatch(/\.atlas-detail-surface__heading strong\s*\{[^}]*white-space:\s*normal/is);
+    expect(cssSource).toMatch(/@media\s*\(max-width:\s*30rem\)[^{]*\{[\s\S]*\.atlas-day-index__primary[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/i);
+    expect(cssSource).toMatch(/@media\s*\(max-width:\s*30rem\)[^{]*\{[\s\S]*\.atlas-detail-surface__heading[\s\S]*grid-column:\s*1\s*\/\s*-1/i);
 
     const allRecipeSource = collectFiles(recipeRoot)
       .filter((path) => !path.endsWith("README.md"))
@@ -655,6 +682,218 @@ describe("Field Atlas recipe contract", () => {
     expect(selectedRoute).toHaveClass("route-band");
     const stopNumbers = experience.querySelectorAll(".stop-number");
     expect(stopNumbers.length).toBeGreaterThan(0);
+  });
+
+  test("keeps route recovery and safe authored navigation in one owner shell", async () => {
+    const presentation = await loadPresentation();
+    const base = syntheticExperience();
+    const route = base.routes[0];
+    if (route === undefined) throw new Error("synthetic route is required");
+    const experienceActions = actions();
+    const loadingModel = syntheticExperience({
+      routes: base.routes.map((entry, index) =>
+        index === 0
+          ? {
+              ...entry,
+              loadState: { status: "loading" as const },
+              navigationHref: "https://example.test/fallback-directions",
+            }
+          : entry,
+      ),
+    });
+    const view = render(
+      createElement(presentation.Experience, {
+        model: loadingModel,
+        actions: experienceActions,
+        bindings: bindings(loadingModel, experienceActions),
+      }),
+    );
+
+    const loadingStatus = view.getByRole("status", { name: "Loading route" });
+    const loadingShell = loadingStatus.closest(".route-band-shell");
+    expect(loadingShell).not.toBeNull();
+    expect(within(loadingShell as HTMLElement).getByRole("button", { name: "Retry route" })).toBeVisible();
+    expect(within(loadingShell as HTMLElement).getByRole("link", { name: /Open live .* directions/ })).toHaveAttribute(
+      "href",
+      "https://example.test/fallback-directions",
+    );
+    fireEvent.click(within(loadingShell as HTMLElement).getByRole("button", { name: "Retry route" }));
+    expect(experienceActions.retryRoute).toHaveBeenCalledWith(route.edge.id);
+
+    const unavailableModel = syntheticExperience();
+    view.rerender(
+      createElement(presentation.Experience, {
+        model: unavailableModel,
+        actions: experienceActions,
+        bindings: bindings(unavailableModel, experienceActions),
+      }),
+    );
+    const unavailableStatus = view.getByRole("status", { name: "Route unavailable" });
+    const unavailableShell = unavailableStatus.closest(".route-band-shell");
+    expect(unavailableShell).not.toBeNull();
+    expect(within(unavailableShell as HTMLElement).getByRole("button", { name: "Retry route" })).toBeVisible();
+    expect(within(unavailableShell as HTMLElement).getByRole("link", { name: /Open live .* directions/ })).toBeVisible();
+
+    const unsafeModel = syntheticExperience({
+      routes: base.routes.map((entry, index) =>
+        index === 0
+          ? { ...entry, navigationHref: "javascript:alert(1)" }
+          : entry,
+      ),
+    });
+    view.rerender(
+      createElement(presentation.Experience, {
+        model: unsafeModel,
+        actions: experienceActions,
+        bindings: bindings(unsafeModel, experienceActions),
+      }),
+    );
+    const unsafeShell = view.getByRole("status", { name: "Route unavailable" }).closest(".route-band-shell");
+    expect(unsafeShell).not.toBeNull();
+    expect(within(unsafeShell as HTMLElement).queryByRole("link")).toBeNull();
+  });
+
+  test("bounds the provider canvas above every mobile sheet snap without remounting it", async () => {
+    const presentation = await loadPresentation();
+    const experienceActions = actions();
+    const base = syntheticExperience();
+    const view = render(
+      createElement(presentation.Experience, {
+        model: base,
+        actions: experienceActions,
+        bindings: bindings(base, experienceActions),
+      }),
+    );
+    const canvas = view.getByTestId("itinerary-map");
+    expect(canvas).toHaveAttribute("data-provider-canvas", "bounded");
+
+    for (const snap of ["collapsed", "half", "expanded"] as const) {
+      const model = syntheticExperience({
+        sheet: { ...base.sheet, snap },
+      });
+      view.rerender(
+        createElement(presentation.Experience, {
+          model,
+          actions: experienceActions,
+          bindings: bindings(model, experienceActions),
+        }),
+      );
+      const shell = view.getByTestId("trip-experience");
+      expect(shell.style.getPropertyValue("--header-clearance")).toBe("148px");
+      expect(shell.style.getPropertyValue("--map-provider-bottom")).toBe(
+        `${model.sheet.geometry[snap] + 8}px`,
+      );
+      expect(view.getByTestId("itinerary-map")).toBe(canvas);
+    }
+  });
+
+  test("scrolls controller-selected owners nearest on selection, return-now, day, and restore without stealing focus", async () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    try {
+      const presentation = await loadPresentation();
+      const experienceActions = actions();
+      const initial = syntheticExperience();
+      const registered = new Map<string, HTMLElement>();
+      const ownerBindings = (model: ExperienceViewModel): ExperienceBindings => ({
+        ...bindings(model, experienceActions),
+        owners: {
+          nodeRef: (nodeId) => (element) => {
+            if (element === null) registered.delete(nodeId);
+            else registered.set(nodeId, element);
+          },
+          routeRef: () => () => undefined,
+        },
+      });
+      const view = render(
+        createElement(presentation.Experience, {
+          model: initial,
+          actions: experienceActions,
+          bindings: ownerBindings(initial),
+        }),
+      );
+      const home = view.getByRole("button", { name: "回到旅行首頁" });
+      home.focus();
+      scrollIntoView.mockClear();
+
+      const nowNodeId = initial.live.currentNodeId;
+      if (nowNodeId === null) throw new Error("synthetic current node is required");
+      const returnedNow = syntheticExperience({
+        selection: { nodeId: nowNodeId, source: "automatic" },
+      });
+      view.rerender(
+        createElement(presentation.Experience, {
+          model: returnedNow,
+          actions: experienceActions,
+          bindings: ownerBindings(returnedNow),
+        }),
+      );
+      expect(scrollIntoView).toHaveBeenLastCalledWith({ block: "nearest" });
+      expect(scrollIntoView.mock.contexts.at(-1)).toBe(registered.get(nowNodeId));
+      expect(document.activeElement).toBe(home);
+
+      const changedEffectiveDay = {
+        ...initial.effectiveDay,
+        day: { ...initial.effectiveDay.day, id: "day-restored-selection" },
+      };
+      const dayNodeId = changedEffectiveDay.nodes[0]?.sourceNodeId;
+      if (dayNodeId === undefined) {
+        throw new Error("synthetic second day owner is required");
+      }
+      scrollIntoView.mockClear();
+      const changedDay = syntheticExperience({
+        effectiveDay: changedEffectiveDay,
+        live: { currentNodeId: dayNodeId, nextNodeId: null },
+        selection: { nodeId: dayNodeId, source: "manual" },
+      });
+      view.rerender(
+        createElement(presentation.Experience, {
+          model: changedDay,
+          actions: experienceActions,
+          bindings: ownerBindings(changedDay),
+        }),
+      );
+      expect(scrollIntoView).toHaveBeenLastCalledWith({ block: "nearest" });
+      expect(scrollIntoView.mock.contexts.at(-1)).toBe(registered.get(dayNodeId));
+      expect(document.activeElement).toBe(home);
+
+      const collapsed = syntheticExperience({
+        effectiveDay: changedDay.effectiveDay,
+        live: changedDay.live,
+        selection: changedDay.selection,
+        sheet: { ...changedDay.sheet, snap: "collapsed" },
+      });
+      view.rerender(
+        createElement(presentation.Experience, {
+          model: collapsed,
+          actions: experienceActions,
+          bindings: ownerBindings(collapsed),
+        }),
+      );
+      expect(registered.has(dayNodeId)).toBe(false);
+      scrollIntoView.mockClear();
+      const restored = syntheticExperience({
+        effectiveDay: changedDay.effectiveDay,
+        live: changedDay.live,
+        selection: changedDay.selection,
+        sheet: { ...changedDay.sheet, snap: "expanded" },
+      });
+      view.rerender(
+        createElement(presentation.Experience, {
+          model: restored,
+          actions: experienceActions,
+          bindings: ownerBindings(restored),
+        }),
+      );
+      expect(scrollIntoView).toHaveBeenLastCalledWith({ block: "nearest" });
+      expect(scrollIntoView.mock.contexts.at(-1)).toBe(registered.get(dayNodeId));
+      expect(document.activeElement).toBe(home);
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+    }
   });
 
   test("renders map failure, setup, loading, and fatal recovery states", async () => {

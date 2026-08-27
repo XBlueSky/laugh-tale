@@ -21,8 +21,7 @@
   pointer-events: none;
 }
 
-.atlas-map-surface,
-.itinerary-map {
+.atlas-map-surface {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -34,6 +33,19 @@
   min-width: 0;
   overflow: hidden;
   background: var(--atlas-surface-deep);
+}
+
+.itinerary-map {
+  position: absolute;
+  z-index: 1;
+  top: calc(var(--header-clearance) + 56px);
+  right: 0;
+  bottom: var(--map-provider-bottom);
+  left: 0;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
 }
 
 .atlas-map-grid {
@@ -213,9 +225,13 @@
 }
 
 @media (min-width: 768px) {
-  .atlas-map-surface {
+  .itinerary-map {
+    top: 0;
     right: min(24rem, 31vw);
+    bottom: 0;
     left: min(15rem, 22vw);
+    width: auto;
+    height: auto;
   }
 
   .day-header {
@@ -237,8 +253,10 @@
   }
 
   .atlas-map-controls {
-    top: var(--atlas-space-3);
-    right: calc(min(24rem, 31vw) + var(--atlas-space-3));
+    top: auto;
+    right: auto;
+    bottom: var(--atlas-space-3);
+    left: var(--atlas-space-3);
   }
 
   .atlas-legend {

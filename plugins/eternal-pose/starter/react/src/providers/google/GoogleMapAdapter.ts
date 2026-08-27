@@ -70,7 +70,33 @@ function classicMarkerIcon(visual: MapMarkerVisual): string {
   const stroke = escapeXmlAttribute(
     resolveMapFallbackPaint(visual.fallback.stroke) ?? SAFE_MAP_FALLBACK_PAINT,
   );
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="${fill}" stroke="${stroke}" stroke-width="3"/></svg>`;
+  const requestedSize = visual.fallback.size;
+  const size =
+    Number.isFinite(requestedSize) && requestedSize >= 44 && requestedSize <= 96
+      ? requestedSize
+      : 44;
+  const requestedStrokeWidth = visual.fallback.strokeWidth;
+  const strokeWidth =
+    Number.isFinite(requestedStrokeWidth) &&
+    requestedStrokeWidth > 0 &&
+    requestedStrokeWidth <= size / 2
+      ? requestedStrokeWidth
+      : 3;
+  const shape = (["circle", "square", "diamond"] as const).includes(
+    visual.fallback.shape,
+  )
+    ? visual.fallback.shape
+    : "circle";
+  const center = size / 2;
+  const inset = strokeWidth / 2 + 1;
+  const extent = size - inset;
+  const geometry =
+    shape === "square"
+      ? `<rect x="${inset}" y="${inset}" width="${size - inset * 2}" height="${size - inset * 2}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/>`
+      : shape === "diamond"
+        ? `<path d="M ${center} ${inset} L ${extent} ${center} L ${center} ${extent} L ${inset} ${center} Z" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/>`
+        : `<circle cx="${center}" cy="${center}" r="${center - inset}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${geometry}</svg>`;
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 

@@ -15,6 +15,10 @@ export const presentation = {
     header: { expanded: 148, collapsed: 72 },
     sheet: { collapsed: 128, minGap: 24 },
     desktopBreakpoint: 768,
+    map: {
+      mobileProviderClearance: 176,
+      desktopRailInset: true,
+    },
   },
   mapProfile: fieldAtlasMapProfile,
 } satisfies TripPresentation;

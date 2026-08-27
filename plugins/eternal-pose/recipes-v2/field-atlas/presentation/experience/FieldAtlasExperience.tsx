@@ -46,12 +46,11 @@ export function FieldAtlasExperience({
   actions,
   bindings,
 }: ExperienceViewProps) {
-  const headerClearance = Math.max(
-    model.viewport.safeTop,
-    model.viewport.height - model.sheet.geometry.ceiling - model.viewport.safeBottom,
-  );
+  const headerClearance = model.header.clearance;
   const mapPaddingBottom =
     model.sheet.geometry[model.sheet.snap] + model.viewport.safeBottom + 16;
+  const mapProviderBottom =
+    model.sheet.geometry[model.sheet.snap] + model.viewport.safeBottom + 8;
   const completedIds = new Set(model.progress.completedIds);
   const shellStyle = {
     "--safe-area-top": `${model.viewport.safeTop}px`,
@@ -60,6 +59,7 @@ export function FieldAtlasExperience({
     "--sheet-ceiling": `${model.sheet.geometry.ceiling}px`,
     "--map-padding-top": `${headerClearance}px`,
     "--map-padding-bottom": `${mapPaddingBottom}px`,
+    "--map-provider-bottom": `${mapProviderBottom}px`,
     "--atlas-state-duration": model.motion === "reduced" ? "0ms" : "180ms",
     maxInlineSize: "100vw",
     overflowX: "hidden",
@@ -89,6 +89,7 @@ export function FieldAtlasExperience({
         data-header-expanded={model.header.expanded ? "true" : "false"}
         data-motion={model.motion}
         data-viewport-width={String(model.viewport.width)}
+        data-map-chrome-layout="bounded"
         style={shellStyle}
       >
         <div className="safe-area-probe" aria-hidden="true" />

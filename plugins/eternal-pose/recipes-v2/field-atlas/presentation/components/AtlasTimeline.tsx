@@ -1,4 +1,12 @@
-import { useId, useState, type ReactNode, type RefCallback } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefCallback,
+} from "react";
 
 import {
   buildTimelineEntries,
@@ -221,6 +229,7 @@ function AtlasStop({
   date,
   progress,
   controlRef,
+  registerLocalOwner,
   onSelect,
 }: {
   effective: EffectiveNode;
@@ -232,6 +241,7 @@ function AtlasStop({
   date: string;
   progress: ExperienceViewModel["progress"];
   controlRef: RefCallback<HTMLElement>;
+  registerLocalOwner: (nodeId: string, element: HTMLElement | null) => void;
   onSelect: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -245,6 +255,13 @@ function AtlasStop({
       value.startsWith("checklist:") ? [value.slice("checklist:".length)] : [],
     ),
   );
+  const composedControlRef = useCallback(
+    (element: HTMLElement | null) => {
+      registerLocalOwner(effective.sourceNodeId, element);
+      controlRef(element);
+    },
+    [controlRef, effective.sourceNodeId, registerLocalOwner],
+  );
 
   return (
     <article
@@ -255,7 +272,7 @@ function AtlasStop({
       data-completed={effective.completed ? "true" : "false"}
     >
       <button
-        ref={controlRef}
+        ref={composedControlRef}
         type="button"
         className="atlas-stop__owner"
         aria-label={accessibleOwnerName(effective.node, date)}
@@ -374,31 +391,60 @@ function AtlasRouteBand({
   const canDisclose = validReady && route.edge.mode === "transit" && ready.steps.length > 0;
   const navigationHref = safeNavigationHref(model?.navigationHref, route);
 
-  if (state?.status === "loading") {
-    return (
-      <div ref={controlRef} className="route-band" role="status" aria-label="Loading route" data-route-owner={route.edge.id} data-state="loading" data-display={route.display}>
-        <span className="atlas-key">ROUTE</span><span>Loading route</span>
-      </div>
-    );
-  }
-  if (state?.status === "unavailable") {
-    return (
-      <div ref={controlRef} className="route-band" role="status" aria-label="Route unavailable" data-route-owner={route.edge.id} data-state="error" data-display={route.display}>
-        <span className="atlas-key">ROUTE</span>
-        <span>{summary}</span>
-        <span className="route-band__error">{state.reason.trim().length > 0 ? state.reason : "Route provider unavailable"}</span>
-        <button type="button" aria-label="Retry route" data-touch-target="44" onClick={() => onRetry(route.edge.id)}>Retry</button>
-      </div>
-    );
-  }
-
   return (
     <section
       className="route-band-shell"
       data-route-certainty={route.edge.certainty}
       data-route-source={route.edge.source}
     >
-      {validReady ? (
+      {state?.status === "loading" ? (
+        <div
+          ref={controlRef}
+          className="route-band"
+          role="status"
+          aria-label="Loading route"
+          data-route-owner={route.edge.id}
+          data-state="loading"
+          data-display={route.display}
+        >
+          <span className="atlas-key">ROUTE</span>
+          <span>Loading route</span>
+          <button
+            type="button"
+            aria-label="Retry route"
+            data-touch-target="44"
+            onClick={() => onRetry(route.edge.id)}
+          >
+            Retry
+          </button>
+        </div>
+      ) : state?.status === "unavailable" ? (
+        <div
+          ref={controlRef}
+          className="route-band"
+          role="status"
+          aria-label="Route unavailable"
+          data-route-owner={route.edge.id}
+          data-state="error"
+          data-display={route.display}
+        >
+          <span className="atlas-key">ROUTE</span>
+          <span>{summary}</span>
+          <span className="route-band__error">
+            {state.reason.trim().length > 0
+              ? state.reason
+              : "Route provider unavailable"}
+          </span>
+          <button
+            type="button"
+            aria-label="Retry route"
+            data-touch-target="44"
+            onClick={() => onRetry(route.edge.id)}
+          >
+            Retry
+          </button>
+        </div>
+      ) : validReady ? (
         <button
           ref={controlRef}
           type="button"
@@ -421,7 +467,7 @@ function AtlasRouteBand({
           <span>{expanded && canDisclose ? "Transit details" : summary}</span>
         </button>
       ) : (
-        <div className="route-band" data-route-owner={route.edge.id} data-display={route.display}>
+        <div ref={controlRef} className="route-band" data-route-owner={route.edge.id} data-display={route.display}>
           <span className="atlas-key">{route.edge.mode.slice(0, 3).toUpperCase()}</span>
           <span>{summary}</span>
         </div>
@@ -462,6 +508,25 @@ export function AtlasTimeline({
   actions: ExperienceActions;
   bindings: ExperienceBindings;
 }) {
+  const nodeElementsRef = useRef(new Map<string, HTMLElement>());
+  const registerLocalOwner = useCallback(
+    (nodeId: string, element: HTMLElement | null) => {
+      if (element === null) nodeElementsRef.current.delete(nodeId);
+      else nodeElementsRef.current.set(nodeId, element);
+    },
+    [],
+  );
+  useEffect(() => {
+    if (model.selection.nodeId === null) return;
+    nodeElementsRef.current
+      .get(model.selection.nodeId)
+      ?.scrollIntoView?.({ block: "nearest" });
+  }, [
+    model.effectiveDay.day.id,
+    model.selection.nodeId,
+    model.selection.source,
+    model.sheet.snap,
+  ]);
   const routesById = new Map(model.routes.map((route) => [route.edge.id, route]));
   const effectiveById = new Map(
     model.effectiveDay.nodes.map((node) => [node.sourceNodeId, node]),
@@ -497,6 +562,7 @@ export function AtlasTimeline({
         date={model.effectiveDay.day.date}
         progress={model.progress}
         controlRef={bindings.owners.nodeRef(sourceNodeId)}
+        registerLocalOwner={registerLocalOwner}
         onSelect={() => actions.selectNode(sourceNodeId)}
       />
     );

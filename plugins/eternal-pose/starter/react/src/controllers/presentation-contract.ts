@@ -67,6 +67,10 @@ export interface PresentationGeometry {
   header: { expanded: number; collapsed: number };
   sheet: { collapsed: number; minGap: number };
   desktopBreakpoint: number;
+  map?: {
+    mobileProviderClearance: number;
+    desktopRailInset: boolean;
+  };
 }
 
 export interface MapMarkerPart {
@@ -79,7 +83,14 @@ export interface MapMarkerVisual {
   className: string;
   label: string;
   parts: readonly MapMarkerPart[];
-  fallback: { fill: string; stroke: string; text: string };
+  fallback: {
+    fill: string;
+    stroke: string;
+    text: string;
+    size: number;
+    shape: "circle" | "square" | "diamond";
+    strokeWidth: number;
+  };
 }
 
 export interface MapRouteVisual {
@@ -140,7 +151,7 @@ export interface ExperienceViewModel {
   map: { presentation: MapPresentation; status: "mounting" | "ready" | "error" };
   viewport: { width: number; height: number; safeTop: number; safeBottom: number };
   motion: "full" | "reduced";
-  header: { expanded: boolean };
+  header: { expanded: boolean; clearance: number };
   location: { status: UserLocationStatus };
   sheet: { snap: SheetSnap; geometry: SheetGeometry };
   candidate: CandidateViewModel | null;

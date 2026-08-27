@@ -63,14 +63,14 @@ const mapProfile: MapVisualProfile = {
     className: `marker-${index}`,
     label: place.label,
     parts: [{ className: "marker-label", text: place.label }],
-    fallback: { fill: "#fff", stroke: "#000", text: String(index + 1) },
+    fallback: { fill: "#fff", stroke: "#000", text: String(index + 1), size: 44, shape: "circle", strokeWidth: 3 },
   }),
   userLocation: () => ({
     title: "location",
     className: "location",
     label: "location",
     parts: [],
-    fallback: { fill: "#000", stroke: "#fff", text: "" },
+    fallback: { fill: "#000", stroke: "#fff", text: "", size: 44, shape: "circle", strokeWidth: 3 },
   }),
   route: () => ({ stroke: "#000", opacity: 1, width: 2 }),
 };
@@ -371,7 +371,7 @@ describe("useTripExperienceController", () => {
     expect(view.current().model.routes[0]?.navigationHref).toBe(
       "https://example.test/Synthetic museum entrance/Synthetic dinner hall/transit",
     );
-    expect(view.current().model.header).toEqual({ expanded: true });
+    expect(view.current().model.header).toEqual({ expanded: true, clearance: 148 });
   });
 
   it("keeps one map mounted while list/map selection and day changes stay bidirectional", async () => {
@@ -615,6 +615,13 @@ describe("useTripExperienceController", () => {
     const view = setup({ adapter });
     await waitFor(() => expect(view.current().model.viewport.safeBottom).toBe(34));
     expect(view.current().model.sheet.geometry.ceiling).toBe(318);
+    expect(view.current().model.header.clearance).toBe(148);
+    expect(adapter.paddingCalls.at(-1)).toEqual({
+      top: 148,
+      right: 16,
+      bottom: 219,
+      left: 16,
+    });
 
     act(() => view.current().actions.setHeaderExpanded(false));
     expect(view.current().model.header.expanded).toBe(false);
@@ -635,11 +642,77 @@ describe("useTripExperienceController", () => {
     expect(adapter.mountCalls).toHaveLength(1);
   });
 
+  it("opts bounded provider canvases into real mobile chrome clearance and desktop rail padding", async () => {
+    const boundedGeometry: PresentationGeometry = {
+      ...geometry,
+      map: {
+        mobileProviderClearance: 176,
+        desktopRailInset: true,
+      },
+    };
+    const adapter = new FakeMapAdapter();
+    const view = setup({
+      adapter,
+      presentation: { geometry: boundedGeometry, mapProfile },
+    });
+
+    await waitFor(() => expect(view.current().model.map.status).toBe("ready"));
+    expect(view.current().model.header).toEqual({ expanded: true, clearance: 148 });
+    expect(view.current().model.sheet.geometry).toEqual({
+      collapsed: 128,
+      half: 176,
+      expanded: 176,
+      ceiling: 176,
+    });
+    expect(adapter.paddingCalls.at(-1)).toEqual({
+      top: 16,
+      right: 16,
+      bottom: 16,
+      left: 16,
+    });
+    for (const snap of ["collapsed", "half", "expanded"] as const) {
+      act(() => view.current().actions.setSheetSnap(snap));
+      await waitFor(() =>
+        expect(adapter.paddingCalls.at(-1)).toEqual({
+          top: 16,
+          right: 16,
+          bottom: 16,
+          left: 16,
+        }),
+      );
+    }
+
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1024 });
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+    await waitFor(() => expect(view.current().model.viewport.width).toBe(1024));
+    expect(view.current().model.sheet.geometry.ceiling).toBe(352);
+    expect(adapter.paddingCalls.at(-1)).toEqual({
+      top: 16,
+      right: 16,
+      bottom: 16,
+      left: 16,
+    });
+    expect(adapter.mountCalls).toHaveLength(1);
+  });
+
   it("rejects negative or non-finite presentation geometry", () => {
     const invalid = {
       ...geometry,
       header: { expanded: Number.NaN, collapsed: -1 },
     };
+    expect(() =>
+      setup({ presentation: { geometry: invalid, mapProfile } }),
+    ).toThrow(/presentation geometry/i);
+  });
+
+  it.each([
+    { mobileProviderClearance: -1, desktopRailInset: true },
+    { mobileProviderClearance: Number.NaN, desktopRailInset: true },
+    { mobileProviderClearance: 112, desktopRailInset: "yes" },
+  ])("rejects invalid bounded provider canvas geometry %#", (map) => {
+    const invalid = { ...geometry, map } as PresentationGeometry;
     expect(() =>
       setup({ presentation: { geometry: invalid, mapProfile } }),
     ).toThrow(/presentation geometry/i);

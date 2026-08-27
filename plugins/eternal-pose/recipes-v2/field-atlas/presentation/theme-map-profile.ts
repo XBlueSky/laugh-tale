@@ -46,12 +46,49 @@ export const fieldAtlasMapProfile = {
       ],
       fallback:
         tone === "selected"
-          ? { fill: "#2457c5", stroke: "#17212b", text: number }
+          ? {
+              fill: "#2457c5",
+              stroke: "#17212b",
+              text: `S${number}`,
+              size: 48,
+              shape: "square",
+              strokeWidth: 5,
+            }
           : tone === "completed"
-            ? { fill: "#e5ebef", stroke: "#2457c5", text: number }
+            ? {
+                fill: "#e5ebef",
+                stroke: "#2457c5",
+                text: `✓${number}`,
+                size: 44,
+                shape: "diamond",
+                strokeWidth: 5,
+              }
             : tone === "skipped"
-              ? { fill: "#c2ccd3", stroke: "#3f4e59", text: number }
-              : { fill: "#f4f7f9", stroke: "#263541", text: number },
+              ? {
+                  fill: "#c2ccd3",
+                  stroke: "#3f4e59",
+                  text: `×${number}`,
+                  size: 44,
+                  shape: "circle",
+                  strokeWidth: 5,
+                }
+              : tone === "candidate"
+                ? {
+                    fill: "#f4f7f9",
+                    stroke: "#263541",
+                    text: `C${number}`,
+                    size: 44,
+                    shape: "square",
+                    strokeWidth: 3,
+                  }
+                : {
+                    fill: "#f4f7f9",
+                    stroke: "#263541",
+                    text: number,
+                    size: 44,
+                    shape: "circle",
+                    strokeWidth: 3,
+                  },
     };
   },
   userLocation: () => ({
@@ -62,7 +99,14 @@ export const fieldAtlasMapProfile = {
       { className: "atlas-marker__crosshair", text: "+" },
       { className: "atlas-marker__key", text: "LOC" },
     ],
-    fallback: { fill: "#2457c5", stroke: "#f4f7f9", text: "+" },
+    fallback: {
+      fill: "#2457c5",
+      stroke: "#f4f7f9",
+      text: "+",
+      size: 44,
+      shape: "circle",
+      strokeWidth: 3,
+    },
   }),
   route: (route) => {
     const uncertain =

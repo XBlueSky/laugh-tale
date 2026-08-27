@@ -140,6 +140,16 @@ function assertPresentationGeometry(geometry: PresentationGeometry): void {
   if (values.some((value) => !Number.isFinite(value) || value < 0)) {
     throw new Error("Presentation geometry must contain finite non-negative values.");
   }
+  if (
+    geometry.map !== undefined &&
+    (geometry.map === null ||
+      typeof geometry.map !== "object" ||
+      !Number.isFinite(geometry.map.mobileProviderClearance) ||
+      geometry.map.mobileProviderClearance < 0 ||
+      typeof geometry.map.desktopRailInset !== "boolean")
+  ) {
+    throw new Error("Presentation geometry map bounds must be finite and explicit.");
+  }
 }
 
 function dayForNode(trip: Trip, nodeId: string | null): string | undefined {
@@ -654,12 +664,20 @@ export function useTripExperienceController({
     (headerExpanded
       ? presentationContract.geometry.header.expanded
       : presentationContract.geometry.header.collapsed) + viewport.safeTop;
+  const mobileProviderClearance =
+    viewport.width < presentationContract.geometry.desktopBreakpoint
+      ? (presentationContract.geometry.map?.mobileProviderClearance ?? 0)
+      : 0;
+  const desktopRailInset =
+    viewport.width >= presentationContract.geometry.desktopBreakpoint &&
+    (presentationContract.geometry.map?.desktopRailInset ?? false);
   const maximumHeaderClearance = Math.max(
     viewport.safeTop,
     viewport.height -
       viewport.safeBottom -
       presentationContract.geometry.sheet.collapsed -
-      presentationContract.geometry.sheet.minGap,
+      presentationContract.geometry.sheet.minGap -
+      mobileProviderClearance,
   );
   const headerClearance = Math.min(
     requestedHeaderClearance,
@@ -667,19 +685,34 @@ export function useTripExperienceController({
   );
   const sheetGeometry = resolveSheetGeometry({
     viewportHeight: viewport.height,
-    topClearance: headerClearance,
+    topClearance: headerClearance + mobileProviderClearance,
     safeBottom: viewport.safeBottom,
     collapsedHeight: presentationContract.geometry.sheet.collapsed,
   });
   const mapPadding = useMemo<MapPadding>(
-    () => ({
-      top: headerClearance,
-      right: MAP_EDGE_PADDING,
-      bottom:
-        sheetGeometry[sheetSnap] + viewport.safeBottom + MAP_EDGE_PADDING,
-      left: MAP_EDGE_PADDING,
-    }),
-    [headerClearance, sheetGeometry, sheetSnap, viewport.safeBottom],
+    () =>
+      mobileProviderClearance > 0 || desktopRailInset
+        ? {
+            top: MAP_EDGE_PADDING,
+            right: MAP_EDGE_PADDING,
+            bottom: MAP_EDGE_PADDING,
+            left: MAP_EDGE_PADDING,
+          }
+        : {
+            top: headerClearance,
+            right: MAP_EDGE_PADDING,
+            bottom:
+              sheetGeometry[sheetSnap] + viewport.safeBottom + MAP_EDGE_PADDING,
+            left: MAP_EDGE_PADDING,
+          },
+    [
+      desktopRailInset,
+      headerClearance,
+      mobileProviderClearance,
+      sheetGeometry,
+      sheetSnap,
+      viewport.safeBottom,
+    ],
   );
   const sheet = useItinerarySheet({
     snap: sheetSnap,
@@ -1038,7 +1071,7 @@ export function useTripExperienceController({
       map: { presentation: mapPresentation, status: mapLifecycle.status },
       viewport,
       motion: reducedMotion ? ("reduced" as const) : ("full" as const),
-      header: { expanded: headerExpanded },
+      header: { expanded: headerExpanded, clearance: headerClearance },
       location: { status: userLocation.status },
       sheet: { snap: sheetSnap, geometry: sheetGeometry },
       candidate:
@@ -1068,6 +1101,7 @@ export function useTripExperienceController({
     [
       candidateDecision,
       candidateSequenceNumber,
+      headerClearance,
       headerExpanded,
       liveState.currentId,
       liveState.nextId,

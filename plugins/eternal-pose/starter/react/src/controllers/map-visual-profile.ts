@@ -138,6 +138,31 @@ function assertMarkerVisual(visual: MapMarkerVisual, label: string): void {
   if (typeof visual.fallback.text !== "string") {
     throw new Error(`Map visual profile ${label} fallback text must be a string`);
   }
+  if (
+    typeof visual.fallback.size !== "number" ||
+    !Number.isFinite(visual.fallback.size) ||
+    visual.fallback.size < 44 ||
+    visual.fallback.size > 96
+  ) {
+    throw new Error(
+      `Map visual profile ${label} fallback size must be finite and within [44,96]`,
+    );
+  }
+  if (!(["circle", "square", "diamond"] as const).includes(visual.fallback.shape)) {
+    throw new Error(
+      `Map visual profile ${label} fallback shape must be circle, square, or diamond`,
+    );
+  }
+  if (
+    typeof visual.fallback.strokeWidth !== "number" ||
+    !Number.isFinite(visual.fallback.strokeWidth) ||
+    visual.fallback.strokeWidth <= 0 ||
+    visual.fallback.strokeWidth > visual.fallback.size / 2
+  ) {
+    throw new Error(
+      `Map visual profile ${label} fallback stroke width must be finite and fit the marker`,
+    );
+  }
 }
 
 function assertRouteVisual(visual: MapRouteVisual, label: string): void {

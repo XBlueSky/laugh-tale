@@ -106,6 +106,56 @@ async function openTrip(page: Page): Promise<void> {
   await expect(page.locator("[data-route-id]").first()).toBeVisible();
 }
 
+async function expectBoundedProviderChrome(page: Page): Promise<void> {
+  const bounded = await page
+    .getByTestId("trip-experience")
+    .getAttribute("data-map-chrome-layout");
+  if (bounded !== "bounded") return;
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const map = document.querySelector<HTMLElement>("[data-provider-canvas='bounded']")!;
+        const header = document.querySelector<HTMLElement>(".day-header")!;
+        const sheet = document.querySelector<HTMLElement>(".itinerary-sheet")!;
+        const control = map.querySelector<HTMLElement>("[data-e2e-provider-control]")!;
+        const attribution = map.querySelector<HTMLElement>("[data-e2e-provider-attribution]")!;
+        const mapRect = map.getBoundingClientRect();
+        const headerRect = header.getBoundingClientRect();
+        const sheetRect = sheet.getBoundingClientRect();
+        const controlRect = control.getBoundingClientRect();
+        const attributionRect = attribution.getBoundingClientRect();
+        const controlHit = document
+          .elementFromPoint(
+            controlRect.left + controlRect.width / 2,
+            controlRect.top + controlRect.height / 2,
+          )
+          ?.closest("[data-e2e-provider-control]");
+        return {
+          clearsHeader: mapRect.top >= headerRect.bottom,
+          clearsSheet: mapRect.bottom <= sheetRect.top - 7,
+          controlContained:
+            controlRect.left >= mapRect.left &&
+            controlRect.right <= mapRect.right &&
+            controlRect.top >= mapRect.top &&
+            controlRect.bottom <= mapRect.bottom,
+          attributionContained:
+            attributionRect.left >= mapRect.left &&
+            attributionRect.right <= mapRect.right &&
+            attributionRect.top >= mapRect.top &&
+            attributionRect.bottom <= mapRect.bottom,
+          controlOperable: controlHit === control,
+        };
+      }),
+    )
+    .toEqual({
+      clearsHeader: true,
+      clearsSheet: true,
+      controlContained: true,
+      attributionContained: true,
+      controlOperable: true,
+    });
+}
+
 async function visibleInteractiveTargetFailures(page: Page): Promise<Array<{
   name: string;
   width: number;
@@ -209,6 +259,7 @@ test("keeps the persistent map and interruptible three-snap sheet inside every m
   await expect(map).toBeVisible();
   await expect(map.getByText("Deterministic test map · E2E only")).toBeVisible();
   await expect(sheet).toHaveAttribute("data-snap", "half");
+  await expectBoundedProviderChrome(page);
   expect(await page.evaluate(() => ({
     document: document.documentElement.scrollWidth <= window.innerWidth,
     body: document.body.scrollWidth <= window.innerWidth,
@@ -219,8 +270,10 @@ test("keeps the persistent map and interruptible three-snap sheet inside every m
   expect(handleBox?.height).toBeGreaterThanOrEqual(44);
   await handle.press("Home");
   await expect(sheet).toHaveAttribute("data-snap", "collapsed");
+  await expectBoundedProviderChrome(page);
   await handle.press("End");
   await expect(sheet).toHaveAttribute("data-snap", "expanded");
+  await expectBoundedProviderChrome(page);
 
   await handle.hover();
   const dragBox = await handle.boundingBox();
@@ -277,9 +330,14 @@ test("proves asymmetric safe areas, clock advancement, route retry, and persiste
     top: number;
     bottom: number;
   };
-  expect(padding.top).toBeGreaterThan(13);
-  expect(padding.bottom).toBeGreaterThan(29);
-  expect(padding.top).not.toBe(padding.bottom);
+  if ((await experience.getAttribute("data-map-chrome-layout")) === "bounded") {
+    expect(padding).toEqual({ top: 16, right: 16, bottom: 16, left: 16 });
+    await expectBoundedProviderChrome(page);
+  } else {
+    expect(padding.top).toBeGreaterThan(13);
+    expect(padding.bottom).toBeGreaterThan(29);
+    expect(padding.top).not.toBe(padding.bottom);
+  }
 
   const unavailable = page.locator(
     '[data-route-owner="route-shopping-hotel"][data-state="error"]',
