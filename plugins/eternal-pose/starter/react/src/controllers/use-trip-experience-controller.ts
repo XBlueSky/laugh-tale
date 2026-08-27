@@ -96,12 +96,26 @@ type OwnerKind = "node" | "route";
 interface PendingOwnerFocus {
   kind: OwnerKind;
   id: string;
+  ownershipKey: string;
+}
+
+interface OwnerRefRegistration {
+  ownershipKey: string;
+  callback: RefCallback<HTMLElement>;
 }
 
 interface CandidateInteractionState {
   override: CandidateMapOverride | null;
   previewRequest?: CandidatePreviewRequest;
   fitIntent: number;
+}
+
+function ownerSelectionKey(
+  dayId: string,
+  source: "automatic" | "manual",
+  nodeId: string | null,
+): string {
+  return JSON.stringify([dayId, source, nodeId]);
 }
 
 function systemClock(): string {
@@ -279,18 +293,18 @@ function useExperienceRoutes(
   );
 }
 
-function useOwnerBindings(): {
+function useOwnerBindings(ownershipKey: string): {
   bindings: ExperienceBindings["owners"];
-  focus(kind: OwnerKind, id: string): void;
+  focus(kind: OwnerKind, id: string, nextOwnershipKey?: string): void;
   cancelPendingFocus(): void;
 } {
   const nodeElementsRef = useRef(new Map<string, HTMLElement>());
   const routeElementsRef = useRef(new Map<string, HTMLElement>());
   const nodeCallbacksRef = useRef(
-    new Map<string, RefCallback<HTMLElement>>(),
+    new Map<string, OwnerRefRegistration>(),
   );
   const routeCallbacksRef = useRef(
-    new Map<string, RefCallback<HTMLElement>>(),
+    new Map<string, OwnerRefRegistration>(),
   );
   const pendingRef = useRef<PendingOwnerFocus | null>(null);
 
@@ -310,10 +324,10 @@ function useOwnerBindings(): {
       kind: OwnerKind,
       id: string,
       elements: MutableRefObject<Map<string, HTMLElement>>,
-      callbacks: MutableRefObject<Map<string, RefCallback<HTMLElement>>>,
+      callbacks: MutableRefObject<Map<string, OwnerRefRegistration>>,
     ): RefCallback<HTMLElement> => {
       const existing = callbacks.current.get(id);
-      if (existing !== undefined) return existing;
+      if (existing?.ownershipKey === ownershipKey) return existing.callback;
       const callback: RefCallback<HTMLElement> = (element) => {
         if (element === null) {
           elements.current.delete(id);
@@ -322,13 +336,17 @@ function useOwnerBindings(): {
         elements.current.set(id, element);
         const pending = pendingRef.current;
         if (pending?.kind === kind && pending.id === id) {
-          focusElement(kind, id, element);
+          if (pending.ownershipKey === ownershipKey) {
+            focusElement(kind, id, element);
+          } else {
+            pendingRef.current = null;
+          }
         }
       };
-      callbacks.current.set(id, callback);
+      callbacks.current.set(id, { ownershipKey, callback });
       return callback;
     },
-    [focusElement],
+    [focusElement, ownershipKey],
   );
 
   const nodeRef = useCallback(
@@ -342,17 +360,22 @@ function useOwnerBindings(): {
     [callbackFor],
   );
   const focus = useCallback(
-    (kind: OwnerKind, id: string): void => {
+    (kind: OwnerKind, id: string, nextOwnershipKey = ownershipKey): void => {
       const elements = kind === "node" ? nodeElementsRef.current : routeElementsRef.current;
       if (!focusElement(kind, id, elements.get(id))) {
-        pendingRef.current = { kind, id };
+        pendingRef.current = { kind, id, ownershipKey: nextOwnershipKey };
       }
     },
-    [focusElement],
+    [focusElement, ownershipKey],
   );
   const cancelPendingFocus = useCallback((): void => {
     pendingRef.current = null;
   }, []);
+  useEffect(() => {
+    if (pendingRef.current?.ownershipKey !== ownershipKey) {
+      pendingRef.current = null;
+    }
+  }, [ownershipKey]);
 
   const bindings = useMemo(() => ({ nodeRef, routeRef }), [nodeRef, routeRef]);
   return useMemo(
@@ -667,7 +690,13 @@ export function useTripExperienceController({
   const cameraIntent = dayCameraIntent + candidateInteraction.fitIntent;
   const pendingMapFocusRef = useRef<PendingMapFocus | null>(null);
   const renderedMapRef = useRef<RenderedMapState | null>(null);
-  const ownerBindings = useOwnerBindings();
+  const ownerBindings = useOwnerBindings(
+    ownerSelectionKey(
+      selectedEffectiveDay.day.id,
+      selection.selection.source,
+      selection.selection.nodeId,
+    ),
+  );
 
   const handlePresentationRendered = useCallback(
     (
@@ -740,7 +769,15 @@ export function useTripExperienceController({
         synchronizeDisplayedDay(ownerDay);
       }
       if (options.restoreOwnerFocus === true) {
-        ownerBindings.focus("node", nodeId);
+        ownerBindings.focus(
+          "node",
+          nodeId,
+          ownerSelectionKey(
+            ownerDay ?? selectedEffectiveDay.day.id,
+            "manual",
+            nodeId,
+          ),
+        );
       }
       focusMap(
         { kind: "place", id: nodeMapOwnerId(nodeId) },
@@ -775,7 +812,15 @@ export function useTripExperienceController({
         )
       ) {
         selection.selectManual(activeCandidateMapOverride.group.parentNodeId);
-        ownerBindings.focus("node", activeCandidateMapOverride.group.parentNodeId);
+        ownerBindings.focus(
+          "node",
+          activeCandidateMapOverride.group.parentNodeId,
+          ownerSelectionKey(
+            selectedEffectiveDay.day.id,
+            "manual",
+            activeCandidateMapOverride.group.parentNodeId,
+          ),
+        );
         setCandidateInteraction((current) => ({
           ...current,
           previewRequest: {
@@ -797,7 +842,14 @@ export function useTripExperienceController({
         });
       }
     },
-    [activeCandidateMapOverride, ownerBindings, selectNode, selection, trip],
+    [
+      activeCandidateMapOverride,
+      ownerBindings,
+      selectNode,
+      selectedEffectiveDay.day.id,
+      selection,
+      trip,
+    ],
   );
   const routeIsDisplayed = useCallback(
     (routeId: string): boolean =>

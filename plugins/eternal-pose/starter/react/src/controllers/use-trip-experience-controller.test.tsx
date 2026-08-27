@@ -491,6 +491,65 @@ describe("useTripExperienceController", () => {
     unrelated.remove();
   });
 
+  it("cancels deferred route focus when progress changes the automatic selection", async () => {
+    const adapter = new FakeMapAdapter();
+    const view = setup({ adapter });
+    const unrelated = document.createElement("button");
+    unrelated.textContent = "automatic selection focus owner";
+    document.body.append(unrelated);
+    await waitFor(() => expect(view.current().model.map.status).toBe("ready"));
+    expect(view.current().model.selection).toEqual({
+      nodeId: "museum",
+      source: "automatic",
+    });
+
+    act(() => adapter.emitRouteSelect("route-museum-dinner"));
+    expect(view.current().model.routes[0]).toMatchObject({
+      selected: true,
+      selectionSource: "map",
+    });
+    unrelated.focus();
+    act(() => view.current().actions.setCompleted("node:museum", true));
+    expect(view.current().model.selection).toEqual({
+      nodeId: "dinner",
+      source: "automatic",
+    });
+
+    view.rerenderOwners({ routeOwnerId: "route-museum-dinner" });
+    expect(document.activeElement).toBe(unrelated);
+    unrelated.remove();
+  });
+
+  it("restores deferred route focus while automatic selection ownership remains current", async () => {
+    const adapter = new FakeMapAdapter();
+    const view = setup({ adapter });
+    await waitFor(() => expect(view.current().model.map.status).toBe("ready"));
+
+    act(() => adapter.emitRouteSelect("route-museum-dinner"));
+    expect(view.current().model.selection).toEqual({
+      nodeId: "museum",
+      source: "automatic",
+    });
+    view.rerenderOwners({ routeOwnerId: "route-museum-dinner" });
+
+    expect(document.activeElement).toHaveTextContent("route owner");
+  });
+
+  it("restores deferred map-node focus for the newly selected owner", async () => {
+    const adapter = new FakeMapAdapter();
+    const view = setup({ adapter });
+    await waitFor(() => expect(view.current().model.map.status).toBe("ready"));
+
+    act(() => adapter.emitPlaceSelect(nodeMapOwnerId("dinner")));
+    expect(view.current().model.selection).toEqual({
+      nodeId: "dinner",
+      source: "manual",
+    });
+    view.rerenderOwners({ nodeOwnerId: "dinner" });
+
+    expect(document.activeElement).toHaveTextContent("node owner");
+  });
+
   it("owns optional candidate preview, decorated map labels, confirmation, and cleanup", async () => {
     const adapter = new FakeMapAdapter();
     const view = setup({ adapter });
