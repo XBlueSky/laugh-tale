@@ -5,6 +5,11 @@ import { describe, expect, test } from "vitest";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 const script = join(repoRoot, "scripts/stage-starter-consumer.mjs");
+const coreVersion = (
+  JSON.parse(readFileSync(join(repoRoot, "packages/core/package.json"), "utf8")) as {
+    version: string;
+  }
+).version;
 const { stageStarterConsumer } = (await import(pathToFileURL(script).href)) as {
   stageStarterConsumer: (options?: {
     install?: boolean;
@@ -24,8 +29,9 @@ describe("stage-starter-consumer", () => {
     const manifest = JSON.parse(readFileSync(join(stagedRoot, "package.json"), "utf8")) as {
       dependencies: Record<string, string>;
     };
+    const escapedVersion = coreVersion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     expect(manifest.dependencies["@laugh-tale-island/core"]).toMatch(
-      /^file:.*laugh-tale-island-core-0\.1\.0\.tgz$/,
+      new RegExp(`^file:.*laugh-tale-island-core-${escapedVersion}\\.tgz$`),
     );
     expect(existsSync(join(stagedRoot, "src/App.tsx"))).toBe(true);
     expect(existsSync(join(stagedRoot, "package-lock.json"))).toBe(false);
