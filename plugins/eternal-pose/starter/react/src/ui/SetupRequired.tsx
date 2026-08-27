@@ -1,7 +1,6 @@
-export type SetupIssue =
-  | { kind: "trip-content" }
-  | { kind: "provider-key" }
-  | { kind: "provider-load"; reason: string };
+import type { SetupIssue } from "../controllers/presentation-contract";
+
+export type { SetupIssue } from "../controllers/presentation-contract";
 
 export interface SetupRequiredProps {
   issue: SetupIssue;

@@ -8,8 +8,9 @@ import { useTripProgress } from "@laugh-tale-island/react";
 import { tripProgressStorageKey } from "./experience-shell/progress-storage";
 import { trip as configuredTrip } from "./trip-content/trip";
 import type { Trip } from "@laugh-tale-island/core";
-import { SetupRequired, type SetupIssue } from "./ui/SetupRequired";
+import { SetupRequired } from "./ui/SetupRequired";
 import { TripHome } from "./ui/home/TripHome";
+import type { SetupIssue, TripPresentation } from "./controllers/presentation-contract";
 
 export interface AppProps {
   adapterFactory?: () => MapAdapter;
@@ -17,6 +18,7 @@ export interface AppProps {
   tripOverride?: Trip | null;
   clock?: () => string;
   setupIssue?: SetupIssue;
+  presentation?: TripPresentation;
 }
 
 interface ReadyTripAppProps {
