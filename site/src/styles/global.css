@@ -1,0 +1,448 @@
+/* Laugh Tale — nautical chart-journal aesthetic.
+   Single committed light look: warm paper ground, deep-sea ink, brass accents.
+   All text pairs measure ≥ 4.5:1 (AA); brass is decoration and large text only. */
+
+:root {
+  --paper: oklch(96% 0.015 85);
+  --paper-deep: oklch(92.5% 0.022 80);
+  --ink: oklch(27% 0.025 60);
+  --ink-soft: oklch(41% 0.022 60);
+  --sea: oklch(42% 0.085 225);
+  --brass: oklch(52% 0.115 65);
+  --line: oklch(82% 0.025 75);
+  --panel: oklch(25% 0.03 240);
+  --panel-edge: oklch(35% 0.04 235);
+  --foam: oklch(93% 0.02 220);
+  --foam-dim: oklch(78% 0.03 225);
+
+  --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, 'Times New Roman', serif;
+  --sans: 'Avenir Next', Avenir, Seravek, 'Gill Sans', 'Helvetica Neue', system-ui, sans-serif;
+  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+
+  --measure: 38rem;
+  --page: 64rem;
+}
+
+* { box-sizing: border-box; margin: 0; }
+
+html { scroll-behavior: smooth; background: var(--paper); }
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 1.0625rem;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--sea); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+a:hover { color: var(--ink); }
+:focus-visible { outline: 2px solid var(--sea); outline-offset: 3px; }
+
+::selection { background: color-mix(in oklch, var(--sea) 22%, var(--paper)); }
+
+code, pre { font-family: var(--mono); }
+
+/* ---------- page chrome ---------- */
+
+.wrap {
+  max-width: var(--page);
+  margin-inline: auto;
+  padding-inline: clamp(1.25rem, 5vw, 3rem);
+}
+
+.masthead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block: clamp(1.25rem, 3vw, 2rem) 0;
+}
+
+.masthead .wordmark {
+  font-family: var(--sans);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.masthead nav {
+  display: flex;
+  gap: 1.25rem;
+  font-family: var(--sans);
+  font-size: 0.8125rem;
+  letter-spacing: 0.04em;
+}
+
+/* ---------- hero ---------- */
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: clamp(1.5rem, 5vw, 4rem);
+  padding-block: clamp(3.5rem, 9vw, 7.5rem) clamp(3rem, 7vw, 5.5rem);
+}
+
+.hero .kicker {
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--brass);
+  margin-bottom: 1.25rem;
+}
+
+.hero h1 {
+  font-size: clamp(3rem, 9vw, 5.5rem);
+  font-weight: 400;
+  line-height: 1.02;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+.hero .lede {
+  max-width: var(--measure);
+  margin-top: 1.5rem;
+  font-size: clamp(1.125rem, 2vw, 1.3125rem);
+  line-height: 1.6;
+  color: var(--ink-soft);
+  text-wrap: pretty;
+}
+
+.hero .lede strong { color: var(--ink); font-weight: 600; }
+
+.hero-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  margin-top: 2rem;
+  font-family: var(--sans);
+  font-size: 0.875rem;
+}
+
+.compass { color: var(--brass); flex-shrink: 0; }
+
+@media (max-width: 44rem) {
+  .hero { grid-template-columns: 1fr; }
+  .compass { display: none; }
+}
+
+/* ---------- the route spine ---------- */
+
+.route { padding-bottom: clamp(3rem, 7vw, 5rem); }
+
+.leg {
+  position: relative;
+  border-left: 2px dashed var(--line);
+  padding-left: clamp(1.25rem, 4vw, 2.75rem);
+  padding-bottom: clamp(3.5rem, 8vw, 6.5rem);
+}
+
+.leg:last-child { padding-bottom: 0; }
+
+.leg-label {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 0.75em;
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--brass);
+  margin-bottom: 1.75rem;
+}
+
+/* waypoint dot sitting on the dashed route */
+.leg-label::before {
+  content: '';
+  position: absolute;
+  left: calc(-1px - clamp(1.25rem, 4vw, 2.75rem) - 5px);
+  top: 0.15em;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--paper);
+  border: 2.5px solid var(--brass);
+}
+
+.leg h2 {
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  margin-bottom: 1rem;
+  text-wrap: balance;
+}
+
+.leg > p { max-width: var(--measure); text-wrap: pretty; }
+
+/* ---------- quickstart ---------- */
+
+.helm { display: grid; gap: 1.5rem; margin-top: 2rem; }
+
+.console { max-width: 44rem; }
+
+.console figcaption {
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin-bottom: 0.5rem;
+}
+
+.console pre {
+  background: var(--panel);
+  color: var(--foam);
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+  padding: 1rem 1.25rem;
+  font-size: 0.875rem;
+  line-height: 1.8;
+  overflow-x: auto;
+}
+
+.console .prompt { color: var(--foam-dim); user-select: none; }
+
+.then {
+  max-width: var(--measure);
+  margin-top: 2rem;
+  padding-left: 1.25rem;
+  border-left: 3px solid var(--brass);
+  font-style: italic;
+  color: var(--ink-soft);
+}
+
+.then em { color: var(--ink); }
+
+/* ---------- marketplace ---------- */
+
+.group-note {
+  font-family: var(--sans);
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+  margin-bottom: 2rem;
+}
+
+.plugin {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: clamp(1.5rem, 4vw, 3.5rem);
+  border-top: 1px solid var(--line);
+  padding-top: 2rem;
+}
+
+.plugin-id {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.plugin-id h3 {
+  font-family: var(--mono);
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.stamp {
+  font-family: var(--sans);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--sea);
+  border: 1.5px solid currentcolor;
+  border-radius: 3px;
+  padding: 0.1em 0.5em;
+  transform: rotate(-2deg);
+}
+
+.plugin .tagline {
+  font-size: clamp(1.25rem, 2.5vw, 1.5rem);
+  line-height: 1.35;
+  text-wrap: balance;
+  margin-bottom: 0.75rem;
+}
+
+.plugin .intro { color: var(--ink-soft); text-wrap: pretty; }
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+  padding: 0;
+  list-style: none;
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+
+.tags li {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.15em 0.75em;
+  background: var(--paper-deep);
+}
+
+.skill h4 {
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin-bottom: 0.75rem;
+}
+
+.skill .trigger { font-style: italic; color: var(--ink-soft); margin-bottom: 1.25rem; }
+
+.examples { list-style: none; padding: 0; display: grid; gap: 0.75rem; }
+
+.examples li {
+  position: relative;
+  padding-left: 1.5rem;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+}
+
+.examples li::before {
+  content: '“';
+  position: absolute;
+  left: 0;
+  top: -0.05em;
+  font-size: 1.5rem;
+  color: var(--brass);
+}
+
+@media (max-width: 44rem) {
+  .plugin { grid-template-columns: 1fr; }
+}
+
+/* ---------- packages ---------- */
+
+.packages { display: grid; gap: 0; margin-top: 2rem; max-width: 46rem; }
+
+.package {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 0.5rem 2rem;
+  align-items: baseline;
+  border-top: 1px solid var(--line);
+  padding-block: 1.25rem;
+}
+
+.package a { font-family: var(--mono); font-size: 0.9375rem; font-weight: 600; }
+
+.package p { font-size: 0.9375rem; color: var(--ink-soft); }
+
+.install-line { margin-top: 1.75rem; max-width: 46rem; }
+
+@media (max-width: 44rem) {
+  .package { grid-template-columns: 1fr; }
+}
+
+/* ---------- recipes: each swatch renders in its own aesthetic ---------- */
+
+.recipes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1.25rem;
+  margin-top: 2rem;
+}
+
+.swatch { padding: 1.75rem 1.5rem; min-height: 11rem; display: flex; flex-direction: column; gap: 0.5rem; }
+
+.swatch p { font-size: 0.9375rem; margin-top: auto; }
+
+.swatch-quiet-wood {
+  background: oklch(89% 0.035 75);
+  color: oklch(30% 0.04 60);
+  border-radius: 14px;
+  box-shadow: 0 2px 10px oklch(50% 0.05 70 / 0.18);
+  font-family: var(--serif);
+}
+.swatch-quiet-wood strong { font-size: 1.375rem; font-weight: 500; }
+
+.swatch-sticker-brutalist {
+  background: oklch(98% 0.005 90);
+  color: oklch(15% 0 0);
+  border: 3px solid oklch(15% 0 0);
+  border-radius: 0;
+  box-shadow: 6px 6px 0 oklch(15% 0 0);
+  font-family: var(--sans);
+}
+.swatch-sticker-brutalist strong {
+  font-size: 1.125rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: oklch(85% 0.17 95);
+  padding: 0.1em 0.4em;
+  align-self: flex-start;
+  transform: rotate(-1.5deg);
+}
+
+.swatch-native-minimal {
+  background: oklch(97% 0 0);
+  color: oklch(32% 0 0);
+  border: 1px solid oklch(87% 0 0);
+  border-radius: 10px;
+  font-family: var(--sans);
+}
+.swatch-native-minimal strong { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.01em; }
+
+.recipes-note {
+  max-width: var(--measure);
+  margin-top: 1.5rem;
+  font-size: 0.9375rem;
+  color: var(--ink-soft);
+}
+
+/* ---------- privacy ---------- */
+
+.pledge { list-style: none; padding: 0; margin-top: 1.5rem; max-width: var(--measure); display: grid; gap: 1rem; }
+
+.pledge li { position: relative; padding-left: 1.75rem; }
+
+.pledge li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 0.75rem;
+  height: 2px;
+  background: var(--brass);
+}
+
+/* ---------- footer ---------- */
+
+.colophon {
+  border-top: 1px solid var(--line);
+  margin-top: clamp(3rem, 7vw, 5rem);
+  padding-block: 2.5rem 3.5rem;
+  font-family: var(--sans);
+  font-size: 0.8125rem;
+  color: var(--ink-soft);
+  display: grid;
+  gap: 1rem;
+}
+
+.colophon .legal { max-width: 46rem; text-wrap: pretty; }
+
+.colophon nav { display: flex; flex-wrap: wrap; gap: 1.25rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
