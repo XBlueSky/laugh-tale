@@ -209,18 +209,27 @@ export async function loadRecipeV2Catalog(catalogRoot, operations_ = {}) {
   const operations = { ...DEFAULT_OPERATIONS, ...operations_ };
   const root = await canonicalDirectory(catalogRoot, "recipe catalog root", operations);
   const entries = (await operations.readdir(root, { withFileTypes: true })).sort((left, right) => left.name.localeCompare(right.name));
-  const recipes = [];
+  const declaredRecipes = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const recipeDir = join(root, entry.name);
     const manifestPath = await canonicalDeclaredPath(recipeDir, "recipe.json", "recipe.json", "file", operations);
-    const expectedId = parseManifest(await operations.readFile(manifestPath, "utf8"))?.id;
-    recipes.push(await loadRecipeV2(recipeDir, expectedId, operations));
+    const id = parseManifest(await operations.readFile(manifestPath, "utf8"))?.id;
+    declaredRecipes.push({ entry, recipeDir, id });
+  }
+  declaredRecipes.sort((left, right) => String(left.id).localeCompare(String(right.id)) || left.entry.name.localeCompare(right.entry.name));
+  for (let index = 1; index < declaredRecipes.length; index += 1) {
+    if (declaredRecipes[index - 1].id === declaredRecipes[index].id) {
+      throw new Error(`duplicate recipe id: ${declaredRecipes[index].id}`);
+    }
+  }
+  const recipes = [];
+  for (const { entry, recipeDir } of declaredRecipes) {
+    recipes.push(await loadRecipeV2(recipeDir, entry.name, operations));
   }
   recipes.sort((left, right) => left.id.localeCompare(right.id));
   const catalog = new Map();
   for (const recipe of recipes) {
-    if (catalog.has(recipe.id)) throw new Error(`duplicate recipe id: ${recipe.id}`);
     catalog.set(recipe.id, recipe);
   }
   return catalog;

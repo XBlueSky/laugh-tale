@@ -548,10 +548,13 @@ export async function createTripProject({ pluginRoot, targetDir, recipe, starter
     "starter root",
     operations,
   );
-  const recipeV2 = recipeCatalogRoot === undefined
+  const canonicalRecipeCatalog = recipeCatalogRoot === undefined
     ? null
-    : (await loadRecipeV2Catalog(recipeCatalogRoot, operations)).get(recipe);
-  if (recipeCatalogRoot !== undefined && !recipeV2) throw new Error(`unknown recipe id: ${recipe}`);
+    : await canonicalDirectory(recipeCatalogRoot, "recipe catalog root", operations);
+  const recipeV2 = canonicalRecipeCatalog === null
+    ? null
+    : (await loadRecipeV2Catalog(canonicalRecipeCatalog, operations)).get(recipe);
+  if (canonicalRecipeCatalog !== null && !recipeV2) throw new Error(`unknown recipe id: ${recipe}`);
   const recipeRoot = recipeV2
     ? recipeV2.root
     : await canonicalDirectory(resolve(canonicalPluginRoot, "recipes"), "recipe root", operations);
@@ -565,7 +568,9 @@ export async function createTripProject({ pluginRoot, targetDir, recipe, starter
   const canonicalTarget = join(canonicalParent, basename(resolvedTarget));
   if (canonicalTarget !== resolvedTarget) throw new Error("target ownership changed");
   if (
-    [canonicalPluginRoot, canonicalStarter, recipeRoot].some((sourceRoot) => overlaps(sourceRoot, canonicalTarget))
+    [canonicalPluginRoot, canonicalStarter, recipeRoot, canonicalRecipeCatalog]
+      .filter(Boolean)
+      .some((sourceRoot) => overlaps(sourceRoot, canonicalTarget))
   ) {
     throw new Error("refusing overlapping target");
   }

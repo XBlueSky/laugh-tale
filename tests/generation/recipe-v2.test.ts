@@ -164,6 +164,13 @@ describe("recipe v2 manifest loading", () => {
 
     await expect(loadRecipeV2Catalog(root)).rejects.toThrow(/duplicate recipe id/);
   });
+
+  test("rejects a catalog recipe whose manifest id does not match its directory", async () => {
+    const root = temporaryRoot();
+    makeRecipe(root, "alpha", (manifest) => { manifest.id = "beta"; });
+
+    await expect(loadRecipeV2Catalog(root)).rejects.toThrow(/id.*directory/i);
+  });
 });
 
 describe("recipe v2 internal composition", () => {
@@ -200,6 +207,16 @@ describe("recipe v2 internal composition", () => {
     const targetDir = join(root, "trip");
 
     await expect(createTripProject({ pluginRoot, targetDir, recipe: "broken", starterDir: makeStarter(root), recipeCatalogRoot: catalog })).rejects.toThrow(/presentation\.entry/);
+    expect(existsSync(targetDir)).toBe(false);
+  });
+
+  test("rejects a v2 target inside the supplied catalog root", async () => {
+    const root = temporaryRoot();
+    const catalog = join(root, "catalog");
+    makeRecipe(catalog, "selected");
+    const targetDir = join(catalog, "generated-trip");
+
+    await expect(createTripProject({ pluginRoot, targetDir, recipe: "selected", starterDir: makeStarter(root), recipeCatalogRoot: catalog })).rejects.toThrow(/refusing overlapping target/);
     expect(existsSync(targetDir)).toBe(false);
   });
 
