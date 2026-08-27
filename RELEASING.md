@@ -2,7 +2,7 @@
 
 Three release lines share this repository: the Eternal Pose plugin/marketplace, `@laugh-tale/core`, and `@laugh-tale/react`. Every externally visible action below is separately approval-gated. A successful local pack is **never** reported as a release.
 
-## Initial package release (from branch `headless-packages`)
+## Initial package release (from `main`)
 
 1. [ ] Workspace gates green: `npm ci && npm run stage:starter && LAUGH_TALE_STARTER_ROOT="$PWD/tmp/staged-starter" npm run check`.
 2. [ ] Staged starter gates green: `npm run test:starter:staged && npm run test:e2e:staged`.
@@ -10,10 +10,11 @@ Three release lines share this repository: the Eternal Pose plugin/marketplace, 
 4. [ ] Publication scan clean over both packed tarball file lists.
 5. [ ] **STOP — explicit user approval required.** Confirm all of: npm authentication (2FA), control of the `@laugh-tale` npm organization, and the exact versions to publish. If the scope cannot be obtained, stop and revise the design spec; do not publish under another name.
 6. [ ] Publish `@laugh-tale/core@0.1.0` publicly, then `@laugh-tale/react@0.1.0` publicly.
-7. [ ] Regenerate the starter lockfile from the public registry (`npm --prefix plugins/eternal-pose/starter/react install`) and commit it on this branch; restore direct starter installs in CI (`npm ci` in the starter replaces the staged path).
+7. [ ] Regenerate the starter lockfile from the public registry (`npm --prefix plugins/eternal-pose/starter/react install`) and commit it; restore direct starter installs in CI (`npm ci` in the starter replaces the staged path).
 8. [ ] Generate a clean site through `plugins/eternal-pose/scripts/create-trip-project.mjs`, run `npm ci` and its full checks in that site with no Laugh Tale checkout on any resolution path.
-9. [ ] Merge `headless-packages` into `main` only after steps 6–8 succeed, so `main` never carries a starter whose lockfile cannot resolve.
-10. [ ] **STOP — separate approvals** for each of: pushing to the remote, creating a GitHub release or tag, and announcing the package-backed plugin release in any marketplace.
+9. [ ] **STOP — separate approvals** for each of: pushing to the remote, creating a GitHub release or tag, and announcing the package-backed plugin release in any marketplace.
+
+> The extraction was merged to `main` before the first publish (maintainer decision, 2026-08-27). Until steps 6–7 complete, the committed starter lockfile does not yet include the two packages, so direct `npm ci` inside `plugins/eternal-pose/starter/react` fails; use the staged flow (`npm run stage:starter`) documented in the README. Publishing and regenerating the lockfile clears this state.
 
 ## Subsequent releases
 
