@@ -17,11 +17,8 @@ import { resolveEffectiveItinerary, type EffectiveDay, type EffectiveNode } from
 import { findLiveState, resolveSchedule } from "@laugh-tale/core";
 import { DayHeader } from "../ui/DayHeader";
 import { ItineraryTimeline } from "../ui/ItineraryTimeline";
-import {
-  CandidateDecision,
-  type CandidateMapOverride,
-  type CandidatePreviewRequest,
-} from "../ui/decisions/CandidateDecision";
+import type { CandidateMapOverride, CandidatePreviewRequest } from "@laugh-tale/core";
+import { CandidateDecision } from "../ui/decisions/CandidateDecision";
 import {
   resolveShoppingStatus,
   ShoppingStatusSelect,

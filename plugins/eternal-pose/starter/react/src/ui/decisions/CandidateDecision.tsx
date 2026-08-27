@@ -1,25 +1,12 @@
-import {
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useId, useMemo, useState } from "react";
 
-import type { CandidateGroup, CandidateOption } from "@laugh-tale/core";
-
-export interface CandidateMapOverride {
-  group: CandidateGroup;
-  sessionId: number;
-  activeOptionId?: string;
-}
-
-export interface CandidatePreviewRequest {
-  groupId: string;
-  sessionId: number;
-  optionId: string;
-  requestId: number;
-}
+import type {
+  CandidateGroup,
+  CandidateMapOverride,
+  CandidateOption,
+  CandidatePreviewRequest,
+} from "@laugh-tale/core";
+import { useCandidateDecision } from "@laugh-tale/react";
 
 export interface CandidateDecisionProps {
   group: CandidateGroup;
@@ -51,19 +38,6 @@ export function candidateOptionLabel(
   return `${sequenceNumber}${optionLetter(index)} · ${option.title}`;
 }
 
-function initialDraftId(
-  group: CandidateGroup,
-  committedOptionId: string | undefined,
-): string | undefined {
-  if (group.options.some(({ id }) => id === committedOptionId)) {
-    return committedOptionId;
-  }
-  if (group.options.some(({ id }) => id === group.defaultOptionId)) {
-    return group.defaultOptionId;
-  }
-  return group.options[0]?.id;
-}
-
 function hasCoordinates(option: CandidateOption): boolean {
   const coordinates = option.place?.coordinates;
   return (
@@ -77,13 +51,6 @@ function hasCoordinates(option: CandidateOption): boolean {
   );
 }
 
-let candidateSessionSequence = 0;
-
-function nextCandidateSessionId(): number {
-  candidateSessionSequence += 1;
-  return candidateSessionSequence;
-}
-
 export function CandidateDecision({
   group,
   label,
@@ -95,16 +62,6 @@ export function CandidateDecision({
   onLocateOption,
 }: CandidateDecisionProps) {
   const radioName = `candidate-decision-${useId().replaceAll(":", "")}`;
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const optionRefs = useRef(new Map<string, HTMLElement>());
-  const lastFocusedMapPreviewRequestKeyRef = useRef<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
-  const [sessionId, setSessionId] = useState<number | null>(null);
-  const [draftOptionId, setDraftOptionId] = useState<string | undefined>(() =>
-    initialDraftId(group, committedOptionId),
-  );
-  const [handledMapPreviewRequestKey, setHandledMapPreviewRequestKey] =
-    useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
   const committedOption = group.options.find(({ id }) => id === committedOptionId);
   const numberedGroup = useMemo<CandidateGroup>(
@@ -117,108 +74,20 @@ export function CandidateDecision({
     }),
     [group, sequenceNumber],
   );
-  const requestedOptionId = mapPreviewRequest?.optionId;
-  const requestedPreviewId = mapPreviewRequest?.requestId;
-  const hasValidPreviewRequest =
-    expanded &&
-    sessionId !== null &&
-    mapPreviewRequest?.groupId === group.id &&
-    mapPreviewRequest.sessionId === sessionId &&
-    requestedPreviewId !== undefined &&
-    requestedOptionId !== undefined &&
-    group.options.some(({ id }) => id === requestedOptionId);
-  const requestedPreviewKey = hasValidPreviewRequest
-    ? `${sessionId}:${requestedPreviewId}`
-    : null;
-
-  if (
-    requestedPreviewKey !== null &&
-    requestedPreviewKey !== handledMapPreviewRequestKey
-  ) {
-    setHandledMapPreviewRequestKey(requestedPreviewKey);
-    if (group.mode === "single" && requestedOptionId !== draftOptionId) {
-      setDraftOptionId(requestedOptionId);
-    }
-  }
-
-  useEffect(() => {
-    if (!expanded || sessionId === null) {
-      onMapOverrideChange(null);
-      return;
-    }
-    onMapOverrideChange({
-      group: numberedGroup,
-      sessionId,
-      ...(group.mode === "single" && draftOptionId !== undefined
-        ? { activeOptionId: draftOptionId }
-        : {}),
-    });
-  }, [
-    draftOptionId,
-    expanded,
-    group.mode,
-    numberedGroup,
+  const decision = useCandidateDecision({
+    group,
+    overrideGroup: numberedGroup,
+    ...(committedOptionId === undefined ? {} : { committedOptionId }),
+    ...(mapPreviewRequest === undefined ? {} : { mapPreviewRequest }),
     onMapOverrideChange,
-    sessionId,
-  ]);
-
-  useEffect(
-    () => () => {
-      onMapOverrideChange(null);
+    onConfirm: (optionId) => {
+      const option = group.options.find(({ id }) => id === optionId);
+      onCommit(group.id, optionId);
+      setAnnouncement(`已選擇 ${option?.title ?? ""}`);
     },
-    [onMapOverrideChange],
-  );
-
-  useEffect(() => {
-    if (
-      !hasValidPreviewRequest ||
-      requestedPreviewKey !== handledMapPreviewRequestKey ||
-      requestedPreviewKey === lastFocusedMapPreviewRequestKeyRef.current
-    ) {
-      return;
-    }
-    lastFocusedMapPreviewRequestKeyRef.current = requestedPreviewKey;
-    const optionControl = optionRefs.current.get(requestedOptionId);
-    optionControl?.scrollIntoView?.({ block: "nearest" });
-    optionControl?.focus();
-  }, [
-    handledMapPreviewRequestKey,
-    hasValidPreviewRequest,
-    requestedOptionId,
-    requestedPreviewKey,
-  ]);
-
-  const restoreTriggerFocus = (): void => {
-    queueMicrotask(() => triggerRef.current?.focus());
-  };
-
-  const closeComparison = (): void => {
-    setDraftOptionId(initialDraftId(group, committedOptionId));
-    setSessionId(null);
-    setExpanded(false);
-    restoreTriggerFocus();
-  };
-
-  const openComparison = (): void => {
-    setDraftOptionId(initialDraftId(group, committedOptionId));
-    setSessionId(nextCandidateSessionId());
-    setExpanded(true);
-  };
-
-  const confirmDraft = (): void => {
-    if (group.mode !== "single" || draftOptionId === undefined) {
-      return;
-    }
-    const option = group.options.find(({ id }) => id === draftOptionId);
-    if (option === undefined) {
-      return;
-    }
-    onCommit(group.id, option.id);
-    setAnnouncement(`已選擇 ${option.title}`);
-    setSessionId(null);
-    setExpanded(false);
-    restoreTriggerFocus();
-  };
+  });
+  const expanded = decision.open;
+  const draftOptionId = decision.draftOptionId;
 
   const triggerLabel =
     group.mode === "browse"
@@ -245,13 +114,11 @@ export function CandidateDecision({
           ) : null}
         </div>
         <button
-          ref={triggerRef}
           type="button"
           className="candidate-decision__trigger"
           aria-label={triggerLabel}
-          aria-expanded={expanded}
           data-touch-target="44"
-          onClick={expanded ? closeComparison : openComparison}
+          {...decision.getTriggerProps()}
         >
           {triggerLabel}
         </button>
@@ -265,19 +132,13 @@ export function CandidateDecision({
             return (
               <label key={`candidate:${option.id}`} className="candidate-decision__option">
                 <input
-                  ref={(element) => {
-                    if (element === null) {
-                      optionRefs.current.delete(option.id);
-                    } else {
-                      optionRefs.current.set(option.id, element);
-                    }
-                  }}
+                  ref={decision.registerOption(option.id)}
                   type="radio"
                   name={radioName}
                   value={option.id}
                   checked={draftOptionId === option.id}
                   onChange={() => {
-                    setDraftOptionId(option.id);
+                    decision.previewOption(option.id);
                     if (hasCoordinates(option)) {
                       onLocateOption(option.id);
                     }
@@ -295,7 +156,7 @@ export function CandidateDecision({
               type="button"
               data-touch-target="44"
               aria-label="取消候選比較"
-              onClick={closeComparison}
+              onClick={decision.closeComparison}
             >
               取消
             </button>
@@ -308,7 +169,7 @@ export function CandidateDecision({
                   ? "確認候選選擇"
                   : `確認選擇 ${group.options.find(({ id }) => id === draftOptionId)?.title ?? ""}`
               }
-              onClick={confirmDraft}
+              onClick={decision.confirmDraft}
             >
               確認
             </button>
@@ -328,13 +189,7 @@ export function CandidateDecision({
               <li key={`browse-candidate:${option.id}`}>
                 {hasCoordinates(option) ? (
                   <button
-                    ref={(element) => {
-                      if (element === null) {
-                        optionRefs.current.delete(option.id);
-                      } else {
-                        optionRefs.current.set(option.id, element);
-                      }
-                    }}
+                    ref={decision.registerOption(option.id)}
                     type="button"
                     data-touch-target="44"
                     aria-label={`定位 ${optionLabel}`}

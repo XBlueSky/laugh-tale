@@ -3,3 +3,4 @@ export { useTripProgress, } from "./use-trip-progress.js";
 export { useRouteStates, } from "./use-route-states.js";
 export { useUserLocation, } from "./use-user-location.js";
 export { useItinerarySheet, } from "./use-itinerary-sheet.js";
+export { useCandidateDecision, } from "./use-candidate-decision.js";

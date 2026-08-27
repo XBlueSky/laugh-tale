@@ -11,11 +11,8 @@ import { FakeMapAdapter } from "../../providers/fake/FakeMapAdapter";
 import type { CandidateGroup, Trip } from "@laugh-tale/core";
 import { emptyTripProgress, tripProgressReducer, type TripProgressV1 } from "@laugh-tale/core";
 import { resolveEffectiveItinerary } from "@laugh-tale/core";
-import {
-  CandidateDecision,
-  type CandidateMapOverride,
-  type CandidatePreviewRequest,
-} from "./CandidateDecision";
+import type { CandidateMapOverride, CandidatePreviewRequest } from "@laugh-tale/core";
+import { CandidateDecision } from "./CandidateDecision";
 
 function mountBaseStyles(): void {
   const style = document.createElement("style");

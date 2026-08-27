@@ -3,3 +3,4 @@ export { useTripProgress, type ProgressPersistenceStatus, type TripProgressContr
 export { useRouteStates, type RouteLoadState, type RouteStates, type UseRouteStatesOptions, } from "./use-route-states.js";
 export { useUserLocation, type UserLocationController, type UserLocationStatus, } from "./use-user-location.js";
 export { useItinerarySheet, type ItinerarySheetController, type SheetHandleProps, type SheetProps, type UseItinerarySheetOptions, } from "./use-itinerary-sheet.js";
+export { useCandidateDecision, type CandidateDecisionController, type CandidateTriggerProps, type UseCandidateDecisionOptions, } from "./use-candidate-decision.js";
