@@ -548,8 +548,24 @@ export async function createTripProject({ pluginRoot, targetDir, recipe, starter
       stageContext,
       operations,
     );
+    let starterPackages = {};
+    try {
+      const starterManifest = JSON.parse(
+        await operations.readFile(join(stageOwnership.path, "package.json"), "utf8"),
+      );
+      const dependencies = starterManifest?.dependencies;
+      if (dependencies !== null && typeof dependencies === "object" && !Array.isArray(dependencies)) {
+        starterPackages = Object.fromEntries(
+          Object.entries(dependencies).filter(
+            ([name, version]) => name.startsWith("@laugh-tale/") && typeof version === "string",
+          ),
+        );
+      }
+    } catch {
+      starterPackages = {};
+    }
     await writeBufferIntoOwnedDirectory(
-      JSON.stringify({ generatorVersion: "0.1.0", recipe }, null, 2),
+      JSON.stringify({ generatorVersion: "0.1.0", recipe, packages: starterPackages }, null, 2),
       0o644,
       join(stageOwnership.path, "eternal-pose.json"),
       stageOwnership,

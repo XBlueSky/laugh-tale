@@ -161,9 +161,14 @@ describe("real starter generation", () => {
     expect(readFileSync(join(targetDir, "src/ui/styles/recipe.css"), "utf8")).toBe(
       readFileSync(join(pluginRoot, "recipes", recipe, "recipe.css"), "utf8"),
     );
-    expect(readFileSync(join(targetDir, "eternal-pose.json"), "utf8")).toBe(
-      JSON.stringify({ generatorVersion: "0.1.0", recipe }, null, 2),
-    );
+    const metadata = JSON.parse(readFileSync(join(targetDir, "eternal-pose.json"), "utf8")) as {
+      generatorVersion: string;
+      recipe: string;
+      packages: Record<string, string>;
+    };
+    expect(metadata.generatorVersion).toBe("0.1.0");
+    expect(metadata.recipe).toBe(recipe);
+    expect(metadata.packages).toEqual({ "@laugh-tale/core": "0.1.0" });
 
     const paths = walk(targetDir);
     expect(paths).toEqual(expect.arrayContaining([
