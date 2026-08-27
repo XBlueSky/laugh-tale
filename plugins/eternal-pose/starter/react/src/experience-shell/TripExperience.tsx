@@ -36,10 +36,14 @@ import { buildMapPresentation } from "@laugh-tale/core";
 import { decodeMapPlaceOwnerId, candidateMapOwnerId, nodeMapOwnerId, type MapFocusTarget, type MapPadding, type MapPresentation } from "@laugh-tale/core";
 import { type MapAdapter, type RouteAdapter } from "@laugh-tale/core/browser";
 import { resolveSheetGeometry, type SheetSnap } from "@laugh-tale/core";
-import { useTripSelection } from "./useTripSelection";
-import type { TripProgressController } from "./useTripProgress";
-import { useRouteStates } from "./useRouteStates";
-import { useUserLocation } from "./useUserLocation";
+import {
+  useRouteStates,
+  useTripSelection,
+  useUserLocation,
+  type TripProgressController,
+} from "@laugh-tale/react";
+
+import { routeAdapterErrorReason, USER_LOCATION_LABELS } from "../ui/labels";
 
 export interface TripExperienceProps {
   trip: Trip;
@@ -401,7 +405,9 @@ export function TripExperience({
     }
     return [...owners.values()];
   }, [effectiveTrip, selectedEffectiveDay.day.id]);
-  const routeStates = useRouteStates(selectedDayRoutes, routeAdapterFactory);
+  const routeStates = useRouteStates(selectedDayRoutes, routeAdapterFactory, {
+    adapterErrorReason: routeAdapterErrorReason,
+  });
   const activeSelectedRouteId = selectedDayRoutes.some(
     ({ id }) => id === selectedRouteId,
   )
@@ -795,7 +801,7 @@ export function TripExperience({
           </button>
         ) : null}
         <span className="map-controls__status" aria-live="polite">
-          {userLocation.label}
+          {USER_LOCATION_LABELS[userLocation.status]}
         </span>
       </div>
 

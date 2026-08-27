@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 
 import type { RouteEdge, ShoppingStatus } from "@laugh-tale/core";
 import type { EffectiveDay, EffectiveNode, EffectiveTrip } from "@laugh-tale/core";
-import type { TripSelection } from "../experience-shell/useTripSelection";
+import type { TripSelection } from "@laugh-tale/react";
 import type { NavigationAdapter } from "@laugh-tale/core/browser";
 import { rendererFor } from "./renderers/CustomEntry";
 import { RouteConnector, type RouteConnectorState } from "./timeline/RouteConnector";

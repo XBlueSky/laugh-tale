@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { TripExperience } from "./experience-shell/TripExperience";
 import type { MapAdapter, RouteAdapter } from "@laugh-tale/core/browser";
-import { useTripProgress } from "./experience-shell/useTripProgress";
+import { createLocalStorageProgressStore } from "@laugh-tale/core/browser";
+import { useTripProgress } from "@laugh-tale/react";
+
+import { tripProgressStorageKey } from "./experience-shell/progress-storage";
 import { trip as configuredTrip } from "./trip-content/trip";
 import type { Trip } from "@laugh-tale/core";
 import { SetupRequired, type SetupIssue } from "./ui/SetupRequired";
@@ -29,7 +32,11 @@ function ReadyTripApp({
   routeAdapterFactory,
   clock,
 }: ReadyTripAppProps) {
-  const progressController = useTripProgress(trip);
+  const progressStore = useMemo(
+    () => createLocalStorageProgressStore(tripProgressStorageKey(trip.id)),
+    [trip.id],
+  );
+  const progressController = useTripProgress(trip, progressStore);
   const [activeDayId, setActiveDayId] = useState<string | null>(null);
 
   if (!progressController.hydrated) {
