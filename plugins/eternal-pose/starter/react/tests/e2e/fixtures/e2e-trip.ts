@@ -187,7 +187,7 @@ export const e2eTrip: Trip = {
   title: "Synthetic Archipelago Field Trip",
   timezone: "Etc/UTC",
   startDate: "2042-04-18",
-  endDate: "2042-04-19",
+  endDate: "2042-04-21",
   days: [
     { id: "day-one", date: "2042-04-18", title: "Harbor field day", summary: "All semantic surfaces with deterministic provider data.", nodes: dayOneNodes },
     {
@@ -214,6 +214,48 @@ export const e2eTrip: Trip = {
           optionality: "core",
           place: { name: "Cove kitchen", coordinates: point(35.71, 139.79), certainty: "confirmed" },
           payload: { cuisine: "Seasonal plates" },
+        },
+      ],
+    },
+    {
+      id: "day-three",
+      date: "2042-04-20",
+      title: "Riverside museum circuit",
+      nodes: [
+        {
+          id: "day-three-museum",
+          dayId: "day-three",
+          kind: "sightseeing",
+          title: "Riverside museum",
+          timing: { start: "10:00", certainty: "fixed" },
+          optionality: "core",
+          place: {
+            name: "Riverside museum",
+            coordinates: point(35.72, 139.8),
+            certainty: "confirmed",
+          },
+          payload: { area: "East river" },
+        },
+      ],
+    },
+    {
+      id: "day-four",
+      date: "2042-04-21",
+      title: "Clifftop archive survey",
+      nodes: [
+        {
+          id: "day-four-archive",
+          dayId: "day-four",
+          kind: "experience",
+          title: "Clifftop archive",
+          timing: { start: "09:30", certainty: "fixed" },
+          optionality: "core",
+          place: {
+            name: "Clifftop archive",
+            coordinates: point(35.73, 139.81),
+            certainty: "confirmed",
+          },
+          payload: { durationMinutes: 75 },
         },
       ],
     },

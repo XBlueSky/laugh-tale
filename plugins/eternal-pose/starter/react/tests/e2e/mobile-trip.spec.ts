@@ -106,7 +106,26 @@ async function openTrip(page: Page): Promise<void> {
   await expect(page.locator("[data-route-id]").first()).toBeVisible();
 }
 
-async function expectContainedFieldAtlasChrome(page: Page): Promise<void> {
+async function setVisibleFieldAtlasDayCount(
+  page: Page,
+  count: 2 | 3 | 4,
+): Promise<boolean> {
+  const experience = page.getByTestId("trip-experience");
+  if ((await experience.getAttribute("data-map-chrome-layout")) !== "bounded") return false;
+
+  await page.locator(".atlas-day-index__rail button").evaluateAll((buttons, visibleCount) => {
+    buttons.forEach((button, index) => {
+      (button as HTMLElement).style.display = index < visibleCount ? "" : "none";
+    });
+    document.querySelector<HTMLElement>(".atlas-day-index__rail")!.scrollLeft = 0;
+  }, count);
+  return true;
+}
+
+async function expectContainedFieldAtlasChrome(
+  page: Page,
+  expectedDayCount = 4,
+): Promise<void> {
   const experience = page.getByTestId("trip-experience");
   if ((await experience.getAttribute("data-map-chrome-layout")) !== "bounded") return;
 
@@ -123,7 +142,9 @@ async function expectContainedFieldAtlasChrome(page: Page): Promise<void> {
         const headerRect = header.getBoundingClientRect();
         const titleRect = title.getBoundingClientRect();
         const railRect = rail.getBoundingClientRect();
-        const buttons = Array.from(rail.querySelectorAll<HTMLElement>("button"));
+        const buttons = Array.from(rail.querySelectorAll<HTMLElement>("button")).filter(
+          (button) => button.getClientRects().length > 0,
+        );
         const desktop = window.innerWidth >= 768;
         const contained = (owner: DOMRect, child: DOMRect) =>
           child.left >= owner.left - 1 &&
@@ -137,7 +158,10 @@ async function expectContainedFieldAtlasChrome(page: Page): Promise<void> {
           titleHasWidth: title.clientWidth > 0 && titleRect.width > 0,
           titleContained: contained(headerRect, titleRect),
           railContained: contained(headerRect, railRect),
-          railFitsWidth: rail.scrollWidth <= rail.clientWidth + 1,
+          visibleDayCount: buttons.length,
+          railScrollsInternally: desktop
+            ? rail.scrollWidth <= rail.clientWidth + 1
+            : buttons.length < 3 || rail.scrollWidth > rail.clientWidth + 1,
           railDirectionCorrect: desktop
             ? getComputedStyle(rail).display === "grid" &&
               buttons.every((button, index) =>
@@ -145,7 +169,16 @@ async function expectContainedFieldAtlasChrome(page: Page): Promise<void> {
                 button.getBoundingClientRect().top >=
                   buttons[index - 1].getBoundingClientRect().bottom - 1,
               )
-            : getComputedStyle(rail).display === "flex",
+            : getComputedStyle(rail).display === "flex" &&
+              getComputedStyle(rail).overflowX === "auto",
+          dayLabelsReadable: buttons.every((button) => {
+            const rect = button.getBoundingClientRect();
+            return (
+              (desktop || rect.width + 0.5 >= 140) &&
+              button.scrollWidth <= button.clientWidth + 1 &&
+              button.scrollHeight <= button.clientHeight + 1
+            );
+          }),
           mobileToolbarCompact: desktop || toolbar.getBoundingClientRect().height <= 72,
           controlsAre44: [
             ...primary.querySelectorAll<HTMLElement>("button"),
@@ -165,11 +198,40 @@ async function expectContainedFieldAtlasChrome(page: Page): Promise<void> {
       titleHasWidth: true,
       titleContained: true,
       railContained: true,
-      railFitsWidth: true,
+      visibleDayCount: expectedDayCount,
+      railScrollsInternally: true,
       railDirectionCorrect: true,
+      dayLabelsReadable: true,
       mobileToolbarCompact: true,
       controlsAre44: true,
     });
+}
+
+async function expectLastFieldAtlasDayReachable(page: Page): Promise<void> {
+  const experience = page.getByTestId("trip-experience");
+  if ((await experience.getAttribute("data-map-chrome-layout")) !== "bounded") return;
+
+  const lastDay = page.locator(".atlas-day-index__rail button:visible").last();
+  await lastDay.scrollIntoViewIfNeeded();
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const rail = document.querySelector<HTMLElement>(".atlas-day-index__rail")!;
+        const buttons = Array.from(rail.querySelectorAll<HTMLElement>("button")).filter(
+          (button) => button.getClientRects().length > 0,
+        );
+        const last = buttons.at(-1);
+        if (last === undefined) return false;
+        const railRect = rail.getBoundingClientRect();
+        const lastRect = last.getBoundingClientRect();
+        return (
+          lastRect.left >= railRect.left - 1 &&
+          lastRect.right <= railRect.right + 1 &&
+          document.documentElement.scrollWidth <= window.innerWidth
+        );
+      }),
+    )
+    .toBe(true);
 }
 
 async function expectBoundedProviderChrome(page: Page): Promise<void> {
@@ -426,7 +488,15 @@ test("keeps the persistent map and interruptible three-snap sheet inside every m
   await expect(map).toBeVisible();
   await expect(map.getByText("Deterministic test map · E2E only")).toBeVisible();
   await expect(sheet).toHaveAttribute("data-snap", "half");
-  await expectContainedFieldAtlasChrome(page);
+  if (await setVisibleFieldAtlasDayCount(page, 2)) {
+    for (const dayCount of [2, 3, 4] as const) {
+      await setVisibleFieldAtlasDayCount(page, dayCount);
+      await expectContainedFieldAtlasChrome(page, dayCount);
+      if (dayCount >= 3) await expectLastFieldAtlasDayReachable(page);
+    }
+  } else {
+    await expectContainedFieldAtlasChrome(page);
+  }
   await expectBoundedProviderChrome(page);
   expect(await page.evaluate(() => ({
     document: document.documentElement.scrollWidth <= window.innerWidth,

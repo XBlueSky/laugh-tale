@@ -290,13 +290,15 @@
   display: flex;
   min-width: 0;
   overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scroll-snap-type: inline proximity;
 }
 
 .atlas-day-index__rail button {
   display: grid;
-  min-width: 0;
+  min-width: clamp(9rem, 45vw, 10rem);
   min-height: 56px;
-  flex: 1 1 0;
+  flex: 0 0 clamp(9rem, 45vw, 10rem);
   grid-template-columns: 2rem minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--atlas-space-2);
@@ -304,6 +306,7 @@
   border: 0;
   border-right: var(--atlas-rule-width) solid var(--atlas-rule);
   background: var(--atlas-surface);
+  scroll-snap-align: start;
   text-align: left;
 }
 
@@ -1002,6 +1005,7 @@ gmp-advanced-marker:focus-visible {
 
   .atlas-day-index__rail button {
     width: 100%;
+    min-width: 0;
     border-right: 0;
     border-bottom: var(--atlas-rule-width) solid var(--atlas-rule);
   }

@@ -107,16 +107,6 @@ function contrastRatio(first: string, second: string): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-function expectEnglishRecipeCopy(container: HTMLElement): void {
-  const accessibleNames = Array.from(
-    container.querySelectorAll<HTMLElement>("[aria-label]"),
-    (element) => element.getAttribute("aria-label") ?? "",
-  ).join("\n");
-  expect(`${container.textContent ?? ""}\n${accessibleNames}`).not.toMatch(
-    /\p{Script=Han}/u,
-  );
-}
-
 const repoRoot = process.cwd();
 const pluginRoot = join(repoRoot, "plugins/eternal-pose");
 const recipeRoot = join(pluginRoot, "recipes-v2/field-atlas");
@@ -627,8 +617,6 @@ describe("Field Atlas recipe contract", () => {
       "data-persistence-status",
       "memory-only",
     );
-    expectEnglishRecipeCopy(view.container);
-
     fireEvent.click(
       view.getByRole("button", {
         name: new RegExp(`Enter Day 1.*${completeTrip.days[0]?.title ?? ""}`),
@@ -642,6 +630,112 @@ describe("Field Atlas recipe contract", () => {
       taskCompletionKey("task-pretrip-documents"),
       false,
     );
+  });
+
+  test("keeps non-English authored trip content verbatim while recipe controls stay English", async () => {
+    const presentation = await loadPresentation();
+    const authoredTrip: HomeViewModel["trip"] = {
+      ...completeTrip,
+      title: "合成群島旅行",
+      days: completeTrip.days.map((day, dayIndex) => ({
+        ...day,
+        title: dayIndex === 0 ? "港灣田野日" : day.title,
+        nodes: day.nodes.map((node) => ({
+          ...node,
+          title:
+            node.id === "node-transport"
+              ? "海港接駁"
+              : node.id === "node-dining"
+                ? "午餐選擇"
+                : node.title,
+        })),
+      })),
+      candidateGroups: completeTrip.candidateGroups.map((group, groupIndex) => ({
+        ...group,
+        options: group.options.map((option, optionIndex) => ({
+          ...option,
+          title: groupIndex === 0 && optionIndex === 1 ? "運河小館" : option.title,
+        })),
+      })),
+      tasks: completeTrip.tasks.map((task) => ({
+        ...task,
+        title:
+          task.id === "task-pretrip-documents"
+            ? "準備旅行文件"
+            : task.id === "task-day-water"
+              ? "補充水瓶"
+              : task.title,
+      })),
+      reservations: completeTrip.reservations.map((reservation, index) => ({
+        ...reservation,
+        title: index === 0 ? "天文台預約" : reservation.title,
+      })),
+    };
+    const home = render(
+      createElement(presentation.Home, {
+        model: {
+          trip: authoredTrip,
+          progress: emptyTripProgress(),
+          pretripCompletion: { completed: 0, total: 3 },
+          reservationCounts: { confirmed: 1, pending: 1, none: 0 },
+          persistence: "persistent",
+        },
+        actions: { setCompleted: vi.fn(), enterDay: vi.fn() },
+      }),
+    );
+
+    expect(home.getByRole("heading", { name: "合成群島旅行" })).toBeVisible();
+    expect(home.getByRole("button", { name: "Enter Day 1 · 港灣田野日" })).toBeVisible();
+    expect(home.getByRole("checkbox", { name: "準備旅行文件" })).toBeVisible();
+    expect(home.getByText("天文台預約")).toBeVisible();
+    expect(home.getByRole("navigation", { name: "Enter daily itinerary" })).toBeVisible();
+    home.unmount();
+
+    const effectiveTrip = resolveEffectiveItinerary(authoredTrip, emptyTripProgress());
+    const effectiveDay = effectiveTrip.days[0];
+    const candidateGroup = authoredTrip.candidateGroups[0];
+    const candidateSource = authoredTrip.days[0]?.nodes.find(
+      ({ id }) => id === candidateGroup?.parentNodeId,
+    );
+    if (
+      effectiveDay === undefined ||
+      candidateGroup === undefined ||
+      candidateSource === undefined
+    ) {
+      throw new Error("authored locale fixtures are required");
+    }
+    const baseModel = syntheticExperience();
+    const experienceModel = syntheticExperience({
+      trip: authoredTrip,
+      days: authoredTrip.days,
+      effectiveDay,
+      tasks: authoredTrip.tasks.filter(({ scope }) => scope === "day"),
+      candidate: {
+        ...baseModel.candidate!,
+        group: candidateGroup,
+        sourceNode: candidateSource,
+        draftOptionId: candidateGroup.options[1]?.id,
+      },
+    });
+    const experienceActions = actions();
+    const experience = render(
+      createElement(presentation.Experience, {
+        model: experienceModel,
+        actions: experienceActions,
+        bindings: bindings(experienceModel, experienceActions),
+      }),
+    );
+
+    expect(experience.getByTitle("合成群島旅行")).toHaveTextContent("合成群島旅行");
+    expect(experience.getByRole("button", { name: /Day 1: 港灣田野日/ })).toBeVisible();
+    expect(experience.getByRole("button", { name: /海港接駁/ })).toBeVisible();
+    expect(experience.getByRole("radio", { name: /運河小館/ })).toBeVisible();
+    expect(experience.getByRole("button", { name: "Open tasks for 港灣田野日" })).toBeVisible();
+    expect(experience.getByText("補充水瓶")).toBeInTheDocument();
+    expect(experience.getByText("天文台預約")).toBeInTheDocument();
+    expect(experience.getByRole("navigation", { name: "Trip dates" })).toBeVisible();
+    expect(experience.getByRole("toolbar", { name: "Map controls" })).toBeVisible();
+
   });
 
   test("renders every experience sub-state and preserves controller actions and bindings", async () => {
@@ -702,8 +796,6 @@ describe("Field Atlas recipe contract", () => {
     ]) {
       expect(experience.querySelector(`[data-semantic="${semantic}"]`)).not.toBeNull();
     }
-    expectEnglishRecipeCopy(view.container);
-
     fireEvent.click(view.getByRole("button", { name: "Return to trip home" }));
     expect(experienceActions.returnHome).toHaveBeenCalledTimes(1);
     fireEvent.click(view.getByRole("button", { name: "Retry route" }));
@@ -991,7 +1083,6 @@ describe("Field Atlas recipe contract", () => {
     const loading = render(createElement(presentation.Loading, { kind: "progress" }));
     expect(loading.getByRole("status")).toHaveAttribute("data-state", "loading");
     expect(loading.getByRole("status")).toHaveAccessibleName("Loading trip progress");
-    expectEnglishRecipeCopy(loading.container);
     loading.unmount();
 
     const retry = vi.fn();
@@ -1039,6 +1130,15 @@ describe("Field Atlas recipe contract", () => {
     );
     expect(review).toMatch(/controller browser matrix:\s*complete/i);
     expect(review).not.toMatch(/pending/i);
+    for (const phrase of [
+      "2, 3, and 4 authored days",
+      "internally horizontal-scrollable",
+      "144px",
+      "160px",
+      "Traditional Chinese authored content",
+    ]) {
+      expect(review).toContain(phrase);
+    }
     expect(review).toMatch(/composition/i);
     expect(review).toMatch(/map grammar/i);
     expect(review).toMatch(/typography|density/i);

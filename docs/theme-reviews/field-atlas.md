@@ -36,6 +36,19 @@ Dialog, candidate, and task focus rings were visibly confirmed in the in-app bro
 
 The in-app-browser backend did not expose global sequential-keyboard, forced-colors, or reduced-motion emulation. Those are not claimed as controller observations. Native Playwright covered keyboard focus and restoration plus forced-colors and reduced-motion behavior in the composed external-network-blocked suite, which passed `27/27`.
 
+### Multi-day rail and authored-locale regression
+
+The round-4 deterministic Chromium regression now exercises 2, 3, and 4 authored days at `320x568`, `390x844`, and `430x932`, plus the `1440x1000` desktop rail. On normal mobile, the bounded date rail is internally horizontal-scrollable and keeps nonshrinking, readable `44px`-minimum targets; it does not require every authored day to be visible simultaneously. The `<=15rem` high-text/zoom document-flow mode and the desktop one-column vertical rail remain separate layout modes.
+
+- At 320, date buttons remain `144px` wide. The four-day rail measures `300px` client width by `576px` scroll width, while the header remains `140/140` client/scroll height and document horizontal overflow remains zero.
+- At 390 and 430, date buttons remain `160px` wide. Four-day rails measure `370/640` and `410/640` client/scroll width; their headers remain `141/141` and `125/125`, with zero document horizontal overflow.
+- At 1440, the rail remains a vertical `236px`-wide grid with four contained rows (`236x56` to `236x63.375`) and zero document horizontal overflow.
+- The browser test scrolls the last authored day into the rail viewport for the three- and four-day cases, proving that later choices remain reachable without moving the document horizontally.
+
+The focused presentation fixture also renders Traditional Chinese authored content for the trip, day, node, task, candidate, and reservation fields and asserts each exact value. Recipe-owned labels remain English through specific accessible-control assertions and a static scan of recipe source literals; authored content is neither rejected nor translated.
+
+These are automated browser and contract results. The captured controller matrix above predates the four-day fixture; the controller owns the subsequent four-day in-app-browser visual confirmation.
+
 ## Grayscale evidence — completed
 
 [Grayscale capture](assets/field-atlas-grayscale.png) applies `grayscale(1)` at the root. The atlas grid composition and monospaced index layer remain legible. The square/double selected marker, route casing, and two dashed route paths remain identifiable without hue, and horizontal overflow remains zero.
