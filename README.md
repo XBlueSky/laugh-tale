@@ -1,5 +1,11 @@
 # Laugh Tale
 
+[![CI](https://github.com/XBlueSky/laugh-tale/actions/workflows/ci.yml/badge.svg)](https://github.com/XBlueSky/laugh-tale/actions/workflows/ci.yml)
+[![npm: @laugh-tale-island/core](https://img.shields.io/npm/v/%40laugh-tale-island%2Fcore?label=%40laugh-tale-island%2Fcore)](https://www.npmjs.com/package/@laugh-tale-island/core)
+[![npm: @laugh-tale-island/react](https://img.shields.io/npm/v/%40laugh-tale-island%2Freact?label=%40laugh-tale-island%2Freact)](https://www.npmjs.com/package/@laugh-tale-island/react)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Node.js >= 22.13](https://img.shields.io/badge/node-%3E%3D22.13-brightgreen.svg)](package.json)
+
 Laugh Tale is an MIT-licensed, agent-native toolkit for building independent, map-first, mobile-first travel websites from real itinerary material.
 
 Its first shared skill, **Eternal Pose**, can turn prose, CSV, Markdown, documents, links, and conversation into a travel-site starting point, then help update, restyle, or audit it. The generated site remains an independent React project and does not need the plugin at runtime.
@@ -66,9 +72,11 @@ npm --prefix tmp/staged-starter exec playwright install chromium
 npm run test:e2e:staged
 ```
 
-Until `@laugh-tale-island/core` is published, starter checks run against a staged copy in `tmp/staged-starter` whose dependencies install from locally packed tarballs; `npm run stage:starter` builds and refreshes it.
+Starter checks run against a staged copy in `tmp/staged-starter` whose dependencies install from locally packed tarballs, so every check exercises your local, unpublished changes the way a consumer would install them; `npm run stage:starter` builds and refreshes it.
 
 Marketplace presentation source lives in `.cc-marketspec/catalog.yaml` and `.cc-marketspec/entries/`. `npm run check:marketplace` validates without writing; `npm run build:marketplace` produces the ignored `.cc-marketspec/dist/manifest.json` only when a consumer needs it. Contributions should preserve the map-first/mobile-first experience contract, keep provider calls fake in tests, and include focused regression coverage.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full contribution guide, commit conventions, and PR process. Questions and ideas are welcome in [Discussions](https://github.com/XBlueSky/laugh-tale/discussions); security issues go through [private vulnerability reporting](SECURITY.md). This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License and attribution
 
