@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 2,
+  "id": "field-atlas",
+  "label": "Field Atlas",
+  "summary": "A dense map-first field index with numbered stops, ruled route bands, and operational trip details.",
+  "register": "product",
+  "presentation": {
+    "source": "presentation",
+    "entry": "index.ts",
+    "css": [
+      "styles/index.css",
+      "styles/tokens.css",
+      "styles/layout.css",
+      "styles/components.css",
+      "styles/accessibility.css"
+    ],
+    "assets": []
+  },
+  "map": {
+    "profile": "presentation/theme-map-profile.ts",
+    "googleStyleGuide": "provider-guides/google-map-style.json"
+  },
+  "motion": {
+    "durationMs": 180,
+    "easing": "cubic-bezier(0.16, 1, 0.3, 1)",
+    "interruptible": true,
+    "reducedMotion": "instant"
+  },
+  "features": ["dense-telemetry"],
+  "font": {
+    "policy": "system",
+    "assets": []
+  },
+  "validation": {
+    "viewports": [320, 390, 430, 768, 1024, 1440],
+    "screenshots": ["home", "experience", "experience-expanded"]
+  }
+}
