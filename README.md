@@ -53,12 +53,14 @@ Requirements: Node.js 22 or newer and npm.
 
 ```bash
 npm ci
-npm --prefix plugins/eternal-pose/starter/react ci
-npm run check
-npm run test:starter
-npm --prefix plugins/eternal-pose/starter/react exec playwright install chromium
-npm run test:e2e
+npm run stage:starter
+LAUGH_TALE_STARTER_ROOT="$PWD/tmp/staged-starter" npm run check
+npm run test:starter:staged
+npm --prefix tmp/staged-starter exec playwright install chromium
+npm run test:e2e:staged
 ```
+
+Until `@laugh-tale/core` is published, starter checks run against a staged copy in `tmp/staged-starter` whose dependencies install from locally packed tarballs; `npm run stage:starter` builds and refreshes it.
 
 Marketplace presentation source lives in `.cc-marketspec/catalog.yaml` and `.cc-marketspec/entries/`. `npm run check:marketplace` validates without writing; `npm run build:marketplace` produces the ignored `.cc-marketspec/dist/manifest.json` only when a consumer needs it. Contributions should preserve the map-first/mobile-first experience contract, keep provider calls fake in tests, and include focused regression coverage.
 

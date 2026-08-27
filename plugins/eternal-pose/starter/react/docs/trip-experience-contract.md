@@ -20,6 +20,8 @@ The following protected invariants keep a customized site recognizably safe and 
 - Provider-neutral interfaces remain outside provider implementations. Production uses configured Google adapters only; missing content, missing keys, and provider load failures are explicit setup states. Fake providers are test-only and visibly labeled.
 - Touch controls are at least 44 by 44 CSS pixels, keyboard focus remains visible and restorable, screen-reader names contain meaningful dates and certainty, forced colors remain legible, and reduced-motion preferences remove nonessential movement.
 
+The pure trip model, validation, scheduling, progress, route, timeline, map-presentation, and sheet-geometry invariants are provided by the exact pinned `@laugh-tale/core` version; upgrade the package rather than re-implementing them locally.
+
 ## Change protocol
 
 Inspect current code and user-authored content first. Keep a focused test for every protected behavior you change, run `npm run check`, and run the relevant mobile Playwright coverage. Use synthetic fixtures only in tests; never copy private itinerary or credential data into reusable source.

@@ -10,6 +10,8 @@ npm ci
 npm run dev
 ```
 
+`npm ci` installs the exact pinned `@laugh-tale/core` version from the public npm registry.
+
 Add your itinerary in `src/trip-content/trip.ts`, then set `VITE_GOOGLE_MAPS_API_KEY` in `.env.local`. Missing trip content or a missing key intentionally renders a configuration-required screen; it never substitutes a fake map or claims Google is connected.
 
 Before editing the experience, read [docs/trip-experience-contract.md](docs/trip-experience-contract.md). Run `npm run check` after ordinary changes and `npm run test:e2e` after changing a protected interaction contract.
