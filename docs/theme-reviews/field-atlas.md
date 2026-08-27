@@ -1,22 +1,51 @@
 # Field Atlas authored-world review
 
-## Initial implementation record
+## Completed controller browser record
 
-The controller-owned browser pass and captures are pending. This record describes implemented hooks and the intended review matrix; it does not claim visual evidence that has not been captured.
+**Controller browser matrix: complete.** The controller inspected Home; default and expanded Experience; candidate, reservation, and task interactions; provider-key, provider-load, loading, map-error, and fatal states; and all three itinerary sheet snaps. Normal mobile coverage used `320x568`, `390x844`, and `430x932`. Desktop coverage used `768`, `1024`, and `1440` CSS-pixel widths, with representative captures at `1440x1000`.
 
-- **Composition:** home uses one route overview, readiness facts, a compact reservation ledger, and an indexed day field. Experience uses a fixed atlas index, persistent map grid, asymmetrical legend, numbered timeline, and one bounded details surface rather than a floating card grid.
-- **Map grammar:** indexed marker tokens, selected marker brackets, completed marker cuts, route casing, and uncertain-route dash patterns carry meaning without relying on accent hue.
-- **Typography and density:** system UI text is paired with a system monospaced numeric/index layer at `VISUAL_DENSITY 8`.
-- **Component language:** sharp ruled regions and cropped grid geometry replace rounded cards, pills, elevation, and glass.
+The pass used the ignored controller-only deterministic visual map harness. It renders the actual Field Atlas marker and route profile with bounded provider chrome. The harness is not shipped or committed, and it adds no runtime selector, npm dependency, remote asset, or font.
+
+## Authored-world assessment
+
+- **Composition:** Home uses one route overview, readiness facts, a compact reservation ledger, and an indexed day field. Experience uses a persistent map grid between a vertical desktop field index and one bounded detail surface. Normal mobile retains the persistent-map, three-snap silhouette; the 200% text mode switches to complete document flow.
+- **Map grammar:** indexed markers, a square/double selected marker, completed-marker cuts, route casing, and dashed uncertain routes remain distinguishable without relying on the cobalt accent.
+- **Typography and density:** system UI text is paired with a system monospaced numeric/index layer at `VISUAL_DENSITY 8`. Dense information remains organized by sharp rules, sequence numbers, and bounded regions.
+- **Component language:** sharp ruled regions and cropped grid geometry replace rounded cards, pill clusters, elevation, gradients, blur, and glass.
 - **Icon and status language:** operational text keys, route bands, check shapes, and boundary patterns identify current, selected, completed, uncertain, and failed states.
-- **Motion:** `MOTION_INTENSITY 3`; only interruptible state transitions use the 180ms token, and reduced motion is instant.
-- **Content framing:** recipe-owned copy is short and operational. Trip titles, notes, places, reservation data, and tasks render unchanged from the authored model.
+- **Motion:** `MOTION_INTENSITY 3`; only interruptible state transitions use the 180ms token, and the reduced-motion path is instant.
+- **Content framing:** recipe-owned visible and accessible strings are consistently English and operational. Authored trip titles, day titles, notes, places, reservation data, candidate names, and tasks render unchanged from the authored model.
 
-## Pending controller browser matrix
+## Responsive and provider evidence
 
-The controller will inspect Home, default Experience, expanded Experience, candidate, reservation, task, setup-required, loading, map-error, and fatal-error at `320`, `390`, `430`, `768`, `1024`, and `1440` CSS pixels. The pass also covers 200% text zoom, keyboard traversal, reduced motion, forced colors, touch targets, overflow, and map attribution.
+The controller pass first exposed defects that headless review missed:
 
-- Grayscale capture: pending controller browser pass (`docs/theme-reviews/assets/field-atlas-grayscale.png`).
-- Accent substitution capture: pending controller browser pass (`docs/theme-reviews/assets/field-atlas-accent-substitution.png`).
+- At `1440x1000`, the trip title had `0px` content width and a `673px` text height; the date rail was horizontal because later base component rules overrode the desktop layout.
+- At normal `320`, `390`, and `430` widths, expanded-header scroll heights were `233px`, `195px`, and `172px` against the fixed header. The stacked sheet toolbar occupied `101px`.
+- Recipe-owned copy fragmented between English and Traditional Chinese despite the English document and fixture.
 
-No NPS, Felt, Mapbox, or other reference asset, screenshot, logo, proprietary font, or trademarked trade dress was copied. Their named references informed only general product and cartographic principles.
+Commit `6060810` corrected those findings. The post-fix controller measurements were:
+
+- At `1440x1000`, the title is `220x46`, the primary rail region is `236x148`, date buttons form a vertical `236x56` stack, and the date rail is a `236px`-wide grid.
+- The map occupies `x=240..1056`; the detail sheet occupies `x=1056..1428`. The provider control remains `44x44`, and provider control and attribution stay contained.
+- Mobile header client/scroll heights are `140/140` at 320, `141/141` at 390, and `125/125` at 430. Date rails are approximately `61px`, remain inside the header, and the sheet toolbar is approximately `56px`.
+- Horizontal overflow is zero at every inspected normal width and across all three sheet snaps.
+- At 200% root text on `320x568`, Field Atlas uses the grid document-flow mode. There is no horizontal overflow, the Home `h1` fits its client width, and every critical control remains at least `44px`.
+
+Dialog, candidate, and task focus rings were visibly confirmed in the in-app browser. Provider attribution and default controls remained visible and operable throughout the inspected matrix.
+
+The in-app-browser backend did not expose global sequential-keyboard, forced-colors, or reduced-motion emulation. Those are not claimed as controller observations. Native Playwright covered keyboard focus and restoration plus forced-colors and reduced-motion behavior in the composed external-network-blocked suite, which passed `27/27`.
+
+## Grayscale evidence — completed
+
+[Grayscale capture](assets/field-atlas-grayscale.png) applies `grayscale(1)` at the root. The atlas grid composition and monospaced index layer remain legible. The square/double selected marker, route casing, and two dashed route paths remain identifiable without hue, and horizontal overflow remains zero.
+
+## Accent substitution evidence — completed
+
+[Accent-substitution capture](assets/field-atlas-accent-substitution.png) replaces the cobalt accent with `#9a3a76`, `#6f2454`, and `#efdcea` in both CSS and the review map profile. The selected marker, active rail choice, and selected itinerary row change color while the composition, marker shapes, route casing, dashed-route grammar, and provider bounds remain intact. Horizontal overflow remains zero.
+
+Both captures are verified `1440x1000` PNG files produced from the controller-owned pass.
+
+## Provenance
+
+No NPS, Felt, Mapbox, reference screenshot, logo, proprietary asset, proprietary font, or trademarked trade dress was copied. Named references informed only general product and cartographic principles.

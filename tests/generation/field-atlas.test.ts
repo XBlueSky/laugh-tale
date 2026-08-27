@@ -1006,7 +1006,7 @@ describe("Field Atlas recipe contract", () => {
     expect(retry).toHaveBeenCalledTimes(1);
   });
 
-  test("documents customization, responsive accessibility, and the pending controller review", () => {
+  test("documents customization, responsive accessibility, and completed controller evidence", () => {
     const readme = readFileSync(join(recipeRoot, "README.md"), "utf8");
     for (const phrase of [
       "Token customization",
@@ -1037,7 +1037,8 @@ describe("Field Atlas recipe contract", () => {
       join(repoRoot, "docs/theme-reviews/field-atlas.md"),
       "utf8",
     );
-    expect(review).toMatch(/controller.*browser.*pending/i);
+    expect(review).toMatch(/controller browser matrix:\s*complete/i);
+    expect(review).not.toMatch(/pending/i);
     expect(review).toMatch(/composition/i);
     expect(review).toMatch(/map grammar/i);
     expect(review).toMatch(/typography|density/i);
@@ -1045,9 +1046,27 @@ describe("Field Atlas recipe contract", () => {
     expect(review).toMatch(/icon|status/i);
     expect(review).toMatch(/motion/i);
     expect(review).toMatch(/content framing/i);
-    expect(review).toMatch(/grayscale.*pending/i);
-    expect(review).toMatch(/accent substitution.*pending/i);
+    expect(review).toMatch(/grayscale[\s\S]*completed/i);
+    expect(review).toMatch(/accent substitution[\s\S]*completed/i);
+    expect(review).toMatch(/1440[\s\S]*title[\s\S]*220x46/i);
+    expect(review).toMatch(/320[\s\S]*140\/140/i);
+    expect(review).toMatch(/forced-colors[\s\S]*playwright/i);
     expect(review).toMatch(/NPS|Felt|Mapbox/);
     expect(review).toMatch(/no.*asset|trade dress/i);
+
+    for (const capture of [
+      "field-atlas-grayscale.png",
+      "field-atlas-accent-substitution.png",
+    ]) {
+      const png = readFileSync(
+        join(repoRoot, "docs/theme-reviews/assets", capture),
+      );
+      expect(Array.from(png.subarray(0, 8)), capture).toEqual([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ]);
+      expect(png.length, capture).toBeGreaterThan(100_000);
+      expect(png.readUInt32BE(16), `${capture} width`).toBe(1440);
+      expect(png.readUInt32BE(20), `${capture} height`).toBe(1000);
+    }
   });
 });
