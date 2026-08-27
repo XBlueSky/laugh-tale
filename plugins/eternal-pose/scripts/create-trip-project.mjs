@@ -4,6 +4,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { validateTargetDirectory } from "../lib/path-safety.mjs";
+import { loadRecipeV2Catalog } from "../lib/recipe-v2.mjs";
 
 const OMITTED_NAMES = new Set([
   ".ds_store",
@@ -64,6 +65,15 @@ function shouldCopyStarterEntry(starterDir, sourcePath) {
     return false;
   }
   return true;
+}
+
+function shouldCopyStarterEntryExceptPresentation(starterDir, sourcePath) {
+  const relativePath = relative(starterDir, sourcePath);
+  return (
+    relativePath !== join("src", "presentation") &&
+    !relativePath.startsWith(`${join("src", "presentation")}${sep}`) &&
+    shouldCopyStarterEntry(starterDir, sourcePath)
+  );
 }
 
 function sameIdentity(left, right) {
@@ -352,7 +362,15 @@ async function writeBufferIntoOwnedDirectory(contents, mode, destinationPath, ow
 }
 
 async function copyFileIntoOwnedDirectory(sourcePath, sourceStats, destinationPath, ownership, context, operations) {
+  const beforeRead = await operations.lstat(sourcePath);
+  if (!beforeRead.isFile() || beforeRead.isSymbolicLink() || !sameIdentity(beforeRead, sourceStats)) {
+    throw new Error("source file identity changed");
+  }
   const contents = await operations.readFile(sourcePath);
+  const afterRead = await operations.lstat(sourcePath);
+  if (!afterRead.isFile() || afterRead.isSymbolicLink() || !sameIdentity(afterRead, beforeRead)) {
+    throw new Error("source file identity changed");
+  }
   await writeBufferIntoOwnedDirectory(
     contents,
     sourceStats.mode,
@@ -363,8 +381,22 @@ async function copyFileIntoOwnedDirectory(sourcePath, sourceStats, destinationPa
   );
 }
 
-async function copyTreeIntoOwnedDirectory(sourceRoot, ownership, context, operations, relativeDirectory = "") {
+async function copyTreeIntoOwnedDirectory(sourceRoot, ownership, context, operations, relativeDirectory = "", options = {}) {
+  const destinationPrefix = options.destinationPrefix ?? "";
+  const shouldCopy = options.shouldCopy ?? shouldCopyStarterEntry;
+  const skipStarterRecipe = options.skipStarterRecipe ?? false;
+  if (relativeDirectory === "" && destinationPrefix !== "") {
+    await ensureOwnedDirectoryPath(ownership, destinationPrefix, context, operations);
+  }
   const sourceDirectory = join(sourceRoot, relativeDirectory);
+  const directoryStats = await operations.lstat(sourceDirectory);
+  if (!directoryStats.isDirectory() || directoryStats.isSymbolicLink()) {
+    throw new Error(`source tree must not contain symbolic links: ${relativeDirectory || "."}`);
+  }
+  const canonicalDirectoryPath = await operations.realpath(sourceDirectory);
+  if (!isWithin(sourceRoot, canonicalDirectoryPath)) {
+    throw new Error(`source tree path escapes source root: ${relativeDirectory || "."}`);
+  }
   const entries = (await operations.readdir(sourceDirectory, { withFileTypes: true })).sort((left, right) =>
     left.name.localeCompare(right.name),
   );
@@ -372,19 +404,19 @@ async function copyTreeIntoOwnedDirectory(sourceRoot, ownership, context, operat
   for (const entry of entries) {
     const relativePath = join(relativeDirectory, entry.name);
     const sourcePath = join(sourceRoot, relativePath);
-    if (!shouldCopyStarterEntry(sourceRoot, sourcePath) || entry.name.startsWith(".laugh-tale-incomplete-")) continue;
+    if (!shouldCopy(sourceRoot, sourcePath) || entry.name.startsWith(".laugh-tale-incomplete-")) continue;
     const sourceStats = await operations.lstat(sourcePath);
     if (sourceStats.isSymbolicLink()) throw new Error(`source tree must not contain symbolic links: ${relativePath}`);
-    const destinationPath = join(ownership.path, relativePath);
+    const destinationPath = join(ownership.path, destinationPrefix, relativePath);
     if (sourceStats.isDirectory()) {
       await runBeforeMutation(operations, context.phase, destinationPath, context.stageDir, context.targetDir);
       await assertOwnedParentChain(ownership, destinationPath, operations);
       beginOwnedMutation(ownership, destinationPath, "directory");
       await operations.mkdir(destinationPath);
       await recordCreatedEntry(ownership, destinationPath, "directory", operations);
-      await copyTreeIntoOwnedDirectory(sourceRoot, ownership, context, operations, relativePath);
+      await copyTreeIntoOwnedDirectory(sourceRoot, ownership, context, operations, relativePath, options);
     } else if (sourceStats.isFile()) {
-      if (relativePath === join("src", "ui", "styles", "recipe.css") && context.phase === "stage-copy") continue;
+      if (skipStarterRecipe && relativePath === join("src", "ui", "styles", "recipe.css") && context.phase === "stage-copy") continue;
       await copyFileIntoOwnedDirectory(sourcePath, sourceStats, destinationPath, ownership, context, operations);
     } else {
       throw new Error(`source tree entry must be a regular file or directory: ${relativePath}`);
@@ -498,7 +530,7 @@ async function finalizeOwnedDirectory(ownership, context, operations) {
   await operations.unlink(ownership.marker.path);
 }
 
-export async function createTripProject({ pluginRoot, targetDir, recipe, starterDir }, testOperations = {}) {
+export async function createTripProject({ pluginRoot, targetDir, recipe, starterDir, recipeCatalogRoot }, testOperations = {}) {
   if (typeof pluginRoot !== "string" || pluginRoot.trim() === "") throw new Error("plugin root is required");
   if (typeof recipe !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(recipe)) {
     throw new Error("recipe name must use lowercase letters, numbers, and hyphens");
@@ -516,8 +548,19 @@ export async function createTripProject({ pluginRoot, targetDir, recipe, starter
     "starter root",
     operations,
   );
-  const recipeRoot = await canonicalDirectory(resolve(canonicalPluginRoot, "recipes"), "recipe root", operations);
-  const recipeSource = await canonicalRecipeFile(resolve(recipeRoot, recipe, "recipe.css"), recipeRoot, operations);
+  const recipeV2 = recipeCatalogRoot === undefined
+    ? null
+    : (await loadRecipeV2Catalog(recipeCatalogRoot, operations)).get(recipe);
+  if (recipeCatalogRoot !== undefined && !recipeV2) throw new Error(`unknown recipe id: ${recipe}`);
+  const recipeRoot = recipeV2
+    ? recipeV2.root
+    : await canonicalDirectory(resolve(canonicalPluginRoot, "recipes"), "recipe root", operations);
+  const recipeSource = recipeV2
+    ? null
+    : await canonicalRecipeFile(resolve(recipeRoot, recipe, "recipe.css"), recipeRoot, operations);
+  const recipeReadme = recipeV2
+    ? await canonicalRecipeFile(join(recipeV2.root, "README.md"), recipeV2.root, operations)
+    : null;
   const canonicalParent = await operations.realpath(dirname(resolvedTarget));
   const canonicalTarget = join(canonicalParent, basename(resolvedTarget));
   if (canonicalTarget !== resolvedTarget) throw new Error("target ownership changed");
@@ -536,18 +579,66 @@ export async function createTripProject({ pluginRoot, targetDir, recipe, starter
     stageOwnership = await prepareOwnedDirectory(stageDir, "stage", operations);
     await createOwnedDirectory(stageOwnership, operations);
     const stageContext = { phase: "stage-copy", stageDir, targetDir: canonicalTarget };
-    await copyTreeIntoOwnedDirectory(canonicalStarter, stageOwnership, stageContext, operations);
-    const recipeTarget = join(stageOwnership.path, "src/ui/styles/recipe.css");
-    const recipeDirectory = dirname(recipeTarget);
-    await ensureOwnedDirectoryPath(stageOwnership, relative(stageOwnership.path, recipeDirectory), stageContext, operations);
-    await copyFileIntoOwnedDirectory(
-      recipeSource,
-      await operations.lstat(recipeSource),
-      recipeTarget,
-      stageOwnership,
-      stageContext,
-      operations,
-    );
+    await copyTreeIntoOwnedDirectory(canonicalStarter, stageOwnership, stageContext, operations, "", {
+      skipStarterRecipe: !recipeV2,
+      shouldCopy: recipeV2 ? shouldCopyStarterEntryExceptPresentation : shouldCopyStarterEntry,
+    });
+    if (recipeV2) {
+      await copyTreeIntoOwnedDirectory(recipeV2.presentationRoot, stageOwnership, stageContext, operations, "", {
+        destinationPrefix: join("src", "presentation"),
+        shouldCopy: () => true,
+      });
+      const presentationReadme = join(stageOwnership.path, "src/presentation/README.md");
+      await ensureOwnedDirectoryPath(
+        stageOwnership,
+        relative(stageOwnership.path, dirname(presentationReadme)),
+        stageContext,
+        operations,
+      );
+      await copyFileIntoOwnedDirectory(
+        recipeReadme,
+        await operations.lstat(recipeReadme),
+        presentationReadme,
+        stageOwnership,
+        stageContext,
+        operations,
+      );
+      for (const assetRoot of recipeV2.assetRoots) {
+        await copyTreeIntoOwnedDirectory(assetRoot, stageOwnership, stageContext, operations, "", {
+          destinationPrefix: join("public", "theme-assets"),
+          shouldCopy: () => true,
+        });
+      }
+      if (recipeV2.googleStyleGuide) {
+        const guideTarget = join(stageOwnership.path, "docs/provider-guides/google-map-style.json");
+        await ensureOwnedDirectoryPath(
+          stageOwnership,
+          relative(stageOwnership.path, dirname(guideTarget)),
+          stageContext,
+          operations,
+        );
+        await copyFileIntoOwnedDirectory(
+          recipeV2.googleStyleGuide,
+          await operations.lstat(recipeV2.googleStyleGuide),
+          guideTarget,
+          stageOwnership,
+          stageContext,
+          operations,
+        );
+      }
+    } else {
+      const recipeTarget = join(stageOwnership.path, "src/ui/styles/recipe.css");
+      const recipeDirectory = dirname(recipeTarget);
+      await ensureOwnedDirectoryPath(stageOwnership, relative(stageOwnership.path, recipeDirectory), stageContext, operations);
+      await copyFileIntoOwnedDirectory(
+        recipeSource,
+        await operations.lstat(recipeSource),
+        recipeTarget,
+        stageOwnership,
+        stageContext,
+        operations,
+      );
+    }
     let starterPackages = {};
     try {
       const starterManifest = JSON.parse(
@@ -565,7 +656,12 @@ export async function createTripProject({ pluginRoot, targetDir, recipe, starter
       starterPackages = {};
     }
     await writeBufferIntoOwnedDirectory(
-      JSON.stringify({ generatorVersion: "0.1.0", recipe, packages: starterPackages }, null, 2),
+      JSON.stringify({
+        generatorVersion: "0.1.0",
+        recipe,
+        ...(recipeV2 ? { recipeSchemaVersion: 2 } : {}),
+        packages: starterPackages,
+      }, null, 2),
       0o644,
       join(stageOwnership.path, "eternal-pose.json"),
       stageOwnership,
