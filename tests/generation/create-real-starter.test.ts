@@ -168,9 +168,12 @@ describe("real starter generation", () => {
     };
     expect(metadata.generatorVersion).toBe("0.1.0");
     expect(metadata.recipe).toBe(recipe);
+    const starterManifest = JSON.parse(
+      readFileSync(join(pluginRoot, "starter/react/package.json"), "utf8"),
+    ) as { dependencies: Record<string, string> };
     expect(metadata.packages).toEqual({
-      "@laugh-tale-island/core": "0.1.0",
-      "@laugh-tale-island/react": "0.1.0",
+      "@laugh-tale-island/core": starterManifest.dependencies["@laugh-tale-island/core"],
+      "@laugh-tale-island/react": starterManifest.dependencies["@laugh-tale-island/react"],
     });
 
     const paths = walk(targetDir);
