@@ -1,6 +1,6 @@
 {
   "name": "@laugh-tale-island/react",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "React hooks and prop-getters for map-first travel sites built on @laugh-tale-island/core.",
   "license": "MIT",
   "author": "XBlueSky",
@@ -48,11 +48,11 @@
     "lint": "eslint ."
   },
   "peerDependencies": {
-    "@laugh-tale-island/core": "0.1.0",
+    "@laugh-tale-island/core": "1.0.0",
     "react": ">=19.2.0 <20"
   },
   "devDependencies": {
-    "@laugh-tale-island/core": "0.1.0",
+    "@laugh-tale-island/core": "1.0.0",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.2",
     "@testing-library/user-event": "14.6.4",

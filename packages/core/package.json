@@ -1,6 +1,6 @@
 {
   "name": "@laugh-tale-island/core",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Framework-neutral trip model, validation, scheduling, progress, routes, and presentation selectors for map-first travel sites.",
   "license": "MIT",
   "author": "XBlueSky",
