@@ -47,11 +47,15 @@ The round-4 deterministic Chromium regression now exercises 2, 3, and 4 authored
 
 The focused presentation fixture also renders Traditional Chinese authored content for the trip, day, node, task, candidate, and reservation fields and asserts each exact value. Recipe-owned labels remain English through specific accessible-control assertions and a static scan of recipe source literals; authored content is neither rejected nor translated.
 
-These are automated browser and contract results. The captured controller matrix above predates the four-day fixture; the controller owns the subsequent four-day in-app-browser visual confirmation.
+These automated browser and contract results were subsequently confirmed with the four-day fixture in the controller's in-app-browser matrix.
 
 The controller's classic-scrollbar pre-fix recheck of commit `896b326` found a platform-specific containment defect that overlay-scrollbar Chromium did not reproduce. At 320, the `144x61` buttons fit above the `156px` header bottom, but the native scrollbar expanded the `300/576` client/scroll-width rail to `76px` high and a `165px` bottom; the header measured `155/144` scroll/client height. At 390, the `160x61` buttons also fit, but the `370/640` rail reached a `165.5px` bottom and the header measured `156/144`. Label readability and document horizontal overflow remained correct, and 430 plus desktop were contained.
 
-The normal-mobile cross-engine rule now keeps `overflow-x:auto` and scroll snapping while the native scrollbar is visually suppressed. The rail remains keyboard, touch, and wheel scrollable; focus-driven scrolling still moves `scrollLeft` and brings the last `44px`-minimum day target fully into view. The partially visible next day remains the visual affordance. Desktop retains its vertical rail, and the `<=15rem` document-flow override remains unchanged. The controller owns the follow-up classic-scrollbar matrix; the existing captures are unchanged.
+The normal-mobile cross-engine rule now keeps `overflow-x:auto` and scroll snapping while the native scrollbar is visually suppressed. The rail remains keyboard, touch, and wheel scrollable; focus-driven scrolling still moves `scrollLeft` and brings the last `44px`-minimum day target fully into view. The partially visible next day remains the visual affordance. Desktop retains its vertical rail, and the `<=15rem` document-flow override remains unchanged.
+
+The controller's completed post-fix IAB matrix on commit `ca866a0` measured header scroll/client heights of `140/140`, `141/141`, and `125/125` at 320, 390, and 430. Each rail remained approximately `61px` high with client/scroll widths of `300/576`, `370/640`, and `410/640`; computed `overflow-x` remained `auto` and `scrollbar-width` was `none`. Every day button remained `144–160px` wide, all labels fit, and document horizontal overflow was zero. At 1440, the date rail remained a vertical `236px` grid with `236px` buttons and no overflow.
+
+At 320, activating Day 4 through its actual accessible locator moved the rail to its maximum `scrollLeft` of `276`, fully contained the selected button, switched the visible itinerary to Day 4, and left the header contained. The existing grayscale and accent-substitution captures are unchanged.
 
 ## Grayscale evidence — completed
 
