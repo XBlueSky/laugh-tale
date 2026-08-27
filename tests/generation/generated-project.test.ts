@@ -493,7 +493,9 @@ describe("generated project validation", () => {
       expect(Object.keys(built)).toEqual(["tripContentReadiness"]);
       expect(built.tripContentReadiness).toEqual({ hasTripContent: false });
     },
-    15_000,
+    // The readiness build regularly takes ~13s on CI runners, so a 15s budget
+    // flakes under load; match the staging test's generous ceiling.
+    120_000,
   );
 
   test("local mode runs every gate read-only and reports intentional setup gaps as warnings", () => {
