@@ -8,6 +8,7 @@ export type {
 export {
   createLocalStorageProgressStore,
   type LocalStorageProgressStoreOptions,
+  type ProgressReadResult,
   type ProgressStore,
   type ProgressStoreEvents,
 } from "./progress-store.js";

@@ -6,6 +6,10 @@ import { describe, expect, it } from "vitest";
 const packageRoot = fileURLToPath(new URL("..", import.meta.url));
 
 describe("package boundaries", () => {
+  it("scans a non-empty source tree", () => {
+    expect(globSync(join(packageRoot, "src/**/*.ts*")).length).toBeGreaterThan(0);
+  });
+
   it("keeps React, Google, and CSS out of all package sources", () => {
     for (const file of globSync(join(packageRoot, "src/**/*.ts"))) {
       const source = readFileSync(file, "utf8");

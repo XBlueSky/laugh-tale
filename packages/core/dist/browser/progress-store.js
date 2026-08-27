@@ -14,11 +14,14 @@ export function createLocalStorageProgressStore(key, options = {}) {
     const events = "events" in options ? options.events : defaultEvents();
     return {
         read() {
+            if (storage === undefined) {
+                return { status: "unavailable" };
+            }
             try {
-                return storage?.getItem(key) ?? null;
+                return { status: "ready", value: storage.getItem(key) };
             }
             catch {
-                return null;
+                return { status: "unavailable" };
             }
         },
         write(value) {

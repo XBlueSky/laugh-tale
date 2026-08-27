@@ -39,14 +39,14 @@ describe("createLocalStorageProgressStore", () => {
   it("reads and writes exactly its own key", () => {
     const storage = workingStorage({ other: "x" });
     const store: ProgressStore = createLocalStorageProgressStore("trip:one", { storage });
-    expect(store.read()).toBeNull();
+    expect(store.read()).toEqual({ status: "ready", value: null });
     expect(store.write("payload")).toBe(true);
     expect(storage.data["trip:one"]).toBe("payload");
     expect(storage.data.other).toBe("x");
-    expect(store.read()).toBe("payload");
+    expect(store.read()).toEqual({ status: "ready", value: "payload" });
   });
 
-  it("returns null/false instead of throwing when storage fails", () => {
+  it("reports unavailable reads and failed writes instead of throwing", () => {
     const store = createLocalStorageProgressStore("trip:one", {
       storage: {
         getItem: () => {
@@ -57,7 +57,7 @@ describe("createLocalStorageProgressStore", () => {
         },
       },
     });
-    expect(store.read()).toBeNull();
+    expect(store.read()).toEqual({ status: "unavailable" });
     expect(store.write("payload")).toBe(false);
   });
 
@@ -83,7 +83,7 @@ describe("createLocalStorageProgressStore", () => {
       storage: undefined,
       events: undefined,
     });
-    expect(store.read()).toBeNull();
+    expect(store.read()).toEqual({ status: "unavailable" });
     expect(store.write("payload")).toBe(false);
     const listener = vi.fn();
     const unsubscribe = store.subscribe(listener);

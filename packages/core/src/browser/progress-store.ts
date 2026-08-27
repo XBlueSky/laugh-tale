@@ -2,11 +2,17 @@
  * Storage boundary for one resolved trip-progress key. The progress schema,
  * parser, and reducer stay in the package root; a store only moves raw
  * strings so a site can substitute any persistence without changing the
- * reducer. `write` reports success so callers can surface a semantic
- * `memory-only` state instead of fabricating persistence.
+ * reducer. `read` distinguishes an empty key from unavailable storage so a
+ * consumer can refuse to overwrite data it could not see, and `write`
+ * reports success so callers can surface a semantic `memory-only` state
+ * instead of fabricating persistence.
  */
+export type ProgressReadResult =
+  | { status: "ready"; value: string | null }
+  | { status: "unavailable" };
+
 export interface ProgressStore {
-  read(): string | null;
+  read(): ProgressReadResult;
   write(value: string): boolean;
   subscribe(listener: (value: string | null) => void): () => void;
 }
@@ -42,10 +48,13 @@ export function createLocalStorageProgressStore(
 
   return {
     read() {
+      if (storage === undefined) {
+        return { status: "unavailable" };
+      }
       try {
-        return storage?.getItem(key) ?? null;
+        return { status: "ready", value: storage.getItem(key) };
       } catch {
-        return null;
+        return { status: "unavailable" };
       }
     },
     write(value) {
