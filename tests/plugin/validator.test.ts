@@ -106,9 +106,12 @@ describe("plugin contract validator", () => {
   test("uses only public npm registry resolved URLs in the committed lockfile", () => {
     const lockfile = readJson("package-lock.json");
     const resolvedUrls = collectResolvedUrls(lockfile);
-    const hosts = resolvedUrls.map((url) => new URL(url).host);
+    const remoteUrls = resolvedUrls.filter((url) => /^[a-z][a-z0-9+.-]*:\/\//i.test(url));
+    const workspaceLinks = resolvedUrls.filter((url) => !/^[a-z][a-z0-9+.-]*:\/\//i.test(url));
+    const hosts = remoteUrls.map((url) => new URL(url).host);
 
     expect(hosts).not.toContain("npm.synology.inc");
     expect(new Set(hosts)).toEqual(new Set(["registry.npmjs.org"]));
+    expect(workspaceLinks.filter((path) => !path.startsWith("packages/"))).toEqual([]);
   });
 });

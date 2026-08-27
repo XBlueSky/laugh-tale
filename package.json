@@ -2,6 +2,9 @@
   "name": "laugh-tale",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "type": "module",
   "license": "MIT",
   "engines": {
@@ -12,10 +15,14 @@
     "test:watch": "vitest",
     "type-check": "tsc --noEmit",
     "lint": "eslint .",
+    "build:packages": "npm run build --workspaces",
+    "test:packages": "npm run test --workspaces",
+    "lint:packages": "npm run lint --workspaces",
+    "type-check:packages": "npm run type-check --workspaces",
     "validate:plugins": "node scripts/validate-plugin-contracts.mjs",
     "check:marketplace": "cc-marketspec --check",
     "build:marketplace": "cc-marketspec",
-    "check": "npm run validate:plugins && npm run check:marketplace && npm test && npm run type-check && npm run lint",
+    "check": "npm run validate:plugins && npm run check:marketplace && npm run build:packages && npm test && npm run test:packages && npm run type-check && npm run type-check:packages && npm run lint && npm run lint:packages",
     "test:starter": "npm --prefix plugins/eternal-pose/starter/react run check",
     "test:e2e": "npm --prefix plugins/eternal-pose/starter/react run test:e2e"
   },
