@@ -9,6 +9,12 @@
   color: var(--atlas-ink);
   background: var(--atlas-canvas);
   isolation: isolate;
+  container-name: field-atlas;
+  container-type: inline-size;
+}
+
+.atlas-responsive-layout {
+  display: contents;
 }
 
 .safe-area-probe {
@@ -277,5 +283,80 @@
   .atlas-map-controls__status,
   .atlas-day-index__primary small {
     display: none;
+  }
+}
+
+@container field-atlas (max-width: 15rem) {
+  .atlas-responsive-layout {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    min-width: 0;
+    height: 100%;
+    grid-template-rows: auto minmax(12rem, 42dvh) auto auto;
+    align-content: start;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .atlas-responsive-layout > .day-header {
+    position: relative;
+    top: auto;
+    right: auto;
+    left: auto;
+    width: auto;
+    max-height: none;
+    grid-row: 1;
+    margin: var(--atlas-space-2);
+    overflow: visible;
+  }
+
+  .atlas-responsive-layout > .atlas-map-surface {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    height: auto;
+    min-height: 12rem;
+    grid-row: 2;
+  }
+
+  .atlas-responsive-layout .itinerary-map {
+    inset: 0;
+    width: auto;
+    height: auto;
+    min-height: 44px;
+  }
+
+  .atlas-responsive-layout > .atlas-map-controls {
+    position: relative;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    display: grid;
+    width: auto;
+    grid-row: 3;
+    grid-template-columns: repeat(2, minmax(44px, 1fr));
+    margin: var(--atlas-space-2);
+  }
+
+  .atlas-responsive-layout > .itinerary-sheet {
+    position: relative;
+    inset: auto !important;
+    width: 100%;
+    height: auto !important;
+    max-height: none !important;
+    grid-row: 4;
+    grid-template-rows: auto auto auto auto;
+    overflow: visible;
+    transform: none !important;
+    transition-duration: 0ms !important;
+  }
+
+  .atlas-responsive-layout .atlas-detail-surface__scroll {
+    min-height: 1px;
+    overflow: visible;
+    overscroll-behavior: auto;
   }
 }

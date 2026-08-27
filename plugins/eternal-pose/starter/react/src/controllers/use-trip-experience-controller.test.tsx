@@ -63,14 +63,14 @@ const mapProfile: MapVisualProfile = {
     className: `marker-${index}`,
     label: place.label,
     parts: [{ className: "marker-label", text: place.label }],
-    fallback: { fill: "#fff", stroke: "#000", text: String(index + 1), size: 44, shape: "circle", strokeWidth: 3 },
+    fallback: { fill: "#fff", stroke: "#000", labelColor: "#000", text: String(index + 1), size: 44, shape: "circle", strokeWidth: 3 },
   }),
   userLocation: () => ({
     title: "location",
     className: "location",
     label: "location",
     parts: [],
-    fallback: { fill: "#000", stroke: "#fff", text: "", size: 44, shape: "circle", strokeWidth: 3 },
+    fallback: { fill: "#000", stroke: "#fff", labelColor: "#fff", text: "", size: 44, shape: "circle", strokeWidth: 3 },
   }),
   route: () => ({ stroke: "#000", opacity: 1, width: 2 }),
 };

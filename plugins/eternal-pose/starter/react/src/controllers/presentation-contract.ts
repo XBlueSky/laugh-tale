@@ -86,6 +86,7 @@ export interface MapMarkerVisual {
   fallback: {
     fill: string;
     stroke: string;
+    labelColor: string;
     text: string;
     size: number;
     shape: "circle" | "square" | "diamond";

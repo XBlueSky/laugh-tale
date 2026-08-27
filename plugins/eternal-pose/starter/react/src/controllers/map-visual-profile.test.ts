@@ -16,6 +16,7 @@ function markerVisual(label = "Marker"): MapMarkerVisual {
     fallback: {
       fill: "#ffffff",
       stroke: "#111827",
+      labelColor: "#111827",
       text: "1",
       size: 44,
       shape: "circle",
@@ -214,6 +215,13 @@ describe("assertMapVisualProfile", () => {
         fallback: { ...markerVisual().fallback, stroke: " " },
       }),
     ],
+    [
+      "fallback label color",
+      () => ({
+        ...markerVisual(),
+        fallback: { ...markerVisual().fallback, labelColor: " " },
+      }),
+    ],
   ] as const)("rejects a blank %s", (expected, visual) => {
     expect(() =>
       assertMapVisualProfile(validProfile({ marker: visual })),
@@ -248,6 +256,8 @@ describe("assertMapVisualProfile", () => {
     ["fallback stroke", "\turl(https://attacker.invalid/stroke.svg#paint)\n"],
     ["fallback fill", `#ffffff\u0000`],
     ["fallback stroke", `rgb(1 2 3)\u000B`],
+    ["fallback label color", "url(https://attacker.invalid/label.svg#paint)"],
+    ["fallback label color", `#ffffff\u0000`],
   ] as const)("rejects an unsafe %s paint", (field, paint) => {
     const profile = validProfile({
       marker: () => {
@@ -256,7 +266,13 @@ describe("assertMapVisualProfile", () => {
           ...visual,
           fallback: {
             ...visual.fallback,
-            [field === "fallback fill" ? "fill" : "stroke"]: paint,
+            [
+              field === "fallback fill"
+                ? "fill"
+                : field === "fallback stroke"
+                  ? "stroke"
+                  : "labelColor"
+            ]: paint,
           },
         };
       },

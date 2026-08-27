@@ -100,6 +100,20 @@ function classicMarkerIcon(visual: MapMarkerVisual): string {
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
+function classicMarkerLabel(
+  visual: MapMarkerVisual,
+): google.maps.MarkerLabel | undefined {
+  if (visual.fallback.text.length === 0) return undefined;
+  return {
+    text: visual.fallback.text,
+    color:
+      resolveMapFallbackPaint(visual.fallback.labelColor) ??
+      SAFE_MAP_FALLBACK_PAINT,
+    fontSize: "14px",
+    fontWeight: "700",
+  };
+}
+
 function supportedDashIcons(
   visual: MapRouteVisual,
 ): google.maps.IconSequence[] | undefined {
@@ -302,14 +316,13 @@ export class GoogleMapAdapter implements MapAdapter {
       }
       const visual = this.options.profile.marker(place, index);
       if (this.mapId === undefined) {
+        const label = classicMarkerLabel(visual);
         const marker = new this.runtime.Marker({
           map,
           position: coordinates,
           title: visual.title,
           icon: classicMarkerIcon(visual),
-          ...(visual.fallback.text.length === 0
-            ? {}
-            : { label: visual.fallback.text }),
+          ...(label === undefined ? {} : { label }),
         });
         const listener = marker.addListener("click", () => {
           if (
@@ -417,14 +430,13 @@ export class GoogleMapAdapter implements MapAdapter {
     }
     const visual = this.options.profile.userLocation();
     if (this.mapId === undefined) {
+      const label = classicMarkerLabel(visual);
       this.userClassicMarker = new this.runtime.Marker({
         map: this.map,
         position: this.userLocation,
         title: visual.title,
         icon: classicMarkerIcon(visual),
-        ...(visual.fallback.text.length === 0
-          ? {}
-          : { label: visual.fallback.text }),
+        ...(label === undefined ? {} : { label }),
       });
     } else {
       this.userAdvancedMarker = new this.runtime.AdvancedMarkerElement({

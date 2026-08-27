@@ -49,6 +49,7 @@ export const fieldAtlasMapProfile = {
           ? {
               fill: "#2457c5",
               stroke: "#17212b",
+              labelColor: "#f4f7f9",
               text: `S${number}`,
               size: 48,
               shape: "square",
@@ -58,6 +59,7 @@ export const fieldAtlasMapProfile = {
             ? {
                 fill: "#e5ebef",
                 stroke: "#2457c5",
+                labelColor: "#17212b",
                 text: `✓${number}`,
                 size: 44,
                 shape: "diamond",
@@ -67,6 +69,7 @@ export const fieldAtlasMapProfile = {
               ? {
                   fill: "#c2ccd3",
                   stroke: "#3f4e59",
+                  labelColor: "#17212b",
                   text: `×${number}`,
                   size: 44,
                   shape: "circle",
@@ -76,6 +79,7 @@ export const fieldAtlasMapProfile = {
                 ? {
                     fill: "#f4f7f9",
                     stroke: "#263541",
+                    labelColor: "#17212b",
                     text: `C${number}`,
                     size: 44,
                     shape: "square",
@@ -84,6 +88,7 @@ export const fieldAtlasMapProfile = {
                 : {
                     fill: "#f4f7f9",
                     stroke: "#263541",
+                    labelColor: "#17212b",
                     text: number,
                     size: 44,
                     shape: "circle",
@@ -102,6 +107,7 @@ export const fieldAtlasMapProfile = {
     fallback: {
       fill: "#2457c5",
       stroke: "#f4f7f9",
+      labelColor: "#f4f7f9",
       text: "+",
       size: 44,
       shape: "circle",

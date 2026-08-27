@@ -44,6 +44,25 @@ function parseJsonBody(init: RequestInit | undefined): unknown {
   return parsed;
 }
 
+function fallbackContrastRatio(first: string, second: string): number {
+  const luminance = (color: string) => {
+    const match = /^#([0-9a-f]{6})$/i.exec(color);
+    if (match?.[1] === undefined) throw new Error(`Expected hex paint: ${color}`);
+    const value = match[1];
+    const channels = [0, 2, 4].map((offset) => {
+      const normalized = Number.parseInt(value.slice(offset, offset + 2), 16) / 255;
+      return normalized <= 0.04045
+        ? normalized / 12.92
+        : ((normalized + 0.055) / 1.055) ** 2.4;
+    });
+    return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+  };
+  const [lighter, darker] = [luminance(first), luminance(second)].sort(
+    (left, right) => right - left,
+  );
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 function routeEdge(overrides: Partial<RouteEdge> = {}): RouteEdge {
   return {
     id: "route-a-b",
@@ -79,6 +98,7 @@ const googleMapProfile: MapVisualProfile = {
     fallback: {
       fill: place.tone === "selected" ? "#123456" : "#fefefe",
       stroke: "#654321",
+      labelColor: place.tone === "selected" ? "#ffffff" : "#111827",
       text: String(index + 1),
       size: place.tone === "selected" ? 48 : 44,
       shape:
@@ -98,6 +118,7 @@ const googleMapProfile: MapVisualProfile = {
     fallback: {
       fill: "#2563eb",
       stroke: "#ffffff",
+      labelColor: "#ffffff",
       text: "U",
       size: 44,
       shape: "circle",
@@ -1556,7 +1577,12 @@ describe("GoogleMapAdapter lifecycle", () => {
     expect(FakeClassicMarker.instances).toHaveLength(5);
     expect(FakeClassicMarker.instances[0]).toMatchObject({
       title: "Profile title: Museum",
-      label: "1",
+      label: {
+        text: "1",
+        color: "#111827",
+        fontSize: "14px",
+        fontWeight: "700",
+      },
     });
     const classicIcon = FakeClassicMarker.instances[0]?.icon;
     expect(typeof classicIcon).toBe("string");
@@ -1585,8 +1611,43 @@ describe("GoogleMapAdapter lifecycle", () => {
     adapter.setUserLocation({ lat: 24.9, lng: 120.9 });
     expect(FakeClassicMarker.instances.at(-1)).toMatchObject({
       title: "Profile current location",
-      label: "U",
+      label: {
+        text: "U",
+        color: "#ffffff",
+        fontSize: "14px",
+        fontWeight: "700",
+      },
     });
+  });
+
+  it("passes explicit classic label visuals for every marker tone", async () => {
+    const adapter = createGoogleMapAdapter({ development: false });
+    await adapter.mount(document.createElement("div"), {
+      onPlaceSelect: vi.fn(),
+      onRouteSelect: vi.fn(),
+    });
+
+    adapter.render(presentation);
+
+    expect(FakeClassicMarker.instances.map(({ label }) => label)).toEqual(
+      presentation.places.map((place, index) => {
+        const fallback = googleMapProfile.marker(place, index).fallback;
+        return {
+          text: fallback.text,
+          color: fallback.labelColor,
+          fontSize: "14px",
+          fontWeight: "700",
+        };
+      }),
+    );
+    for (const [index, place] of presentation.places.entries()) {
+      const fallback = googleMapProfile.marker(place, index).fallback;
+      const label = FakeClassicMarker.instances[index]?.label;
+      if (typeof label !== "object" || label === null || label.color === undefined) {
+        throw new Error("Expected a typed classic marker label");
+      }
+      expect(fallbackContrastRatio(fallback.fill, label.color)).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   it("keeps adversarial classic-marker colors inside their SVG attributes", async () => {
@@ -1644,7 +1705,8 @@ describe("GoogleMapAdapter lifecycle", () => {
           ...googleMapProfile.marker(place, index).fallback,
           fill: "  UrL ( https://attacker.invalid/pattern.svg#p )  ",
           stroke: `#654321\u0000`,
-          text: "",
+          labelColor: "url(https://attacker.invalid/label.svg#paint)",
+          text: "1",
         },
       }),
     };
@@ -1671,6 +1733,36 @@ describe("GoogleMapAdapter lifecycle", () => {
     expect(svg).not.toMatch(/url\s*\(/i);
     expect(svg).not.toContain("attacker.invalid");
     expect(svg).not.toContain("\u0000");
+    expect(FakeClassicMarker.instances[0]?.label).toEqual({
+      text: "1",
+      color: "#000000",
+      fontSize: "14px",
+      fontWeight: "700",
+    });
+
+    const controlProfile: MapVisualProfile = {
+      ...googleMapProfile,
+      id: "control-classic-marker-label-profile",
+      marker: (place, index) => ({
+        ...googleMapProfile.marker(place, index),
+        fallback: {
+          ...googleMapProfile.marker(place, index).fallback,
+          labelColor: `#ffffff\u0000`,
+        },
+      }),
+    };
+    const controlAdapter = createGoogleMapAdapter({
+      development: false,
+      profile: controlProfile,
+    });
+    await controlAdapter.mount(document.createElement("div"), {
+      onPlaceSelect: vi.fn(),
+      onRouteSelect: vi.fn(),
+    });
+    controlAdapter.render({ places: presentation.places.slice(0, 1), routes: [] });
+    expect(FakeClassicMarker.instances.at(-1)?.label).toMatchObject({
+      color: "#000000",
+    });
   });
 
   it("fails closed when unvalidated classic-marker geometry bypasses the profile validator", async () => {

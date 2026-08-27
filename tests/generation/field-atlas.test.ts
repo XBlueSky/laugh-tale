@@ -78,6 +78,35 @@ interface ComposerModule {
   }) => Promise<void>;
 }
 
+function hexRgb(color: string): readonly [number, number, number] {
+  const match = /^#([0-9a-f]{6})$/i.exec(color);
+  if (match?.[1] === undefined) {
+    throw new Error(`Expected an opaque six-digit hex color, received ${color}`);
+  }
+  const value = match[1];
+  return [
+    Number.parseInt(value.slice(0, 2), 16),
+    Number.parseInt(value.slice(2, 4), 16),
+    Number.parseInt(value.slice(4, 6), 16),
+  ];
+}
+
+function relativeLuminance(color: string): number {
+  const channels = hexRgb(color).map((channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.04045
+      ? normalized / 12.92
+      : ((normalized + 0.055) / 1.055) ** 2.4;
+  });
+  return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+}
+
+function contrastRatio(first: string, second: string): number {
+  const [lighter, darker] = [relativeLuminance(first), relativeLuminance(second)]
+    .sort((left, right) => right - left);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 const repoRoot = process.cwd();
 const pluginRoot = join(repoRoot, "plugins/eternal-pose");
 const recipeRoot = join(pluginRoot, "recipes-v2/field-atlas");
@@ -455,7 +484,13 @@ describe("Field Atlas recipe contract", () => {
     for (const marker of Object.values(markers)) {
       expect(marker.fallback.size).toBeGreaterThanOrEqual(44);
       expect(marker.fallback.strokeWidth).toBeGreaterThan(0);
+      expect(contrastRatio(marker.fallback.fill, marker.fallback.labelColor)).toBeGreaterThanOrEqual(4.5);
     }
+    const userLocation = profile.userLocation();
+    expect(contrastRatio(
+      userLocation.fallback.fill,
+      userLocation.fallback.labelColor,
+    )).toBeGreaterThanOrEqual(4.5);
     expect([
       selectedMarker.fallback.shape,
       selectedMarker.fallback.strokeWidth,
@@ -521,6 +556,9 @@ describe("Field Atlas recipe contract", () => {
     expect(cssSource).toMatch(/\.atlas-detail-surface__heading strong\s*\{[^}]*white-space:\s*normal/is);
     expect(cssSource).toMatch(/@media\s*\(max-width:\s*30rem\)[^{]*\{[\s\S]*\.atlas-day-index__primary[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/i);
     expect(cssSource).toMatch(/@media\s*\(max-width:\s*30rem\)[^{]*\{[\s\S]*\.atlas-detail-surface__heading[\s\S]*grid-column:\s*1\s*\/\s*-1/i);
+    expect(cssSource).toMatch(/container-type:\s*inline-size/i);
+    expect(cssSource).toMatch(/@container\s+field-atlas\s*\(max-width:\s*15rem\)/i);
+    expect(presentationSource).toMatch(/className="atlas-responsive-layout"/);
 
     const allRecipeSource = collectFiles(recipeRoot)
       .filter((path) => !path.endsWith("README.md"))

@@ -217,6 +217,97 @@ async function visibleInteractiveTargetFailures(page: Page): Promise<Array<{
   });
 }
 
+async function expectCompleteFieldAtlasReflow(page: Page): Promise<void> {
+  const experience = page.getByTestId("trip-experience");
+  if ((await experience.getAttribute("data-map-chrome-layout")) !== "bounded") return;
+
+  const layout = experience.locator(".atlas-responsive-layout");
+  await expect(layout).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const header = document.querySelector<HTMLElement>(".day-header")!;
+        const sheet = document.querySelector<HTMLElement>(".itinerary-sheet")!;
+        const layoutNode = document.querySelector<HTMLElement>(".atlas-responsive-layout")!;
+        const map = document.querySelector<HTMLElement>("[data-provider-canvas='bounded']")!;
+        const itinerary = document.querySelector<HTMLElement>("[data-scroll-region='itinerary']")!;
+        const tripTitle = header.querySelector<HTMLElement>(".atlas-day-index__primary strong")!;
+        const dayTitle = sheet.querySelector<HTMLElement>(".atlas-detail-surface__heading strong")!;
+        const contains = (owner: HTMLElement, child: HTMLElement) => {
+          const ownerRect = owner.getBoundingClientRect();
+          const childRect = child.getBoundingClientRect();
+          return (
+            childRect.left >= ownerRect.left - 1 &&
+            childRect.right <= ownerRect.right + 1 &&
+            childRect.top >= ownerRect.top - 1 &&
+            childRect.bottom <= ownerRect.bottom + 1
+          );
+        };
+        const criticalControls = [
+          ...header.querySelectorAll<HTMLElement>("button"),
+          ...sheet.querySelectorAll<HTMLElement>("button"),
+          ...document.querySelectorAll<HTMLElement>(".atlas-map-controls button"),
+        ].filter((control) => control.getClientRects().length > 0);
+        return {
+          documentFits: document.documentElement.scrollWidth <= window.innerWidth,
+          bodyFits: document.body.scrollWidth <= window.innerWidth,
+          flowMode: getComputedStyle(layoutNode).display === "grid",
+          verticalFlow: layoutNode.scrollHeight > layoutNode.clientHeight,
+          headerFits: header.scrollHeight <= header.clientHeight + 1,
+          sheetFits: sheet.scrollHeight <= sheet.clientHeight + 1,
+          tripTitleFits:
+            contains(header, tripTitle) &&
+            tripTitle.scrollWidth <= tripTitle.clientWidth + 1 &&
+            tripTitle.scrollHeight <= tripTitle.clientHeight + 1,
+          dayTitleFits:
+            contains(sheet, dayTitle) &&
+            dayTitle.scrollWidth <= dayTitle.clientWidth + 1 &&
+            dayTitle.scrollHeight <= dayTitle.clientHeight + 1,
+          itineraryHasFlow:
+            itinerary.clientHeight > 0 &&
+            itinerary.scrollHeight > 0 &&
+            itinerary.getBoundingClientRect().width > 0,
+          mapHasCanvas:
+            map.getBoundingClientRect().width > 0 &&
+            map.getBoundingClientRect().height > 0,
+          targetsAre44:
+            criticalControls.length > 0 &&
+            criticalControls.every((control) => {
+              const rect = control.getBoundingClientRect();
+              return rect.width + 0.5 >= 44 && rect.height + 0.5 >= 44;
+            }),
+        };
+      }),
+    )
+    .toEqual({
+      documentFits: true,
+      bodyFits: true,
+      flowMode: true,
+      verticalFlow: true,
+      headerFits: true,
+      sheetFits: true,
+      tripTitleFits: true,
+      dayTitleFits: true,
+      itineraryHasFlow: true,
+      mapHasCanvas: true,
+      targetsAre44: true,
+    });
+
+  const criticalControls = page.locator(
+    ".day-header button, .itinerary-sheet button, .atlas-map-controls button",
+  );
+  for (let index = 0; index < (await criticalControls.count()); index += 1) {
+    const control = criticalControls.nth(index);
+    if (await control.isVisible()) {
+      await control.scrollIntoViewIfNeeded();
+      await expect(control).toBeInViewport();
+    }
+  }
+
+  await page.getByTestId("itinerary-map").scrollIntoViewIfNeeded();
+  await expectBoundedProviderChrome(page);
+}
+
 test("touch target audit catches offscreen and label-backed undersized controls", async ({ page }) => {
   await page.setContent(`
     <button aria-label="Offscreen small control" style="position:absolute;top:2000px;left:0;width:24px;height:24px;padding:0">O</button>
@@ -285,6 +376,25 @@ test("keeps the persistent map and interruptible three-snap sheet inside every m
   expect(await sheet.evaluate((element) => (element as HTMLElement).style.transitionDuration)).toBe("0ms");
   await page.mouse.up();
   await expect(sheet).not.toHaveAttribute("data-snap", "expanded");
+
+  if (page.viewportSize()?.width === 320) {
+    await page.getByRole("button", { name: "Set half itinerary" }).click();
+    await page.evaluate(() => {
+      document.documentElement.style.fontSize = "200%";
+      window.dispatchEvent(new Event("resize"));
+    });
+    await expectCompleteFieldAtlasReflow(page);
+    await page.evaluate(() => {
+      document.documentElement.style.removeProperty("font-size");
+      window.dispatchEvent(new Event("resize"));
+    });
+
+    await page.setViewportSize({ width: 160, height: 284 });
+    await expectCompleteFieldAtlasReflow(page);
+    await page.setViewportSize({ width: 320, height: 568 });
+    await expect(sheet).toHaveAttribute("data-snap", "half");
+    await expectBoundedProviderChrome(page);
+  }
 
   const geometry = await page.evaluate(() => {
     const header = document.querySelector<HTMLElement>(".day-header")!.getBoundingClientRect();

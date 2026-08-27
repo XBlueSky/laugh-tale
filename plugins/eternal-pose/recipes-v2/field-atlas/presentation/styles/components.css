@@ -975,3 +975,112 @@ gmp-advanced-marker:focus-visible {
     border-bottom: var(--atlas-rule-width) solid var(--atlas-rule);
   }
 }
+
+@container field-atlas (max-width: 15rem) {
+  .atlas-day-index__rail {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    overflow: visible;
+  }
+
+  .atlas-day-index__rail button {
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: 2rem minmax(0, 1fr);
+  }
+
+  .atlas-day-index__rail time {
+    grid-column: 2;
+  }
+
+  .atlas-map-controls > button,
+  .atlas-map-controls > .atlas-utility__trigger {
+    width: 100%;
+  }
+
+  .atlas-map-controls__status {
+    grid-column: 1 / -1;
+    overflow-wrap: anywhere;
+  }
+
+  .atlas-stop {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .atlas-stop__owner {
+    grid-template-columns: 2rem minmax(0, 1fr);
+    padding: var(--atlas-space-2);
+  }
+
+  .atlas-stop__owner > .stop-number {
+    grid-row: 1 / span 2;
+  }
+
+  .atlas-stop__time,
+  .atlas-stop__body {
+    grid-column: 2;
+  }
+
+  .atlas-stop__disclosure {
+    width: 100%;
+    border-top: var(--atlas-rule-width) solid var(--atlas-rule-soft);
+    border-left: 0;
+  }
+
+  .atlas-stop__details,
+  .route-band__details {
+    padding: var(--atlas-space-2);
+  }
+
+  .route-band-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .route-band {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: var(--atlas-space-2);
+  }
+
+  .route-band > :first-child {
+    grid-column: 1;
+  }
+
+  .route-band > :nth-child(2) {
+    grid-column: 1;
+  }
+
+  .route-band[data-state] > button {
+    grid-row: 1 / span 2;
+    grid-column: 2;
+  }
+
+  .route-band__error {
+    grid-column: 1;
+  }
+
+  .route-band-shell > a {
+    width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .atlas-decision__header,
+  .atlas-shopping > ul > li,
+  .atlas-dialog header,
+  .atlas-dialog__task-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .atlas-decision__option {
+    grid-template-columns: 2rem minmax(0, 1fr);
+  }
+
+  .atlas-decision__option > :first-child,
+  .atlas-decision__option > :last-child {
+    grid-column: 1 / -1;
+  }
+
+  .atlas-shopping select {
+    width: 100%;
+    min-width: 0;
+  }
+}

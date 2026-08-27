@@ -93,14 +93,15 @@ export function FieldAtlasExperience({
         style={shellStyle}
       >
         <div className="safe-area-probe" aria-hidden="true" />
-        <AtlasMapSurface map={model.map} binding={bindings.map} retry={actions.retryMap} />
+        <div className="atlas-responsive-layout">
+          <AtlasMapSurface map={model.map} binding={bindings.map} retry={actions.retryMap} />
 
-        <header
-          className="day-header atlas-index atlas-day-index"
-          aria-label="Trip controls"
-          data-expanded={model.header.expanded ? "true" : "false"}
-          data-motion-duration={model.motion === "reduced" ? "0ms" : "180ms"}
-        >
+          <header
+            className="day-header atlas-index atlas-day-index"
+            aria-label="Trip controls"
+            data-expanded={model.header.expanded ? "true" : "false"}
+            data-motion-duration={model.motion === "reduced" ? "0ms" : "180ms"}
+          >
           <div className="atlas-day-index__primary">
             <div>
               <span className="atlas-key">ACTIVE FIELD</span>
@@ -148,9 +149,9 @@ export function FieldAtlasExperience({
               </button>
             ))}
           </nav>
-        </header>
+          </header>
 
-        <div className="map-controls atlas-map-controls" role="toolbar" aria-label="Map controls">
+          <div className="map-controls atlas-map-controls" role="toolbar" aria-label="Map controls">
           <button type="button" aria-label="回到旅行首頁" data-touch-target="44" onClick={actions.returnHome}>HOME</button>
           <AtlasReservationPanel reservations={model.trip.reservations} />
           <button
@@ -174,18 +175,18 @@ export function FieldAtlasExperience({
           <span className="atlas-map-controls__status" aria-live="polite">
             {locationLabel(model.location.status)}
           </span>
-        </div>
+          </div>
 
-        <section
-          {...sheetProps}
-          className="itinerary-sheet atlas-detail-surface"
-          aria-label="Itinerary"
-          style={{
-            ...sheetProps.style,
-            bottom: "var(--safe-area-bottom)",
-            paddingBottom: 0,
-          }}
-        >
+          <section
+            {...sheetProps}
+            className="itinerary-sheet atlas-detail-surface"
+            aria-label="Itinerary"
+            style={{
+              ...sheetProps.style,
+              bottom: "var(--safe-area-bottom)",
+              paddingBottom: 0,
+            }}
+          >
           <button
             type="button"
             className="atlas-detail-surface__handle"
@@ -257,7 +258,8 @@ export function FieldAtlasExperience({
               <AtlasTimeline model={model} actions={actions} bindings={bindings} />
             </div>
           )}
-        </section>
+          </section>
+        </div>
       </main>
     </>
   );

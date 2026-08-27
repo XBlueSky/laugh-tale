@@ -135,6 +135,10 @@ function assertMarkerVisual(visual: MapMarkerVisual, label: string): void {
   }
   assertFallbackPaint(visual.fallback.fill, `${label} fallback fill`);
   assertFallbackPaint(visual.fallback.stroke, `${label} fallback stroke`);
+  assertFallbackPaint(
+    visual.fallback.labelColor,
+    `${label} fallback label color`,
+  );
   if (typeof visual.fallback.text !== "string") {
     throw new Error(`Map visual profile ${label} fallback text must be a string`);
   }

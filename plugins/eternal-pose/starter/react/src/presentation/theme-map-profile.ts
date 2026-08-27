@@ -20,6 +20,7 @@ export const themeMapProfile: MapVisualProfile = {
       fallback: {
         fill: place.tone === "selected" ? "#1f2937" : "#ffffff",
         stroke: "#1f2937",
+        labelColor: place.tone === "selected" ? "#ffffff" : "#111827",
         text: place.tone === "completed" ? `✓${number}` : number,
         size: place.tone === "selected" ? 48 : 44,
         shape:
@@ -40,6 +41,7 @@ export const themeMapProfile: MapVisualProfile = {
     fallback: {
       fill: "#2563eb",
       stroke: "#ffffff",
+      labelColor: "#ffffff",
       text: "",
       size: 44,
       shape: "circle",
