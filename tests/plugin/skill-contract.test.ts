@@ -19,6 +19,7 @@ const expectedReferences = [
   "map-first-contract.md",
   "provider-boundaries.md",
   "design-recipes.md",
+  "packages.md",
   "safety-and-deployment.md",
   "testing.md",
 ];

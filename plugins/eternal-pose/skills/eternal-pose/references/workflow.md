@@ -8,6 +8,7 @@ Use this lifecycle for every intent. Scale the work to the request, but do not s
 - Read repository instructions, package scripts, project contracts, trip content, tests, and the user-supplied sources before proposing changes.
 - Establish the exact target for Create. Reject a non-empty target rather than force-copying a starter into it.
 - Explore an existing site's actual structure. Do not assume starter paths, component names, or state organization survived customization.
+- Read `eternal-pose.json` when present and note its recorded `packages` versions for later comparison (see `packages.md`).
 - Record the chosen intent and the requested scope. Treat Audit as zero-write from this point onward.
 
 ## Ingest
@@ -42,6 +43,7 @@ Use this lifecycle for every intent. Scale the work to the request, but do not s
 
 - Recheck semantic validation, timing, candidates, tasks, reservations, progress, route ownership, map/list synchronization, sheet geometry, accessibility, provider boundaries, and safety.
 - Run the repository's relevant unit, type, lint, build, and browser gates described in `testing.md`.
+- Report drift between recorded, declared, and installed package versions as a finding; never rewrite versions silently.
 - Report failures and limitations precisely. Do not translate a partial result into a readiness claim.
 
 ## Publish

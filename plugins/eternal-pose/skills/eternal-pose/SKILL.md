@@ -41,15 +41,16 @@ Resolve every resource relative to this `SKILL.md`. Read `references/workflow.md
 | Map, list, route presentation, bottom sheet, responsive behavior, focus, or motion | `references/map-first-contract.md` |
 | Map/place/route lookup, provider configuration, navigation, or provider failure | `references/provider-boundaries.md` |
 | Recipe selection, visual redesign, renderer work, home page, or IA changes | `references/design-recipes.md` |
+| Package dependencies, versions, upgrades, or `eternal-pose.json` | `references/packages.md` |
 | Credentials, personal data, destructive work, remote creation, public access, push, or deployment | `references/safety-and-deployment.md` |
 | Before any completion, readiness, or compliance claim | `references/testing.md` |
 
-Read all seven references for a full Create. For a scoped Update, load the workflow, the references touched by the requested change, and testing. For Audit, load the workflow plus every contract being audited and keep the entire run zero-write.
+Read all eight references for a full Create. For a scoped Update, load the workflow, the references touched by the requested change, and testing. For Audit, load the workflow plus every contract being audited and keep the entire run zero-write.
 
 ## Preserve core invariants
 
 Keep a real map as the single-day base experience, synchronize map and itinerary selection, and keep the itinerary usable with external navigation when a provider fails. Keep ordinary movement as independently owned route edges. Keep the mobile itinerary in an interruptible draggable sheet with collapsed, half, and expanded states. Preserve semantic certainty, accessible focus, keyboard operation, forced-colors behavior, and reduced-motion operation.
 
-Treat generated IA, the home page, type renderers, styling, and folder layout as user-editable. Never restore a starter structure merely because the user reorganized it. Preserve stable facts and IDs across scoped edits. Do not invent coordinates, provider IDs, reservations, opening hours, ticket state, or precise transit facts.
+Keep protected runtime behavior on the pinned `@laugh-tale/core` and `@laugh-tale/react` packages instead of re-implementing it locally. Treat generated IA, the home page, type renderers, styling, and folder layout as user-editable. Never restore a starter structure merely because the user reorganized it. Preserve stable facts and IDs across scoped edits. Do not invent coordinates, provider IDs, reservations, opening hours, ticket state, or precise transit facts.
 
 Keep work local and private by default. Do not publish, push, or deploy without explicit approval. Do not create a remote, make a repository public, or create a hosting project without explicit approval for that exact action.
