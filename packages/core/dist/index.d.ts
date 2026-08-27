@@ -3,6 +3,7 @@ export * from "./validation.js";
 export * from "./time.js";
 export * from "./progress.js";
 export * from "./resolve-itinerary.js";
+export * from "./candidates.js";
 export * from "./routes.js";
 export * from "./timeline.js";
 export * from "./map-owners.js";
