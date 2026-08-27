@@ -73,13 +73,21 @@ function selectedPlaceOwnerId(places, context) {
         : undefined;
 }
 export function buildMapPresentation(effectiveDay, context = {}) {
+    let routeEdges = [];
+    let routeResults = {};
+    if (context.routes !== undefined || context.routeResults !== undefined) {
+        if (context.routes === undefined || context.routeResults === undefined) {
+            throw new Error("Map presentation routes and routeResults must be provided together");
+        }
+        routeEdges = context.routes;
+        routeResults = context.routeResults;
+    }
     const places = [
         ...effectivePlaces(effectiveDay, context),
         ...expandedCandidatePlaces(effectiveDay, context),
     ];
-    const routeResults = context.routeResults ?? {};
     const routeOwners = new Set();
-    const routes = (context.routes ?? []).flatMap((edge) => {
+    const routes = routeEdges.flatMap((edge) => {
         if (routeOwners.has(edge.id) || !Object.hasOwn(routeResults, edge.id)) {
             return [];
         }

@@ -43,49 +43,37 @@ const CANDIDATE_FIXTURES: readonly CandidateOption[] = [
   },
 ];
 
-const ROUTE_FIXTURES: readonly MapRoutePresentation[] = [
-  {
-    edgeId: "profile-default-manual",
-    path: [
-      { lat: 25, lng: 121 },
-      { lat: 25.01, lng: 121.01 },
-    ],
-    tone: "default",
-    source: "manual",
-    certainty: "confirmed",
-    mode: "walking",
-  },
-  {
-    edgeId: "profile-selected-provider",
-    path: [
-      { lat: 25.02, lng: 121.02 },
-      { lat: 25.03, lng: 121.03 },
-    ],
-    tone: "selected",
-    source: "provider",
-    certainty: "suggested",
-    mode: "transit",
-  },
-  {
-    edgeId: "profile-unavailable-recomposed",
-    path: [],
-    tone: "unavailable",
-    source: "recomposed",
-    certainty: "candidate",
-    mode: "driving",
-  },
-  {
-    edgeId: "profile-unverified-flight",
-    path: [
-      { lat: 25.04, lng: 121.04 },
-      { lat: 25.05, lng: 121.05 },
-    ],
-    tone: "default",
-    source: "manual",
-    certainty: "unverified",
-    mode: "flight",
-  },
-];
+const ROUTE_TONES = ["default", "selected", "unavailable"] as const;
+const ROUTE_SOURCES = ["manual", "provider", "recomposed"] as const;
+const ROUTE_CERTAINTIES = [
+  "confirmed",
+  "suggested",
+  "candidate",
+  "unverified",
+] as const;
+const ROUTE_MODES = ["walking", "transit", "driving", "flight"] as const;
+
+const ROUTE_FIXTURES: readonly MapRoutePresentation[] = ROUTE_TONES.flatMap(
+  (tone) =>
+    ROUTE_SOURCES.flatMap((source) =>
+      ROUTE_CERTAINTIES.flatMap((certainty) =>
+        ROUTE_MODES.map((mode) => ({
+          edgeId: `profile-${tone}-${source}-${certainty}-${mode}`,
+          path:
+            tone === "unavailable"
+              ? []
+              : [
+                  { lat: 25, lng: 121 },
+                  { lat: 25.01, lng: 121.01 },
+                ],
+          tone,
+          source,
+          certainty,
+          mode,
+        })),
+      ),
+    ),
+);
 
 function assertNonBlank(value: unknown, label: string): asserts value is string {
   if (typeof value !== "string" || value.trim().length === 0) {

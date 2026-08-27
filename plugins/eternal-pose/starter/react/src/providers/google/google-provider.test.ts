@@ -1240,6 +1240,7 @@ class FakeAdvancedMarker {
   readonly gmpClickable: google.maps.marker.AdvancedMarkerElementOptions["gmpClickable"];
   readonly addedEventNames: string[] = [];
   readonly removedEventNames: string[] = [];
+  private readonly attributes = new Map<string, string>();
   private readonly eventListeners = new Map<
     string,
     Set<EventListenerOrEventListenerObject>
@@ -1252,6 +1253,14 @@ class FakeAdvancedMarker {
     this.content = options.content;
     this.gmpClickable = options.gmpClickable;
     FakeAdvancedMarker.instances.push(this);
+  }
+
+  setAttribute(name: string, value: string): void {
+    this.attributes.set(name, value);
+  }
+
+  getAttribute(name: string): string | null {
+    return this.attributes.get(name) ?? null;
   }
 
   addEventListener(
@@ -1440,8 +1449,8 @@ describe("GoogleMapAdapter lifecycle", () => {
       "Profile title: Hotel",
     ]);
     expect(
-      FakeAdvancedMarker.instances.map(({ content }) =>
-        content instanceof HTMLElement ? content.getAttribute("aria-label") : null,
+      FakeAdvancedMarker.instances.map((marker) =>
+        marker.getAttribute("aria-label"),
       ),
     ).toEqual([
       "Profile label: Museum",
@@ -1449,6 +1458,11 @@ describe("GoogleMapAdapter lifecycle", () => {
       "Profile label: Park",
       "Profile label: Hotel",
     ]);
+    expect(
+      FakeAdvancedMarker.instances.map(({ content }) =>
+        content instanceof HTMLElement ? content.getAttribute("aria-label") : null,
+      ),
+    ).toEqual([null, null, null, null]);
     expect(
       FakeAdvancedMarker.instances.map(({ content }) =>
         content instanceof HTMLElement ? content.getAttribute("aria-hidden") : null,
@@ -1536,6 +1550,46 @@ describe("GoogleMapAdapter lifecycle", () => {
       title: "Profile current location",
       label: "U",
     });
+  });
+
+  it("keeps adversarial classic-marker colors inside their SVG attributes", async () => {
+    const fill = 'red" onload="alert(1)&<';
+    const stroke =
+      'blue"/><image href="https://attacker.invalid/pixel"/><circle stroke="green';
+    const profile: MapVisualProfile = {
+      ...googleMapProfile,
+      id: "adversarial-classic-marker-profile",
+      marker: (place, index) => ({
+        ...googleMapProfile.marker(place, index),
+        fallback: { fill, stroke, text: "" },
+      }),
+    };
+    const adapter = createGoogleMapAdapter({ development: false, profile });
+    await adapter.mount(document.createElement("div"), {
+      onPlaceSelect: vi.fn(),
+      onRouteSelect: vi.fn(),
+    });
+
+    adapter.render({ places: presentation.places.slice(0, 1), routes: [] });
+
+    const icon = FakeClassicMarker.instances[0]?.icon;
+    expect(typeof icon).toBe("string");
+    if (typeof icon !== "string") {
+      throw new Error("Expected a classic SVG marker icon");
+    }
+    const separator = icon.indexOf(",");
+    const svg = decodeURIComponent(icon.slice(separator + 1));
+    const documentNode = new DOMParser().parseFromString(svg, "image/svg+xml");
+    const circle = documentNode.querySelector("circle");
+
+    expect(documentNode.querySelector("parsererror")).toBeNull();
+    expect(documentNode.querySelectorAll("circle")).toHaveLength(1);
+    expect(circle?.getAttribute("fill")).toBe(fill);
+    expect(circle?.getAttribute("stroke")).toBe(stroke);
+    expect(documentNode.querySelector("[onload], [href], [src]")).toBeNull();
+    expect(
+      documentNode.querySelector("image, script, use, foreignObject"),
+    ).toBeNull();
   });
 
   it("resolves selected, default, recomposed, and uncertain route effects through the profile", async () => {

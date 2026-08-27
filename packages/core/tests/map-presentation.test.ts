@@ -78,6 +78,22 @@ const candidateGroup: CandidateGroup = {
   ],
 };
 
+const routeFreeContext: MapPresentationContext = {};
+const pairedRouteContext: MapPresentationContext = {
+  routes: [],
+  routeResults: {},
+};
+// @ts-expect-error routeResults must be paired with routes.
+const routeResultsOnlyContext: MapPresentationContext = { routeResults: {} };
+// @ts-expect-error routes must be paired with routeResults.
+const routesOnlyContext: MapPresentationContext = { routes: [] };
+void [
+  routeFreeContext,
+  pairedRouteContext,
+  routeResultsOnlyContext,
+  routesOnlyContext,
+];
+
 function fixtureDay(): EffectiveDay {
   const museum = placeNode("museum", {
     title: "Museum",
@@ -126,6 +142,34 @@ function fixtureDay(): EffectiveDay {
 }
 
 describe("buildMapPresentation", () => {
+  it("rejects malformed partial route contexts instead of dropping route data", () => {
+    const partialContexts = [
+      { routeResults: {} },
+      {
+        routes: [
+          {
+            id: "partial-route",
+            dayId: "day-one",
+            fromNodeId: "museum",
+            toNodeId: "garden",
+            mode: "walking",
+            source: "manual",
+            certainty: "confirmed",
+          },
+        ],
+      },
+    ];
+
+    for (const partialContext of partialContexts) {
+      expect(() =>
+        buildMapPresentation(
+          fixtureDay(),
+          partialContext as unknown as MapPresentationContext,
+        ),
+      ).toThrow(/routes and routeResults must be provided together/i);
+    }
+  });
+
   it("keeps every locatable effective node and only the resolved candidate when collapsed", () => {
     const presentation = buildMapPresentation(fixtureDay(), {});
 

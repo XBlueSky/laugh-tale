@@ -46,8 +46,36 @@ function validProfile(overrides: Partial<MapVisualProfile> = {}): MapVisualProfi
 }
 
 describe("assertMapVisualProfile", () => {
-  it("accepts finite profile visuals for every deterministic semantic fixture", () => {
-    expect(() => assertMapVisualProfile(validProfile())).not.toThrow();
+  it("accepts finite profile visuals for every route semantic combination", () => {
+    const combinations = new Set<string>();
+    const profile = validProfile({
+      route: (route) => {
+        combinations.add(
+          [route.tone, route.source, route.certainty, route.mode].join(":"),
+        );
+        return routeVisual();
+      },
+    });
+
+    expect(() => assertMapVisualProfile(profile)).not.toThrow();
+    expect(combinations.size).toBe(3 * 3 * 4 * 4);
+  });
+
+  it("rejects a visual invalid only for a previously untested route combination", () => {
+    const profile = validProfile({
+      route: (route) => ({
+        ...routeVisual(),
+        stroke:
+          route.tone === "selected" &&
+          route.source === "recomposed" &&
+          route.certainty === "unverified" &&
+          route.mode === "flight"
+            ? "   "
+            : "#2563eb",
+      }),
+    });
+
+    expect(() => assertMapVisualProfile(profile)).toThrow(/stroke/i);
   });
 
   it("exercises deterministic candidate fixtures and rejects a blank candidate title", () => {

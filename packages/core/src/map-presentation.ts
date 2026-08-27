@@ -8,14 +8,22 @@ import type {
   RouteResult,
 } from "./provider-data.js";
 
-export interface MapPresentationContext {
+interface MapPresentationSelectionContext {
   expandedCandidateGroup?: CandidateGroup;
   activeCandidateOptionId?: string;
   selectedNodeId?: string;
   selectedRouteId?: string;
-  routes?: readonly RouteEdge[];
-  routeResults?: Readonly<Record<string, RouteResult>>;
 }
+
+type MapPresentationRouteContext =
+  | { routes?: never; routeResults?: never }
+  | {
+      routes: readonly RouteEdge[];
+      routeResults: Readonly<Record<string, RouteResult>>;
+    };
+
+export type MapPresentationContext = MapPresentationSelectionContext &
+  MapPresentationRouteContext;
 
 function validCoordinates(value: Coordinates | undefined): value is Coordinates {
   return (
@@ -121,13 +129,21 @@ export function buildMapPresentation(
   effectiveDay: EffectiveDay,
   context: MapPresentationContext = {},
 ): MapPresentation {
+  let routeEdges: readonly RouteEdge[] = [];
+  let routeResults: Readonly<Record<string, RouteResult>> = {};
+  if (context.routes !== undefined || context.routeResults !== undefined) {
+    if (context.routes === undefined || context.routeResults === undefined) {
+      throw new Error("Map presentation routes and routeResults must be provided together");
+    }
+    routeEdges = context.routes;
+    routeResults = context.routeResults;
+  }
   const places = [
     ...effectivePlaces(effectiveDay, context),
     ...expandedCandidatePlaces(effectiveDay, context),
   ];
-  const routeResults = context.routeResults ?? {};
   const routeOwners = new Set<string>();
-  const routes = (context.routes ?? []).flatMap<MapRoutePresentation>((edge) => {
+  const routes = routeEdges.flatMap<MapRoutePresentation>((edge) => {
     if (routeOwners.has(edge.id) || !Object.hasOwn(routeResults, edge.id)) {
       return [];
     }

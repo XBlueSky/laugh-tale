@@ -38,7 +38,6 @@ function clonePresentation(presentation: MapPresentation): MapPresentation {
 function markerContent(visual: MapMarkerVisual): HTMLElement {
   const content = document.createElement("span");
   content.className = visual.className;
-  content.setAttribute("aria-label", visual.label);
   content.setAttribute("aria-hidden", "true");
   for (const part of visual.parts) {
     const element = document.createElement("span");
@@ -49,8 +48,21 @@ function markerContent(visual: MapMarkerVisual): HTMLElement {
   return content;
 }
 
+function escapeXmlAttribute(value: string): string {
+  const escapes: Readonly<Record<string, string>> = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&apos;",
+  };
+  return value.replace(/[&<>"']/g, (character) => escapes[character] ?? character);
+}
+
 function classicMarkerIcon(visual: MapMarkerVisual): string {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="${visual.fallback.fill}" stroke="${visual.fallback.stroke}" stroke-width="3"/></svg>`;
+  const fill = escapeXmlAttribute(visual.fallback.fill);
+  const stroke = escapeXmlAttribute(visual.fallback.stroke);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="${fill}" stroke="${stroke}" stroke-width="3"/></svg>`;
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
@@ -283,6 +295,7 @@ export class GoogleMapAdapter implements MapAdapter {
           content: markerContent(visual),
           gmpClickable: true,
         });
+        marker.setAttribute("aria-label", visual.label);
         const listener: EventListener = () => {
           if (
             lifecycleGeneration === this.lifecycleGeneration &&
@@ -386,6 +399,7 @@ export class GoogleMapAdapter implements MapAdapter {
         title: visual.title,
         content: markerContent(visual),
       });
+      this.userAdvancedMarker.setAttribute("aria-label", visual.label);
     }
     this.placeCoordinatesByOwnerId.set(USER_LOCATION_OWNER_ID, [
       { ...this.userLocation },
