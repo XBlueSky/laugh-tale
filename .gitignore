@@ -17,3 +17,7 @@ plugins/eternal-pose/starter/react/.DS_Store
 plugins/eternal-pose/starter/react/*.tsbuildinfo
 docs/superpowers/
 docs/specs/laugh-tale-eternal-pose-plugin-design.md
+/site/node_modules/
+/site/dist/
+/site/.astro/
+/site/src/data/
