@@ -77,15 +77,42 @@ export function buildMapPresentation(effectiveDay, context = {}) {
         ...effectivePlaces(effectiveDay, context),
         ...expandedCandidatePlaces(effectiveDay, context),
     ];
-    const routes = Object.entries(context.routeResults ?? {}).map(([edgeId, result]) => result.status === "ready"
-        ? {
-            edgeId,
-            path: result.path.map(cloneCoordinates),
-            tone: edgeId === context.selectedRouteId
-                ? "selected"
-                : "default",
+    const routeResults = context.routeResults ?? {};
+    const routeOwners = new Set();
+    const routes = (context.routes ?? []).flatMap((edge) => {
+        if (routeOwners.has(edge.id) || !Object.hasOwn(routeResults, edge.id)) {
+            return [];
         }
-        : { edgeId, path: [], tone: "unavailable" });
+        routeOwners.add(edge.id);
+        const result = routeResults[edge.id];
+        if (result === undefined) {
+            return [];
+        }
+        const semantics = {
+            source: edge.source,
+            certainty: edge.certainty,
+            mode: edge.mode,
+        };
+        return result.status === "ready"
+            ? [
+                {
+                    edgeId: edge.id,
+                    path: result.path.map(cloneCoordinates),
+                    tone: edge.id === context.selectedRouteId
+                        ? "selected"
+                        : "default",
+                    ...semantics,
+                },
+            ]
+            : [
+                {
+                    edgeId: edge.id,
+                    path: [],
+                    tone: "unavailable",
+                    ...semantics,
+                },
+            ];
+    });
     const selectedPlace = selectedPlaceOwnerId(places, context);
     return {
         places,

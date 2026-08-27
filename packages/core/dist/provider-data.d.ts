@@ -9,6 +9,9 @@ export interface MapRoutePresentation {
     edgeId: string;
     path: Coordinates[];
     tone: "default" | "selected" | "unavailable";
+    source: RouteEdge["source"];
+    certainty: RouteEdge["certainty"];
+    mode: RouteEdge["mode"];
 }
 export interface MapPresentation {
     places: MapPlacePresentation[];

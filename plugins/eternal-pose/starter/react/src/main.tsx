@@ -3,6 +3,8 @@ import { createRoot } from "react-dom/client";
 
 import { App } from "./app/App";
 import type { RouteAdapter } from "@laugh-tale-island/core/browser";
+import { assertMapVisualProfile } from "./controllers/map-visual-profile";
+import { presentation } from "./presentation";
 import { GoogleNavigationAdapter } from "./providers/google/google-maps-url";
 import { trip } from "./trip-content/trip";
 
@@ -31,6 +33,8 @@ function environmentString(value: unknown): string {
 }
 
 async function start(): Promise<void> {
+  assertMapVisualProfile(presentation.mapProfile);
+
   if (
     import.meta.env.DEV &&
     import.meta.env.VITE_E2E_FAKE_PROVIDER === "true"
@@ -56,6 +60,7 @@ async function start(): Promise<void> {
   const apiKey = environmentString(
     import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
   ).trim();
+  const mapId = environmentString(import.meta.env.VITE_GOOGLE_MAP_ID).trim();
   if (apiKey.length === 0) {
     render(<App tripOverride={trip} />);
     return;
@@ -64,7 +69,12 @@ async function start(): Promise<void> {
   const { configureGoogleMaps } = await import(
     "./providers/google/google-config"
   );
-  const configured = await configureGoogleMaps({ apiKey });
+  const configured = await configureGoogleMaps({
+    apiKey,
+    ...(mapId.length === 0 ? {} : { mapId }),
+    development: import.meta.env.DEV,
+    profile: presentation.mapProfile,
+  });
   if (configured.status === "missing-key") {
     render(<App tripOverride={trip} />);
     return;

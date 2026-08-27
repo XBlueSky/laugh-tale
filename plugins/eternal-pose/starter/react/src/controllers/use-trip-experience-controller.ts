@@ -635,6 +635,7 @@ export function useTripExperienceController({
                   }),
             }),
         routeResults: routeStates.mapResults,
+        routes: selectedDayRoutes,
         ...(activeSelectedRouteId === null
           ? {}
           : { selectedRouteId: activeSelectedRouteId }),
@@ -643,6 +644,7 @@ export function useTripExperienceController({
       activeCandidateMapOverride,
       activeSelectedRouteId,
       routeStates.mapResults,
+      selectedDayRoutes,
       selectedEffectiveDay,
       selection.selection.nodeId,
     ],
