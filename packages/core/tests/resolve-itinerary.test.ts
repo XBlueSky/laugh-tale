@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import type { RouteEdge, Trip } from "./model";
-import { emptyTripProgress, nodeCompletionKey } from "./progress";
-import { resolveEffectiveItinerary } from "./resolve-itinerary";
+import type { RouteEdge, Trip } from "@laugh-tale/core";
+import { emptyTripProgress, nodeCompletionKey } from "@laugh-tale/core";
+import { resolveEffectiveItinerary } from "@laugh-tale/core";
 
 function deepFreeze<T>(value: T): T {
   if (typeof value === "object" && value !== null && !Object.isFrozen(value)) {
@@ -522,8 +522,14 @@ describe("resolveEffectiveItinerary", () => {
       certainty: "suggested",
     });
 
-    expect(() => resolveEffectiveItinerary(deepFreeze(trip), emptyTripProgress())).toThrow(
-      /duplicate route owner.*route-a-b/i,
-    );
+    expect(() =>
+      resolveEffectiveItinerary(deepFreeze(trip), emptyTripProgress(), {
+        onDuplicateRoute: "throw",
+      }),
+    ).toThrow(/duplicate route owner.*route-a-b/i);
+
+    const resolved = resolveEffectiveItinerary(deepFreeze(trip), emptyTripProgress());
+    const ownerIds = resolved.routes.map((route) => route.id);
+    expect(new Set(ownerIds).size).toBe(ownerIds.length);
   });
 });

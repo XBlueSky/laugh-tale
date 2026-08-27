@@ -9,7 +9,7 @@ import { useEffect, useId, useState, type Ref } from "react";
 
 import type { Timing } from "../../trip-core/model";
 import type { RoutePresentation } from "../../trip-core/routes";
-import { formatTimingLabel } from "../../trip-core/time";
+import { formatTimingLabel } from "../timing-label";
 import type { RouteResult } from "../../experience-shell/provider-contracts";
 
 export type RouteConnectorState = RouteResult | { status: "loading" };

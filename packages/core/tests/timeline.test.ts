@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import type { RouteEdge, Trip, TripNode } from "../../trip-core/model";
-import { emptyTripProgress } from "../../trip-core/progress";
+import type { RouteEdge, Trip, TripNode } from "@laugh-tale/core";
+import { emptyTripProgress } from "@laugh-tale/core";
 import {
   resolveEffectiveItinerary,
   type EffectiveTrip,
-} from "../../trip-core/resolve-itinerary";
+} from "@laugh-tale/core";
 import {
   buildTimelineEntries,
   type LogisticsGroupEntry,
   type RouteEntry,
-} from "./build-timeline-entries";
+} from "@laugh-tale/core";
 
 const DAY_ID = "day-2040-06-12";
 

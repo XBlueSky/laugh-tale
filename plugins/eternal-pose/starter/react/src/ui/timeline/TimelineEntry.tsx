@@ -12,7 +12,7 @@ import type {
   Timing,
   TripNode,
 } from "../../trip-core/model";
-import { formatTimingLabel } from "../../trip-core/time";
+import { formatTimingLabel } from "../timing-label";
 
 export interface TimelineNodeState {
   completed: boolean;

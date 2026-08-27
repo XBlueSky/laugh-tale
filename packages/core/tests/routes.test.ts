@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import type { RouteEdge, TripDay, TripNode } from "./model";
-import type { EffectiveNode } from "./resolve-itinerary";
-import { buildRoutePresentations } from "./routes";
+import type { RouteEdge, TripDay, TripNode } from "@laugh-tale/core";
+import type { EffectiveNode } from "@laugh-tale/core";
+import { buildRoutePresentations } from "@laugh-tale/core";
 
 function node(id: string): TripNode {
   return {
@@ -247,12 +247,23 @@ describe("buildRoutePresentations", () => {
     expect(presentation?.edge).not.toHaveProperty("preferences");
   });
 
-  it("fails loudly in development when two edges claim the same owner ID", () => {
+  it("fails loudly when asked to throw on two edges claiming the same owner ID", () => {
     expect(() =>
       buildRoutePresentations(
         { ...sourceDay, routes: [...sourceRoutes, { ...sourceRoutes[1], fromNodeId: "a" }] },
         effectiveNodes(["a", "b", "c"]),
+        { onDuplicateRoute: "throw" },
       ),
     ).toThrow(/duplicate route owner.*walk-7m/i);
+  });
+
+  it("keeps the first owner and drops later duplicates by default", () => {
+    const presentations = buildRoutePresentations(
+      { ...sourceDay, routes: [...sourceRoutes, { ...sourceRoutes[1], fromNodeId: "a" }] },
+      effectiveNodes(["a", "b", "c"]),
+    );
+
+    const ownerIds = presentations.map(({ edge }) => edge.id);
+    expect(new Set(ownerIds).size).toBe(ownerIds.length);
   });
 });
