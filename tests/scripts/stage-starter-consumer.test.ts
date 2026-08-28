@@ -24,6 +24,8 @@ const recipeCatalogRoot = join(repoRoot, "plugins/eternal-pose/recipes-v2");
 const packRoot = join(repoRoot, "tmp/staged-packs");
 const packageLockRoot = join(repositoryTmpRoot, ".stage-starter-package.lock");
 const lockOwnerPath = join(packageLockRoot, "owner.json");
+const artifactLockRoot = join(repositoryTmpRoot, ".stage-starter-artifact.lock");
+const artifactLockOwnerPath = join(artifactLockRoot, "owner.json");
 const ownershipMarkerName = ".laugh-tale-staged-consumer.json";
 const nonPackageWorkspaceDir = join(repoRoot, "packages/.staging-non-package");
 const nonPackageWorkspaceFile = join(repoRoot, "packages/.staging-non-package-file");
@@ -71,9 +73,15 @@ const { stageStarterConsumer, validateStagingTarget, reclaimOrphanedStagingArtif
       lockPollMs?: number;
       lockDeadOwnerGraceMs?: number;
       artifactGraceMs?: number;
+      artifactLockDeadOwnerGraceMs?: number;
+      artifactLockPollMs?: number;
+      artifactLockTimeoutMs?: number;
       isProcessAlive?: (pid: number) => boolean;
       afterTargetRevalidated?: (context: { target: string }) => void;
-      beforeCandidateRename?: (context: { candidate: string; previous?: string }) => void;
+      beforeCandidateRename?: (context: {
+        candidate: string;
+        previous?: string;
+      }) => void | Promise<void>;
       beforePreviousPackCleanup?: (context: { packRoot: string }) => void;
       beforePreviousCleanup?: (context: { previous: string }) => void;
     },
@@ -81,6 +89,9 @@ const { stageStarterConsumer, validateStagingTarget, reclaimOrphanedStagingArtif
   validateStagingTarget: (outDir: string) => Promise<unknown>;
   reclaimOrphanedStagingArtifacts: (testOperations?: {
     artifactGraceMs?: number;
+    artifactLockDeadOwnerGraceMs?: number;
+    artifactLockPollMs?: number;
+    artifactLockTimeoutMs?: number;
     isProcessAlive?: (pid: number) => boolean;
   }) => Promise<{ removed: string[]; preserved: string[] }>;
 };
@@ -136,6 +147,137 @@ function readConsumerMarker(staged: string): {
     pack?: PackReference;
     target: string;
   };
+}
+
+function pathIdentity(path: string): { dev: string; ino: string } {
+  const stat = lstatSync(path);
+  return { dev: String(stat.dev), ino: String(stat.ino) };
+}
+
+function tmpRelative(path: string): string {
+  return relative(repositoryTmpRoot, path).split(sep).join("/");
+}
+
+function createOwnedPackFixture({
+  createdAt,
+  invocation,
+  packPath,
+  pid,
+  target,
+}: {
+  createdAt: number;
+  invocation: string;
+  packPath: string;
+  pid: number;
+  target: string;
+}): { artifact: string; reference: PackReference } {
+  const artifact = join(packPath, "artifact.tgz");
+  const markerPath = join(packPath, ".laugh-tale-staging-owner.json");
+  const token = `pack-token-${invocation}`;
+  const marker = {
+    kind: "laugh-tale-staging-packs",
+    version: 2,
+    invocation,
+    token,
+    path: tmpRelative(packPath),
+    target: tmpRelative(target),
+    pid,
+    createdAt,
+    files: [basename(artifact)],
+  };
+  const markerSource = `${JSON.stringify(marker)}\n`;
+  mkdirSync(packPath, { recursive: true });
+  writeFileSync(markerPath, markerSource);
+  writeFileSync(artifact, "owned pack artifact\n");
+  return {
+    artifact,
+    reference: {
+      invocation,
+      path: marker.path,
+      token,
+      directoryIdentity: pathIdentity(packPath),
+      markerIdentity: pathIdentity(markerPath),
+      markerSource,
+    },
+  };
+}
+
+function createInterruptedWorkFixture({
+  createdAt,
+  invocation,
+  pack,
+  pid,
+  target,
+  workPath,
+}: {
+  createdAt: number;
+  invocation: string;
+  pack?: PackReference;
+  pid: number;
+  target: string;
+  workPath: string;
+}): { previous: string; priorMarkerSource: string } {
+  const previous = join(workPath, "previous");
+  const targetRelative = tmpRelative(target);
+  const priorMarker = {
+    kind: "laugh-tale-staged-consumer",
+    version: 1,
+    target: targetRelative,
+    invocation: `prior-${invocation}`,
+    ...(pack === undefined ? {} : { pack }),
+  };
+  const priorMarkerSource = `${JSON.stringify(priorMarker)}\n`;
+  mkdirSync(previous, { recursive: true });
+  writeFileSync(join(previous, ownershipMarkerName), priorMarkerSource);
+  writeFileSync(join(previous, "consumer-sentinel.txt"), "restore this consumer exactly\n");
+  writeFileSync(
+    join(workPath, ".laugh-tale-staging-owner.json"),
+    `${JSON.stringify({
+      kind: "laugh-tale-staging-work",
+      version: 2,
+      invocation,
+      token: `work-token-${invocation}`,
+      path: tmpRelative(workPath),
+      target: targetRelative,
+      pid,
+      createdAt,
+      prior: {
+        state: "owned",
+        targetIdentity: pathIdentity(previous),
+        marker: priorMarker,
+        markerIdentity: pathIdentity(join(previous, ownershipMarkerName)),
+        markerSource: priorMarkerSource,
+      },
+    })}\n`,
+  );
+  return { previous, priorMarkerSource };
+}
+
+function createCandidateFixture({
+  invocation,
+  pack,
+  target,
+  workPath,
+}: {
+  invocation: string;
+  pack: PackReference;
+  target: string;
+  workPath: string;
+}): string {
+  const candidate = join(workPath, "consumer");
+  mkdirSync(candidate);
+  writeFileSync(
+    join(candidate, ownershipMarkerName),
+    `${JSON.stringify({
+      kind: "laugh-tale-staged-consumer",
+      version: 1,
+      target: tmpRelative(target),
+      invocation,
+      pack,
+    })}\n`,
+  );
+  writeFileSync(join(candidate, "candidate-sentinel.txt"), "candidate stays recoverable\n");
+  return candidate;
 }
 
 function expectOwnedConsumer(staged: string): void {
@@ -312,6 +454,7 @@ describe("stage-starter-consumer", () => {
   }, 120_000);
 
   test("rejects every unsafe staging target without changing its sentinel", async () => {
+    mkdirSync(repositoryTmpRoot, { recursive: true });
     const repoSentinel = ownedPath(join(repoRoot, ".stage-target-repo-sentinel"));
     const tmpSentinel = ownedPath(join(repositoryTmpRoot, ".stage-target-tmp-sentinel"));
     const sourceSentinel = ownedPath(join(starterRoot, ".stage-target-source-sentinel"));
@@ -432,6 +575,7 @@ describe("stage-starter-consumer", () => {
   test("bounds an active package lock wait without mutating its owner", async () => {
     const outDir = stagedRoot("staged-active-lock-timeout-test");
     ownedPath(packageLockRoot);
+    mkdirSync(repositoryTmpRoot, { recursive: true });
     mkdirSync(packageLockRoot);
     const owner = `${JSON.stringify({
       kind: "laugh-tale-package-build-lock",
@@ -463,6 +607,7 @@ describe("stage-starter-consumer", () => {
   test("rejects malformed lock ownership without swallowing or changing it", async () => {
     const outDir = stagedRoot("staged-invalid-lock-test");
     ownedPath(packageLockRoot);
+    mkdirSync(repositoryTmpRoot, { recursive: true });
     mkdirSync(packageLockRoot);
     writeFileSync(lockOwnerPath, "{not valid json\n");
 
@@ -480,6 +625,7 @@ describe("stage-starter-consumer", () => {
   test("conservatively retires a token-verified lock whose owner is dead", async () => {
     const outDir = stagedRoot("staged-dead-lock-recovery-test");
     ownedPath(packageLockRoot);
+    mkdirSync(repositoryTmpRoot, { recursive: true });
     mkdirSync(packageLockRoot);
     writeFileSync(
       lockOwnerPath,
@@ -508,6 +654,54 @@ describe("stage-starter-consumer", () => {
     expectExactlyOneWorkspaceBuildAndPack(commands);
     expect(existsSync(packageLockRoot)).toBe(false);
   }, 120_000);
+
+  test("bounds an active artifact lock without scanning or changing its owner", async () => {
+    ownedPath(artifactLockRoot);
+    mkdirSync(repositoryTmpRoot, { recursive: true });
+    mkdirSync(artifactLockRoot);
+    const owner = `${JSON.stringify({
+      kind: "laugh-tale-artifact-cleanup-lock",
+      version: 1,
+      token: "active-artifact-owner",
+      pid: process.pid,
+      createdAt: Date.now(),
+    })}\n`;
+    writeFileSync(artifactLockOwnerPath, owner);
+
+    await expect(
+      reclaimOrphanedStagingArtifacts({
+        artifactLockPollMs: 5,
+        artifactLockTimeoutMs: 25,
+        isProcessAlive: () => true,
+      }),
+    ).rejects.toThrow(/timed out after 25ms.*artifact cleanup lock/i);
+
+    expect(readFileSync(artifactLockOwnerPath, "utf8")).toBe(owner);
+  });
+
+  test("conservatively retires an exact artifact lock whose owner is dead", async () => {
+    ownedPath(artifactLockRoot);
+    mkdirSync(repositoryTmpRoot, { recursive: true });
+    mkdirSync(artifactLockRoot);
+    writeFileSync(
+      artifactLockOwnerPath,
+      `${JSON.stringify({
+        kind: "laugh-tale-artifact-cleanup-lock",
+        version: 1,
+        token: "dead-artifact-owner",
+        pid: 424_242,
+        createdAt: Date.now() - 2_000,
+      })}\n`,
+    );
+
+    await reclaimOrphanedStagingArtifacts({
+      artifactLockDeadOwnerGraceMs: 0,
+      artifactLockPollMs: 5,
+      isProcessAlive: () => false,
+    });
+
+    expect(existsSync(artifactLockRoot)).toBe(false);
+  });
 
   test("rolls back when the authorized target identity is swapped after revalidation", async () => {
     const outDir = stagedRoot("staged-identity-swap-test");
@@ -539,6 +733,39 @@ describe("stage-starter-consumer", () => {
     );
     expect(existsSync(join(outDir, "package.json"))).toBe(false);
     expect(existsSync(packageLockRoot)).toBe(false);
+  }, 120_000);
+
+  test("serializes artifact reclamation across the target publication gap", async () => {
+    const outDir = stagedRoot("staged-reclaimer-publication-race-test");
+    const initial = await stageStarterConsumer({ install: false, outDir });
+    rememberPackRoots(initial.tarballs);
+    let concurrentReclaim: Promise<unknown> | undefined;
+    let reclaimSettled = false;
+
+    const refreshed = await stageStarterConsumer(
+      { install: false, outDir },
+      {
+        beforeCandidateRename: async () => {
+          concurrentReclaim = reclaimOrphanedStagingArtifacts({ artifactGraceMs: 0 });
+          void concurrentReclaim.then(
+            () => {
+              reclaimSettled = true;
+            },
+            () => {
+              reclaimSettled = true;
+            },
+          );
+          await new Promise<void>((resolveImmediate) => setImmediate(resolveImmediate));
+          expect(reclaimSettled).toBe(false);
+        },
+      },
+    );
+    rememberPackRoots(refreshed.tarballs);
+    await concurrentReclaim;
+
+    expectOwnedConsumer(outDir);
+    for (const tarball of refreshed.tarballs) expect(existsSync(tarball)).toBe(true);
+    expect(existsSync(dirname(initial.tarballs[0]))).toBe(false);
   }, 120_000);
 
   test("restores the exact prior consumer when candidate publication rename fails", async () => {
@@ -596,6 +823,44 @@ describe("stage-starter-consumer", () => {
     );
     expect(existsSync(join(outDir, "package.json"))).toBe(true);
     expect(existsSync(packageLockRoot)).toBe(false);
+  }, 120_000);
+
+  test("keeps the candidate pack when rollback must preserve unresolved work", async () => {
+    const outDir = stagedRoot("staged-preserved-rollback-pack-test");
+    const initial = await stageStarterConsumer({ install: false, outDir });
+    rememberPackRoots(initial.tarballs);
+    let preservedWorkRoot: string | undefined;
+    let candidatePackRoot: string | undefined;
+    const replacementSentinel = join(outDir, "replacement-sentinel.txt");
+
+    await expect(
+      stageStarterConsumer(
+        { install: false, outDir },
+        {
+          beforeCandidateRename: ({ candidate }) => {
+            preservedWorkRoot = dirname(candidate);
+            const marker = readConsumerMarker(candidate);
+            candidatePackRoot = join(repositoryTmpRoot, marker.pack!.path);
+            rememberPackRoots([join(candidatePackRoot, "owned-by-test.tgz")]);
+            mkdirSync(outDir);
+            writeFileSync(replacementSentinel, "replacement remains untouched\n");
+          },
+        },
+      ),
+    ).rejects.toThrow(/rollback refused|target path was replaced/i);
+
+    expect(preservedWorkRoot).toBeDefined();
+    expect(candidatePackRoot).toBeDefined();
+    ownedPath(preservedWorkRoot!);
+    expect(readFileSync(replacementSentinel, "utf8")).toBe(
+      "replacement remains untouched\n",
+    );
+    expect(readFileSync(join(preservedWorkRoot!, "consumer/package.json"), "utf8")).toContain(
+      `file:${candidatePackRoot}`,
+    );
+    expect(
+      readdirSync(candidatePackRoot!).filter((entry) => entry.endsWith(".tgz")),
+    ).toHaveLength(2);
   }, 120_000);
 
   test("records pack ownership and reclaims only the previous consumer's exact pack on refresh", async () => {
@@ -738,5 +1003,172 @@ describe("stage-starter-consumer", () => {
     expect(readFileSync(unknownPackEntry, "utf8")).toBe("unknown pack bytes\n");
     expect(readFileSync(unknownWorkEntry, "utf8")).toBe("unknown work bytes\n");
     expect(reclaimed.preserved).toEqual(expect.arrayContaining([guardedPack, unknownWork]));
+  });
+
+  test("refuses to restore an interrupted consumer through a replaced symlink parent", async () => {
+    const suffix = `${process.pid}-${Date.now()}`;
+    const outsideRoot = ownedPath(mkdtempSync(join(tmpdir(), "laugh-tale-orphan-outside-")));
+    const outsideSentinel = join(outsideRoot, "outside-sentinel.txt");
+    const symlinkParent = ownedPath(join(repositoryTmpRoot, `.orphan-parent-${suffix}`));
+    const target = join(symlinkParent, "nested", "consumer");
+    const workPath = ownedPath(
+      join(repositoryTmpRoot, `.stage-starter-work-symlink-${suffix}`),
+    );
+    writeFileSync(outsideSentinel, "outside bytes stay intact\n");
+    mkdirSync(join(outsideRoot, "nested"));
+    symlinkSync(outsideRoot, symlinkParent, "dir");
+    const { previous } = createInterruptedWorkFixture({
+      createdAt: Date.now() - 60_000,
+      invocation: `symlink-${suffix}`,
+      pid: 424_242,
+      target,
+      workPath,
+    });
+
+    const reclaimed = await reclaimOrphanedStagingArtifacts({
+      artifactGraceMs: 0,
+      isProcessAlive: () => false,
+    });
+
+    expect(readFileSync(outsideSentinel, "utf8")).toBe("outside bytes stay intact\n");
+    expect(existsSync(target)).toBe(false);
+    expect(readFileSync(join(previous, "consumer-sentinel.txt"), "utf8")).toBe(
+      "restore this consumer exactly\n",
+    );
+    expect(reclaimed.preserved).toContain(workPath);
+  });
+
+  test("recovers an interrupted prior consumer before considering its exact pack orphaned", async () => {
+    const suffix = `${process.pid}-${Date.now()}`;
+    const targetParent = ownedPath(join(repositoryTmpRoot, `.orphan-target-${suffix}`));
+    const target = join(targetParent, "consumer");
+    const workPath = ownedPath(
+      join(repositoryTmpRoot, `.stage-starter-work-recovery-${suffix}`),
+    );
+    const fixturePackPath = ownedPath(join(packRoot, `recovery-${suffix}`));
+    mkdirSync(targetParent);
+    const { artifact, reference } = createOwnedPackFixture({
+      createdAt: Date.now() - 60_000,
+      invocation: `recovery-${suffix}`,
+      packPath: fixturePackPath,
+      pid: 424_242,
+      target,
+    });
+    createInterruptedWorkFixture({
+      createdAt: Date.now() - 60_000,
+      invocation: `recovery-${suffix}`,
+      pack: reference,
+      pid: 424_242,
+      target,
+      workPath,
+    });
+
+    const reclaimed = await reclaimOrphanedStagingArtifacts({
+      artifactGraceMs: 0,
+      isProcessAlive: () => false,
+    });
+
+    expect(readFileSync(join(target, "consumer-sentinel.txt"), "utf8")).toBe(
+      "restore this consumer exactly\n",
+    );
+    expect(readFileSync(artifact, "utf8")).toBe("owned pack artifact\n");
+    expect(reclaimed.removed).toContain(workPath);
+    expect(reclaimed.preserved).toContain(fixturePackPath);
+  });
+
+  test("keeps an exact prior pack referenced by a still-active interrupted refresh", async () => {
+    const suffix = `${process.pid}-${Date.now()}`;
+    const targetParent = ownedPath(join(repositoryTmpRoot, `.active-target-${suffix}`));
+    const target = join(targetParent, "consumer");
+    const workPath = ownedPath(
+      join(repositoryTmpRoot, `.stage-starter-work-active-${suffix}`),
+    );
+    const fixturePackPath = ownedPath(join(packRoot, `active-${suffix}`));
+    mkdirSync(targetParent);
+    const { artifact, reference } = createOwnedPackFixture({
+      createdAt: Date.now() - 60_000,
+      invocation: `active-${suffix}`,
+      packPath: fixturePackPath,
+      pid: 424_242,
+      target,
+    });
+    const { previous } = createInterruptedWorkFixture({
+      createdAt: Date.now(),
+      invocation: `active-${suffix}`,
+      pack: reference,
+      pid: process.pid,
+      target,
+      workPath,
+    });
+
+    const reclaimed = await reclaimOrphanedStagingArtifacts({
+      artifactGraceMs: 0,
+      isProcessAlive: (pid) => pid === process.pid,
+    });
+
+    expect(readFileSync(artifact, "utf8")).toBe("owned pack artifact\n");
+    expect(readFileSync(join(previous, "consumer-sentinel.txt"), "utf8")).toBe(
+      "restore this consumer exactly\n",
+    );
+    expect(reclaimed.preserved).toEqual(
+      expect.arrayContaining([workPath, fixturePackPath]),
+    );
+  });
+
+  test("preserves prior and candidate packs while interrupted work cannot safely resolve", async () => {
+    const suffix = `${process.pid}-${Date.now()}`;
+    const targetParent = ownedPath(join(repositoryTmpRoot, `.blocked-target-${suffix}`));
+    const target = join(targetParent, "consumer");
+    const targetSentinel = join(target, "user-sentinel.txt");
+    const workPath = ownedPath(
+      join(repositoryTmpRoot, `.stage-starter-work-blocked-${suffix}`),
+    );
+    const priorPackPath = ownedPath(join(packRoot, `blocked-prior-${suffix}`));
+    const candidatePackPath = ownedPath(join(packRoot, `blocked-candidate-${suffix}`));
+    mkdirSync(target, { recursive: true });
+    writeFileSync(targetSentinel, "unowned target stays intact\n");
+    const priorPack = createOwnedPackFixture({
+      createdAt: Date.now() - 60_000,
+      invocation: `blocked-prior-${suffix}`,
+      packPath: priorPackPath,
+      pid: 424_242,
+      target,
+    });
+    const candidatePack = createOwnedPackFixture({
+      createdAt: Date.now() - 60_000,
+      invocation: `blocked-candidate-${suffix}`,
+      packPath: candidatePackPath,
+      pid: 424_242,
+      target,
+    });
+    createInterruptedWorkFixture({
+      createdAt: Date.now() - 60_000,
+      invocation: `blocked-candidate-${suffix}`,
+      pack: priorPack.reference,
+      pid: 424_242,
+      target,
+      workPath,
+    });
+    const candidate = createCandidateFixture({
+      invocation: `blocked-candidate-${suffix}`,
+      pack: candidatePack.reference,
+      target,
+      workPath,
+    });
+
+    const reclaimed = await reclaimOrphanedStagingArtifacts({
+      artifactGraceMs: 0,
+      isProcessAlive: () => false,
+    });
+
+    expect(readFileSync(targetSentinel, "utf8")).toBe("unowned target stays intact\n");
+    expect(readFileSync(priorPack.artifact, "utf8")).toBe("owned pack artifact\n");
+    expect(readFileSync(candidatePack.artifact, "utf8")).toBe("owned pack artifact\n");
+    expect(readFileSync(join(candidate, "candidate-sentinel.txt"), "utf8")).toBe(
+      "candidate stays recoverable\n",
+    );
+    expect(reclaimed.preserved).toEqual(
+      expect.arrayContaining([workPath, priorPackPath, candidatePackPath]),
+    );
   });
 });

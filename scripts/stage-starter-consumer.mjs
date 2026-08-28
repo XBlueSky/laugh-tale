@@ -26,6 +26,7 @@ const repositoryTmpRoot = join(repoRoot, "tmp");
 const defaultStagedRoot = join(repositoryTmpRoot, "staged-starter");
 const packBaseRoot = join(repositoryTmpRoot, "staged-packs");
 const packageLockRoot = join(repositoryTmpRoot, ".stage-starter-package.lock");
+const artifactLockRoot = join(repositoryTmpRoot, ".stage-starter-artifact.lock");
 const consumerMarkerName = ".laugh-tale-staged-consumer.json";
 const auxiliaryMarkerName = ".laugh-tale-staging-owner.json";
 const lockOwnerName = "owner.json";
@@ -601,6 +602,182 @@ async function withPackageLock(testOperations, operation) {
   return result;
 }
 
+function validArtifactLockOwner(owner) {
+  return (
+    owner?.kind === "laugh-tale-artifact-cleanup-lock" &&
+    owner.version === 1 &&
+    typeof owner.token === "string" &&
+    owner.token.length > 0 &&
+    Number.isInteger(owner.pid) &&
+    owner.pid > 0 &&
+    Number.isFinite(owner.createdAt)
+  );
+}
+
+async function captureArtifactLock() {
+  const directoryStat = await lstat(artifactLockRoot);
+  if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory()) {
+    throw new Error("staging artifact lock path is not a real directory");
+  }
+  const ownerSnapshot = await readMarkerSnapshot(join(artifactLockRoot, lockOwnerName));
+  if (ownerSnapshot !== undefined && !validArtifactLockOwner(ownerSnapshot.marker)) {
+    throw new Error("staging artifact lock has invalid ownership metadata");
+  }
+  const currentStat = await lstat(artifactLockRoot);
+  if (!sameIdentity(identityFor(directoryStat), identityFor(currentStat))) {
+    throw new Error("staging artifact lock identity changed while it was inspected");
+  }
+  return {
+    directoryIdentity: identityFor(directoryStat),
+    ownerSnapshot,
+  };
+}
+
+async function rollbackRenamedArtifactLock(removalPath, cause) {
+  if ((await statMaybe(artifactLockRoot)) !== undefined) {
+    throw new AggregateError(
+      [cause],
+      `staging artifact lock changed during retirement; preserved unknown lock at ${removalPath}`,
+    );
+  }
+  try {
+    await rename(removalPath, artifactLockRoot);
+  } catch (rollbackError) {
+    throw new AggregateError(
+      [cause, rollbackError],
+      `staging artifact lock changed during retirement and could not be restored from ${removalPath}`,
+    );
+  }
+  throw cause;
+}
+
+async function removeCapturedArtifactLock(captured, removalPath) {
+  await rename(artifactLockRoot, removalPath);
+  try {
+    const removalStat = await lstat(removalPath);
+    if (
+      removalStat.isSymbolicLink() ||
+      !removalStat.isDirectory() ||
+      !sameIdentity(identityFor(removalStat), captured.directoryIdentity)
+    ) {
+      throw new Error("staging artifact lock directory identity changed before retirement");
+    }
+    const ownerSnapshot = await readMarkerSnapshot(join(removalPath, lockOwnerName));
+    if (
+      (captured.ownerSnapshot === undefined) !== (ownerSnapshot === undefined) ||
+      (captured.ownerSnapshot !== undefined &&
+        (!sameIdentity(captured.ownerSnapshot.identity, ownerSnapshot?.identity) ||
+          captured.ownerSnapshot.source !== ownerSnapshot?.source))
+    ) {
+      throw new Error("staging artifact lock owner identity changed before retirement");
+    }
+    const entries = await readdir(removalPath);
+    const expectedEntries = captured.ownerSnapshot === undefined ? [] : [lockOwnerName];
+    if (
+      entries.length !== expectedEntries.length ||
+      entries.some((entry) => !expectedEntries.includes(entry))
+    ) {
+      throw new Error("staging artifact lock contains unknown files at retirement");
+    }
+  } catch (error) {
+    await rollbackRenamedArtifactLock(removalPath, error);
+  }
+  if (captured.ownerSnapshot !== undefined) await unlink(join(removalPath, lockOwnerName));
+  await rmdir(removalPath);
+}
+
+async function acquireArtifactLock(testOperations) {
+  await ensureRealDirectoryBelowTmp(repositoryTmpRoot);
+  const token = randomUUID();
+  const timeoutMs = testOperations?.artifactLockTimeoutMs ?? 120_000;
+  const pollMs = testOperations?.artifactLockPollMs ?? 75;
+  const staleMs = testOperations?.artifactLockStaleMs ?? 300_000;
+  const deadOwnerGraceMs = testOperations?.artifactLockDeadOwnerGraceMs ?? 1_000;
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() <= deadline) {
+    try {
+      await mkdir(artifactLockRoot);
+      const owner = {
+        kind: "laugh-tale-artifact-cleanup-lock",
+        version: 1,
+        token,
+        pid: process.pid,
+        createdAt: Date.now(),
+      };
+      try {
+        await writeFile(join(artifactLockRoot, lockOwnerName), `${JSON.stringify(owner)}\n`, {
+          flag: "wx",
+        });
+        const captured = await captureArtifactLock();
+        return async () => {
+          const removalPath = join(
+            repositoryTmpRoot,
+            `.stage-starter-artifact.release-${token}`,
+          );
+          await removeCapturedArtifactLock(captured, removalPath);
+        };
+      } catch (error) {
+        await rmdir(artifactLockRoot).catch(() => undefined);
+        throw error;
+      }
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+    }
+
+    const captured = await captureArtifactLock();
+    const owner = captured.ownerSnapshot?.marker;
+    const ownerIsDead =
+      validArtifactLockOwner(owner) &&
+      !(testOperations?.isProcessAlive ?? processIsAlive)(owner.pid);
+    if (ownerIsDead && Date.now() - owner.createdAt > deadOwnerGraceMs) {
+      const stalePath = join(
+        repositoryTmpRoot,
+        `.stage-starter-artifact.stale-${token}`,
+      );
+      await removeCapturedArtifactLock(captured, stalePath);
+      continue;
+    }
+    if (
+      owner === undefined &&
+      Date.now() - (await lstat(artifactLockRoot)).mtimeMs > staleMs
+    ) {
+      const stalePath = join(
+        repositoryTmpRoot,
+        `.stage-starter-artifact.stale-${token}`,
+      );
+      await removeCapturedArtifactLock(captured, stalePath);
+      continue;
+    }
+    await wait(pollMs);
+  }
+  throw new Error(`timed out after ${timeoutMs}ms waiting for the staging artifact cleanup lock`);
+}
+
+async function withArtifactLock(testOperations, operation) {
+  const release = await acquireArtifactLock(testOperations);
+  let result;
+  let operationError;
+  try {
+    result = await operation();
+  } catch (error) {
+    operationError = error;
+  }
+  try {
+    await release();
+  } catch (releaseError) {
+    if (operationError !== undefined) {
+      throw new AggregateError(
+        [operationError, releaseError],
+        "staging operation and artifact-lock release both failed",
+      );
+    }
+    throw releaseError;
+  }
+  if (operationError !== undefined) throw operationError;
+  return result;
+}
+
 async function packWorkspacePackages(packRoot, testOperations, onPacked) {
   const tarballs = [];
   const packageEntries = await readdir(join(repoRoot, "packages"), { withFileTypes: true });
@@ -735,6 +912,17 @@ function preserveWork(error) {
 }
 
 async function rollbackMovedTarget(previous, target, cause) {
+  try {
+    await assertRealPathComponents(previous);
+    await assertRealPathComponents(target);
+  } catch (pathError) {
+    throw preserveWork(
+      new AggregateError(
+        [cause, pathError],
+        "staging publication rollback refused because a path component changed",
+      ),
+    );
+  }
   if ((await statMaybe(target)) !== undefined) {
     throw preserveWork(
       new AggregateError(
@@ -757,6 +945,7 @@ async function rollbackMovedTarget(previous, target, cause) {
 }
 
 async function removeAuthorizedPrevious(previous, targetState) {
+  await assertRealPathComponents(previous);
   await assertRenamedTargetIdentity(previous, targetState);
   if (targetState.state === "owned") {
     await rm(previous, REMOVE_TREE_OPTIONS);
@@ -778,6 +967,7 @@ async function publishCandidate({
     throw new Error("staging target changed while the replacement consumer was prepared");
   }
   await testOperations?.afterTargetRevalidated?.({ target: targetState.target });
+  await assertRealPathComponents(targetState.target);
 
   const previous = join(workRoot, "previous");
   if (currentState.state !== "missing") {
@@ -793,6 +983,8 @@ async function publishCandidate({
       candidate,
       previous: currentState.state === "missing" ? undefined : previous,
     });
+    await assertRealPathComponents(candidate);
+    await assertRealPathComponents(currentState.target);
     await rename(candidate, currentState.target);
     markPublished();
   } catch (error) {
@@ -898,6 +1090,7 @@ async function reclaimOrphanPack(path, marker) {
 }
 
 async function removeWorkMarkerOnly(path) {
+  await assertRealPathComponents(path);
   const remaining = await readdir(path);
   if (remaining.some((entry) => entry !== auxiliaryMarkerName)) {
     throw new Error(`refusing to remove work tree with unknown remaining contents: ${path}`);
@@ -906,18 +1099,32 @@ async function removeWorkMarkerOnly(path) {
   await rmdir(path);
 }
 
+async function removePriorPackForTargetState(targetState) {
+  if (targetState.marker?.pack === undefined) return;
+  const priorPackPath = packPathForReference(targetState.marker.pack);
+  if ((await statMaybe(priorPackPath)) === undefined) return;
+  await removeOwnedPackTree(
+    priorPackPath,
+    targetState.marker.pack,
+    targetState.marker.target,
+  );
+}
+
 async function reclaimOrphanWork(path, marker) {
+  await assertRealPathComponents(path);
   const entries = await readdir(path);
   if (entries.some((entry) => ![auxiliaryMarkerName, "consumer", "previous"].includes(entry))) {
     return false;
   }
   const targetState = targetStateFromWorkMarker(marker);
+  await assertRealPathComponents(targetState.target);
   const candidatePath = join(path, "consumer");
   const previousPath = join(path, "previous");
   const candidateExists = entries.includes("consumer");
   const previousExists = entries.includes("previous");
   let candidateMarker;
   if (candidateExists) {
+    await assertRealPathComponents(candidatePath);
     const snapshot = await readMarkerSnapshot(join(candidatePath, consumerMarkerName));
     if (
       !isConsumerMarker(snapshot?.marker, targetState.target) ||
@@ -929,13 +1136,17 @@ async function reclaimOrphanWork(path, marker) {
   }
 
   if (previousExists) {
+    await assertRealPathComponents(previousPath);
     try {
       await assertRenamedTargetIdentity(previousPath, targetState);
     } catch {
       return false;
     }
+    await assertRealPathComponents(targetState.target);
     const targetStat = await statMaybe(targetState.target);
     if (targetStat === undefined) {
+      await assertRealPathComponents(previousPath);
+      await assertRealPathComponents(targetState.target);
       await rename(previousPath, targetState.target);
     } else {
       let currentSnapshot;
@@ -951,17 +1162,31 @@ async function reclaimOrphanWork(path, marker) {
         return false;
       }
       await removeAuthorizedPrevious(previousPath, targetState);
-      if (targetState.marker?.pack !== undefined) {
-        try {
-          await removeOwnedPackTree(
-            packPathForReference(targetState.marker.pack),
-            targetState.marker.pack,
-            targetState.marker.target,
-          );
-        } catch {
-          // A pack with changed ownership or unknown contents is preserved for manual recovery.
-        }
+      try {
+        await removePriorPackForTargetState(targetState);
+      } catch {
+        return false;
       }
+    }
+  }
+
+  if (!previousExists && !candidateExists && targetState.marker?.pack !== undefined) {
+    let currentSnapshot;
+    try {
+      await assertRealPathComponents(targetState.target);
+      currentSnapshot = await readMarkerSnapshot(join(targetState.target, consumerMarkerName));
+    } catch {
+      return false;
+    }
+    if (!isConsumerMarker(currentSnapshot?.marker, targetState.target)) return false;
+    if (currentSnapshot.marker.invocation === marker.invocation) {
+      try {
+        await removePriorPackForTargetState(targetState);
+      } catch {
+        return false;
+      }
+    } else if (currentSnapshot.marker.invocation !== targetState.marker.invocation) {
+      return false;
     }
   }
 
@@ -978,101 +1203,168 @@ function artifactOwnerIsExpired(marker, testOperations) {
   return marker.status === "cleanup-pending" || !isAlive(marker.pid);
 }
 
-export async function reclaimOrphanedStagingArtifacts(testOperations = {}) {
+async function reclaimOrphanedStagingArtifactsUnlocked(testOperations = {}) {
   const removed = [];
   const preserved = [];
-  await mkdir(repositoryTmpRoot, { recursive: true });
+  const protectedPackPaths = new Set();
+  await ensureRealDirectoryBelowTmp(repositoryTmpRoot);
 
-  const inspect = async (path, kind) => {
-    let snapshot;
+  const protectPackReference = (reference) => {
+    if (reference === undefined) return;
     try {
-      snapshot = await readMarkerSnapshot(join(path, auxiliaryMarkerName));
-      const marker = snapshot?.marker;
-      if (
-        !validArtifactMarker(marker, kind, path) ||
-        !artifactOwnerIsExpired(marker, testOperations)
-      ) {
-        preserved.push(path);
-        return;
-      }
-      const wasRemoved =
-        kind === "laugh-tale-staging-packs"
-          ? validPackMarker(marker, path) && (await reclaimOrphanPack(path, marker))
-          : await reclaimOrphanWork(path, marker);
-      (wasRemoved ? removed : preserved).push(path);
+      protectedPackPaths.add(packPathForReference(reference));
     } catch {
-      preserved.push(path);
+      // Invalid references cannot authorize deletion or identify a managed pack.
     }
   };
 
-  const packBaseStat = await statMaybe(packBaseRoot);
-  if (packBaseStat?.isDirectory() && !packBaseStat.isSymbolicLink()) {
-    for (const entry of await readdir(packBaseRoot, { withFileTypes: true })) {
-      const path = join(packBaseRoot, entry.name);
-      if (!entry.isDirectory() || entry.isSymbolicLink()) {
+  const inspectWork = async (path) => {
+    let snapshot;
+    let marker;
+    const workClaims = [];
+    try {
+      await assertRealPathComponents(path);
+      snapshot = await readMarkerSnapshot(join(path, auxiliaryMarkerName));
+      marker = snapshot?.marker;
+      if (!validArtifactMarker(marker, "laugh-tale-staging-work", path)) {
         preserved.push(path);
-        continue;
+        return;
       }
-      await inspect(path, "laugh-tale-staging-packs");
-    }
-  }
+      const targetState = targetStateFromWorkMarker(marker);
+      if (targetState.marker?.pack !== undefined) workClaims.push(targetState.marker.pack);
+      const entries = await readdir(path);
+      if (entries.includes("consumer")) {
+        const candidatePath = join(path, "consumer");
+        try {
+          await assertRealPathComponents(candidatePath);
+          const candidateSnapshot = await readMarkerSnapshot(
+            join(candidatePath, consumerMarkerName),
+          );
+          if (
+            isConsumerMarker(candidateSnapshot?.marker, targetState.target) &&
+            candidateSnapshot.marker.invocation === marker.invocation &&
+            candidateSnapshot.marker.pack !== undefined
+          ) {
+            workClaims.push(candidateSnapshot.marker.pack);
+          }
+        } catch {
+          // The work tree itself remains preserved; known prior claims still protect packs.
+        }
+      }
 
-  for (const entry of await readdir(repositoryTmpRoot, { withFileTypes: true })) {
+      if (!artifactOwnerIsExpired(marker, testOperations)) {
+        preserved.push(path);
+        for (const claim of workClaims) protectPackReference(claim);
+        return;
+      }
+      const wasRemoved = await reclaimOrphanWork(path, marker);
+      (wasRemoved ? removed : preserved).push(path);
+      if (!wasRemoved) for (const claim of workClaims) protectPackReference(claim);
+    } catch {
+      preserved.push(path);
+      for (const claim of workClaims) protectPackReference(claim);
+    }
+  };
+
+  const tmpEntries = await readdir(repositoryTmpRoot, { withFileTypes: true });
+  for (const entry of tmpEntries) {
     if (!entry.name.startsWith(".stage-starter-work-")) continue;
     const path = join(repositoryTmpRoot, entry.name);
     if (!entry.isDirectory() || entry.isSymbolicLink()) {
       preserved.push(path);
       continue;
     }
-    await inspect(path, "laugh-tale-staging-work");
+    await inspectWork(path);
+  }
+
+  const packBaseStat = await statMaybe(packBaseRoot);
+  if (packBaseStat?.isDirectory() && !packBaseStat.isSymbolicLink()) {
+    await assertRealPathComponents(packBaseRoot);
+    for (const entry of await readdir(packBaseRoot, { withFileTypes: true })) {
+      const path = join(packBaseRoot, entry.name);
+      if (!entry.isDirectory() || entry.isSymbolicLink()) {
+        preserved.push(path);
+        continue;
+      }
+      if (protectedPackPaths.has(path)) {
+        preserved.push(path);
+        continue;
+      }
+      try {
+        await assertRealPathComponents(path);
+        const snapshot = await readMarkerSnapshot(join(path, auxiliaryMarkerName));
+        const marker = snapshot?.marker;
+        if (
+          !validPackMarker(marker, path) ||
+          !artifactOwnerIsExpired(marker, testOperations)
+        ) {
+          preserved.push(path);
+          continue;
+        }
+        const wasRemoved = await reclaimOrphanPack(path, marker);
+        (wasRemoved ? removed : preserved).push(path);
+      } catch {
+        preserved.push(path);
+      }
+    }
   }
   return { removed, preserved };
+}
+
+export async function reclaimOrphanedStagingArtifacts(testOperations = {}) {
+  return withArtifactLock(testOperations, () =>
+    reclaimOrphanedStagingArtifactsUnlocked(testOperations),
+  );
 }
 
 export async function stageStarterConsumer(
   { install = true, outDir, recipe, recipeCatalogRoot } = {},
   testOperations = {},
 ) {
-  await mkdir(repositoryTmpRoot, { recursive: true });
-  await reclaimOrphanedStagingArtifacts(testOperations);
-  const targetState = await validateStagingTarget(
-    outDir === undefined ? defaultStagedRoot : resolve(outDir),
-  );
+  const requestedTarget = outDir === undefined ? defaultStagedRoot : resolve(outDir);
   const invocation = randomUUID();
   const workRoot = join(repositoryTmpRoot, `.stage-starter-work-${invocation}`);
   const candidate = join(workRoot, "consumer");
-  const workMarker = {
-    kind: "laugh-tale-staging-work",
-    version: artifactMarkerVersion,
-    invocation,
-    token: randomUUID(),
-    path: normalizedRelative(workRoot),
-    target: normalizedRelative(targetState.target),
-    pid: process.pid,
-    createdAt: Date.now(),
-    prior: serializableTargetState(targetState),
-  };
   const packRoot = join(packBaseRoot, invocation);
-  const packMarker = {
-    kind: "laugh-tale-staging-packs",
-    version: artifactMarkerVersion,
-    invocation,
-    token: randomUUID(),
-    path: normalizedRelative(packRoot),
-    target: normalizedRelative(targetState.target),
-    pid: process.pid,
-    createdAt: Date.now(),
-    files: [],
-  };
-  let packReference = packReferenceFor(packMarker);
+  let targetState;
+  let workMarker;
+  let packMarker;
+  let packReference;
   let workCreated = false;
   let packCreated = false;
   let published = false;
   let candidateMarker;
 
   try {
-    await createAuxiliaryDirectory(workRoot, workMarker);
-    workCreated = true;
+    await reclaimOrphanedStagingArtifacts(testOperations);
+    await withArtifactLock(testOperations, async () => {
+      targetState = await validateStagingTarget(requestedTarget);
+      workMarker = {
+        kind: "laugh-tale-staging-work",
+        version: artifactMarkerVersion,
+        invocation,
+        token: randomUUID(),
+        path: normalizedRelative(workRoot),
+        target: normalizedRelative(targetState.target),
+        pid: process.pid,
+        createdAt: Date.now(),
+        prior: serializableTargetState(targetState),
+      };
+      packMarker = {
+        kind: "laugh-tale-staging-packs",
+        version: artifactMarkerVersion,
+        invocation,
+        token: randomUUID(),
+        path: normalizedRelative(packRoot),
+        target: normalizedRelative(targetState.target),
+        pid: process.pid,
+        createdAt: Date.now(),
+        files: [],
+      };
+      packReference = packReferenceFor(packMarker);
+      await createAuxiliaryDirectory(workRoot, workMarker);
+      workCreated = true;
+    });
     await composeStarter({ stagedRoot: candidate, recipe, recipeCatalogRoot });
     candidateMarker = await writeConsumerMarker(
       candidate,
@@ -1105,83 +1397,90 @@ export async function stageStarterConsumer(
     if (install) {
       run("npm", ["install", "--no-audit", "--no-fund"], candidate, testOperations);
     }
-    const publication = await publishCandidate({
-      candidate,
-      targetState,
-      workRoot,
-      testOperations,
-      markPublished: () => {
-        published = true;
-      },
-    });
-    const cleanupPending = [...publication.cleanupPending];
-    const cleanupWarnings = [...publication.cleanupWarnings];
-    if (cleanupPending.includes(workRoot)) {
-      workMarker.status = "cleanup-pending";
-      workMarker.releasedAt = Date.now();
-      try {
-        await updateAuxiliaryMarker(workRoot, workMarker);
-      } catch (error) {
-        cleanupWarnings.push(
-          `published consumer; could not record retryable work cleanup: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
+    return await withArtifactLock(testOperations, async () => {
+      const publication = await publishCandidate({
+        candidate,
+        targetState,
+        workRoot,
+        testOperations,
+        markPublished: () => {
+          published = true;
+        },
+      });
+      const cleanupPending = [...publication.cleanupPending];
+      const cleanupWarnings = [...publication.cleanupWarnings];
 
-    if (publication.previousRemoved && targetState.marker?.pack !== undefined) {
-      try {
-        const previousPackRoot = packPathForReference(targetState.marker.pack);
-        await testOperations?.beforePreviousPackCleanup?.({ packRoot: previousPackRoot });
-        await removeOwnedPackTree(
-          previousPackRoot,
-          targetState.marker.pack,
-          targetState.marker.target,
-        );
-      } catch (error) {
-        let pendingPath;
+      if (publication.previousRemoved && targetState.marker?.pack !== undefined) {
         try {
-          pendingPath = packPathForReference(targetState.marker.pack);
-        } catch {
-          pendingPath = undefined;
+          const previousPackRoot = packPathForReference(targetState.marker.pack);
+          await testOperations?.beforePreviousPackCleanup?.({ packRoot: previousPackRoot });
+          await removePriorPackForTargetState(targetState);
+        } catch (error) {
+          let pendingPath;
+          try {
+            pendingPath = packPathForReference(targetState.marker.pack);
+          } catch {
+            pendingPath = undefined;
+          }
+          if (pendingPath !== undefined) cleanupPending.push(pendingPath);
+          if (!cleanupPending.includes(workRoot)) cleanupPending.push(workRoot);
+          cleanupWarnings.push(
+            `published consumer; prior-pack cleanup remains pending: ${error instanceof Error ? error.message : String(error)}`,
+          );
         }
-        if (pendingPath !== undefined) cleanupPending.push(pendingPath);
-        cleanupWarnings.push(
-          `published consumer; prior-pack cleanup remains pending: ${error instanceof Error ? error.message : String(error)}`,
-        );
       }
-    }
 
-    if (!cleanupPending.includes(workRoot)) {
-      try {
-        await removeOwnedWorkTree(workRoot, workMarker, candidateMarker);
-        workCreated = false;
-      } catch (error) {
-        cleanupPending.push(workRoot);
-        cleanupWarnings.push(
-          `published consumer; staging-work cleanup remains pending: ${error instanceof Error ? error.message : String(error)}`,
-        );
+      if (!cleanupPending.includes(workRoot)) {
+        try {
+          await removeOwnedWorkTree(workRoot, workMarker, candidateMarker);
+          workCreated = false;
+        } catch (error) {
+          cleanupPending.push(workRoot);
+          cleanupWarnings.push(
+            `published consumer; staging-work cleanup remains pending: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
       }
-    }
 
-    return {
-      stagedRoot: targetState.target,
-      tarballs,
-      ...(cleanupPending.length === 0 ? {} : { cleanupPending }),
-      ...(cleanupWarnings.length === 0 ? {} : { cleanupWarnings }),
-    };
+      if (cleanupPending.includes(workRoot)) {
+        workMarker.status = "cleanup-pending";
+        workMarker.releasedAt = Date.now();
+        try {
+          await updateAuxiliaryMarker(workRoot, workMarker);
+        } catch (error) {
+          cleanupWarnings.push(
+            `published consumer; could not record retryable work cleanup: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
+
+      return {
+        stagedRoot: targetState.target,
+        tarballs,
+        ...(cleanupPending.length === 0 ? {} : { cleanupPending }),
+        ...(cleanupWarnings.length === 0 ? {} : { cleanupWarnings }),
+      };
+    });
   } catch (error) {
     const cleanupErrors = [];
-    if (!published && packCreated) {
+    if (!published && (packCreated || workCreated)) {
       try {
-        const cleanupReference = await capturePackReference(packRoot);
-        await removeOwnedPackTree(packRoot, cleanupReference, packMarker.target);
-      } catch (cleanupError) {
-        cleanupErrors.push(cleanupError);
-      }
-    }
-    if (!published && workCreated && !error?.stagingPreserveWork) {
-      try {
-        await removeOwnedWorkTree(workRoot, workMarker, candidateMarker);
+        await withArtifactLock(testOperations, async () => {
+          if (error?.stagingPreserveWork && workCreated) {
+            workMarker.status = "cleanup-pending";
+            workMarker.releasedAt = Date.now();
+            await updateAuxiliaryMarker(workRoot, workMarker);
+            return;
+          }
+          if (packCreated) {
+            const cleanupReference = await capturePackReference(packRoot);
+            await removeOwnedPackTree(packRoot, cleanupReference, packMarker.target);
+          }
+          if (workCreated) {
+            await removeOwnedWorkTree(workRoot, workMarker, candidateMarker);
+            workCreated = false;
+          }
+        });
       } catch (cleanupError) {
         cleanupErrors.push(cleanupError);
       }

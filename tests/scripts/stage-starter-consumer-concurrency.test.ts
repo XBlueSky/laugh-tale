@@ -1,9 +1,12 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { setTimeout as wait } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { gunzipSync } from "node:zlib";
 import { afterEach, describe, expect, test } from "vitest";
+
+import { signalProcessTree } from "./fixtures/process-tree-termination.js";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 const childScript = join(
@@ -12,6 +15,7 @@ const childScript = join(
 );
 const ownedPaths: string[] = [];
 const activeChildren = new Set<ChildProcess>();
+const activeGrandchildren = new Set<number>();
 const { reclaimOrphanedStagingArtifacts } = (await import(
   pathToFileURL(join(repoRoot, "scripts/stage-starter-consumer.mjs")).href
 )) as {
@@ -41,14 +45,14 @@ interface ChildOptions {
   timeoutMs?: number;
 }
 
-function signalChild(child: ChildProcess, signal: NodeJS.Signals): void {
-  if (child.exitCode !== null || child.signalCode !== null) return;
-  try {
-    if (process.platform !== "win32" && child.pid !== undefined) process.kill(-child.pid, signal);
-    else child.kill(signal);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
-  }
+function signalChild(
+  child: ChildProcess,
+  signal: NodeJS.Signals,
+  { includeExitedRoot = false }: { includeExitedRoot?: boolean } = {},
+): void {
+  if (!includeExitedRoot && (child.exitCode !== null || child.signalCode !== null)) return;
+  if (child.pid === undefined) throw new Error("cannot terminate a child without a pid");
+  signalProcessTree(child.pid, signal);
 }
 
 function waitForChildClose(child: ChildProcess, timeoutMs: number): Promise<boolean> {
@@ -92,10 +96,17 @@ function runStageChild(outDir: string, options: ChildOptions = {}): Promise<Chil
     let stderr = "";
     let promiseSettled = false;
     let timedOut = false;
+    const terminationErrors: string[] = [];
     let killTimer: NodeJS.Timeout | undefined;
     let hardSettleTimer: NodeJS.Timeout | undefined;
     const diagnostic = (message: string): Error =>
-      new Error(`${message}:\n--- stdout ---\n${stdout}\n--- stderr ---\n${stderr}`);
+      new Error(
+        `${message}:\n--- stdout ---\n${stdout}\n--- stderr ---\n${stderr}${
+          terminationErrors.length === 0
+            ? ""
+            : `\n--- termination errors ---\n${terminationErrors.join("\n")}`
+        }`,
+      );
     const settle = (operation: () => void): void => {
       if (promiseSettled) return;
       promiseSettled = true;
@@ -103,8 +114,18 @@ function runStageChild(outDir: string, options: ChildOptions = {}): Promise<Chil
     };
     const timeout = setTimeout(() => {
       timedOut = true;
-      signalChild(child, "SIGTERM");
-      killTimer = setTimeout(() => signalChild(child, "SIGKILL"), killGraceMs);
+      try {
+        signalChild(child, "SIGTERM");
+      } catch (error) {
+        terminationErrors.push(error instanceof Error ? error.message : String(error));
+      }
+      killTimer = setTimeout(() => {
+        try {
+          signalChild(child, "SIGKILL", { includeExitedRoot: true });
+        } catch (error) {
+          terminationErrors.push(error instanceof Error ? error.message : String(error));
+        }
+      }, killGraceMs);
       hardSettleTimer = setTimeout(
         () =>
           settle(() =>
@@ -117,22 +138,28 @@ function runStageChild(outDir: string, options: ChildOptions = {}): Promise<Chil
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk) => {
       stdout += chunk;
+      for (const match of stdout.matchAll(/STAGE_CHILD_GRANDCHILD_PID:(\d+)/g)) {
+        activeGrandchildren.add(Number(match[1]));
+      }
     });
     child.stderr.on("data", (chunk) => {
       stderr += chunk;
     });
     child.on("error", (error) => {
+      activeChildren.delete(child);
+      clearTimeout(timeout);
+      if (killTimer !== undefined) clearTimeout(killTimer);
+      if (hardSettleTimer !== undefined) clearTimeout(hardSettleTimer);
       settle(() => rejectChild(diagnostic(`staging child process error: ${error.message}`)));
     });
     child.on("close", (status) => {
       activeChildren.delete(child);
       clearTimeout(timeout);
-      if (killTimer !== undefined) clearTimeout(killTimer);
-      if (hardSettleTimer !== undefined) clearTimeout(hardSettleTimer);
       if (timedOut) {
-        settle(() => rejectChild(diagnostic(`staging child timed out after ${timeoutMs}ms`)));
         return;
       }
+      if (killTimer !== undefined) clearTimeout(killTimer);
+      if (hardSettleTimer !== undefined) clearTimeout(hardSettleTimer);
       if (status !== 0) {
         settle(() => rejectChild(diagnostic(`staging child failed (${status})`)));
         return;
@@ -160,6 +187,25 @@ function runStageChild(outDir: string, options: ChildOptions = {}): Promise<Chil
       }
     });
   });
+}
+
+function processIsAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
+    throw error;
+  }
+}
+
+async function waitForProcessExit(pid: number, timeoutMs = 1_000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() <= deadline) {
+    if (!processIsAlive(pid)) return true;
+    await wait(20);
+  }
+  return !processIsAlive(pid);
 }
 
 function tarEntries(tarball: string): Map<string, Buffer> {
@@ -199,6 +245,17 @@ afterEach(async () => {
   const terminated = await Promise.allSettled(
     [...activeChildren].map((child) => terminateChild(child)),
   );
+  for (const pid of activeGrandchildren) {
+    if (processIsAlive(pid)) {
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+      }
+      await waitForProcessExit(pid);
+    }
+  }
+  activeGrandchildren.clear();
   await reclaimOrphanedStagingArtifacts({ artifactGraceMs: 0 });
   for (const path of ownedPaths.splice(0).reverse()) {
     rmSync(path, {
@@ -330,9 +387,32 @@ describe("stage-starter-consumer cross-process packaging", () => {
       timeoutMs: 1_000,
     });
 
-    await expect(timeout).rejects.toThrow(
+    let failure: unknown;
+    try {
+      await timeout;
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeInstanceOf(Error);
+    const diagnostic = (failure as Error).message;
+    expect(diagnostic).toMatch(
       /timed out after 1000ms[\s\S]*STAGE_CHILD_HANG_STDOUT[\s\S]*STAGE_CHILD_HANG_STDERR/,
     );
-    expect(activeChildren.size).toBe(0);
+    expect(diagnostic).toContain("STAGE_CHILD_GRANDCHILD_STDOUT");
+    expect(diagnostic).toContain("STAGE_CHILD_GRANDCHILD_STDERR");
+    expect(diagnostic).toContain("STAGE_CHILD_GRANDCHILD_IGNORED_TERM");
+    const grandchildPid = Number(
+      /STAGE_CHILD_GRANDCHILD_PID:(\d+)/.exec(diagnostic)?.[1],
+    );
+    expect(Number.isSafeInteger(grandchildPid)).toBe(true);
+    try {
+      expect(await waitForProcessExit(grandchildPid, 250)).toBe(true);
+      activeGrandchildren.delete(grandchildPid);
+      expect(activeChildren.size).toBe(0);
+    } finally {
+      if (processIsAlive(grandchildPid)) process.kill(grandchildPid, "SIGKILL");
+      await waitForProcessExit(grandchildPid);
+      activeGrandchildren.delete(grandchildPid);
+    }
   }, 3_000);
 });
