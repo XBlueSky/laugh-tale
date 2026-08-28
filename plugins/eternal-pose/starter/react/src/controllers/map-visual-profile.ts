@@ -53,6 +53,18 @@ const ROUTE_CERTAINTIES = [
   "unverified",
 ] as const;
 const ROUTE_MODES = ["walking", "transit", "driving", "flight"] as const;
+const BASEMAP_MODES = [
+  "neutral",
+  "topographic",
+  "flat",
+  "technical",
+  "coastal",
+  "subdued",
+] as const;
+const BASEMAP_DENSITIES = ["low", "medium", "high"] as const;
+const BASEMAP_CONTRASTS = ["soft", "standard", "high"] as const;
+const BASEMAP_POI = ["minimal", "standard"] as const;
+const BASEMAP_KEYS = ["mode", "density", "contrast", "poi"] as const;
 
 const ROUTE_FIXTURES: readonly MapRoutePresentation[] = ROUTE_TONES.flatMap(
   (tone) =>
@@ -97,6 +109,42 @@ function assertPositive(value: unknown, label: string): asserts value is number 
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     throw new Error(`Map visual profile ${label} must be finite and positive`);
   }
+}
+
+function assertEnumMember<const Member extends string>(
+  value: unknown,
+  allowed: readonly Member[],
+  label: string,
+): asserts value is Member {
+  if (typeof value !== "string" || !allowed.includes(value as Member)) {
+    throw new Error(
+      `Map visual profile ${label} must be one of ${allowed.join(", ")}`,
+    );
+  }
+}
+
+function assertBasemap(value: unknown): void {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Map visual profile basemap must be an object");
+  }
+  const basemap = value as Record<string, unknown>;
+  for (const key of Reflect.ownKeys(basemap)) {
+    if (
+      typeof key !== "string" ||
+      !BASEMAP_KEYS.includes(key as (typeof BASEMAP_KEYS)[number])
+    ) {
+      throw new Error(`Map visual profile basemap.${String(key)} is not allowed`);
+    }
+  }
+  for (const key of BASEMAP_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(basemap, key)) {
+      throw new Error(`Map visual profile basemap.${key} is required`);
+    }
+  }
+  assertEnumMember(basemap.mode, BASEMAP_MODES, "basemap.mode");
+  assertEnumMember(basemap.density, BASEMAP_DENSITIES, "basemap.density");
+  assertEnumMember(basemap.contrast, BASEMAP_CONTRASTS, "basemap.contrast");
+  assertEnumMember(basemap.poi, BASEMAP_POI, "basemap.poi");
 }
 
 function assertFallbackPaint(value: unknown, label: string): asserts value is string {
@@ -207,6 +255,7 @@ export function assertMapVisualProfile(profile: MapVisualProfile): void {
     throw new Error("Map visual profile must be an object");
   }
   assertNonBlank(profile.id, "id");
+  assertBasemap(profile.basemap);
 
   for (const [index, option] of CANDIDATE_FIXTURES.entries()) {
     assertNonBlank(

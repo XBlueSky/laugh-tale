@@ -54,6 +54,107 @@ function validProfile(overrides: Partial<MapVisualProfile> = {}): MapVisualProfi
 }
 
 describe("assertMapVisualProfile", () => {
+  it.each([
+    [
+      "missing",
+      () => {
+        const profile = { ...validProfile() } as Record<string, unknown>;
+        Reflect.deleteProperty(profile, "basemap");
+        return profile as unknown as MapVisualProfile;
+      },
+    ],
+    [
+      "null",
+      () => ({ ...validProfile(), basemap: null }) as unknown as MapVisualProfile,
+    ],
+    [
+      "primitive",
+      () => ({ ...validProfile(), basemap: "neutral" }) as unknown as MapVisualProfile,
+    ],
+    [
+      "array",
+      () => ({ ...validProfile(), basemap: [] }) as unknown as MapVisualProfile,
+    ],
+  ] as const)("rejects a %s basemap value", (_case, profile) => {
+    expect(() => assertMapVisualProfile(profile())).toThrow(/basemap.*object/i);
+  });
+
+  it.each([
+    ["mode", "satellite"],
+    ["density", "dense"],
+    ["contrast", "extreme"],
+    ["poi", "all"],
+  ] as const)("rejects unsupported basemap %s=%s", (field, value) => {
+    const profile = validProfile({
+      basemap: {
+        ...validProfile().basemap,
+        [field]: value,
+      } as MapVisualProfile["basemap"],
+    });
+
+    expect(() => assertMapVisualProfile(profile)).toThrow(
+      new RegExp(`basemap\\.${field}`, "i"),
+    );
+  });
+
+  it.each([
+    ["mode", "neutral"],
+    ["mode", "topographic"],
+    ["mode", "flat"],
+    ["mode", "technical"],
+    ["mode", "coastal"],
+    ["mode", "subdued"],
+    ["density", "low"],
+    ["density", "medium"],
+    ["density", "high"],
+    ["contrast", "soft"],
+    ["contrast", "standard"],
+    ["contrast", "high"],
+    ["poi", "minimal"],
+    ["poi", "standard"],
+  ] as const)("accepts supported basemap %s=%s", (field, value) => {
+    const profile = validProfile({
+      basemap: {
+        ...validProfile().basemap,
+        [field]: value,
+      },
+    });
+
+    expect(() => assertMapVisualProfile(profile)).not.toThrow();
+  });
+
+  it.each(["mode", "density", "contrast", "poi"] as const)(
+    "rejects a basemap missing its %s member",
+    (field) => {
+      const basemap = {
+        ...validProfile().basemap,
+      } as Record<string, unknown>;
+      Reflect.deleteProperty(basemap, field);
+      const profile = {
+        ...validProfile(),
+        basemap,
+      } as unknown as MapVisualProfile;
+
+      expect(() => assertMapVisualProfile(profile)).toThrow(
+        new RegExp(`basemap\\.${field}`, "i"),
+      );
+    },
+  );
+
+  it("rejects unexpected basemap members", () => {
+    const profile = {
+      ...validProfile(),
+      basemap: {
+        ...validProfile().basemap,
+        style: "unexpected",
+      },
+    } as MapVisualProfile;
+
+    expect(() => assertMapVisualProfile(profile)).toThrow(
+      /basemap\.style.*not allowed/i,
+    );
+  });
+
   it("accepts finite profile visuals for every route semantic combination", () => {
     const combinations = new Set<string>();
     const profile = validProfile({

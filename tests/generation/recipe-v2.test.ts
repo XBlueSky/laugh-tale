@@ -131,6 +131,53 @@ describe("recipe v2 manifest loading", () => {
     expect(Object.isFrozen(valid.manifest)).toBe(true);
   });
 
+  test("loads and freezes empty feature and screenshot arrays", async () => {
+    const root = temporaryRoot();
+    const recipeDir = makeRecipe(root, "empty-arrays", (manifest) => {
+      manifest.features = [];
+      manifest.validation.screenshots = [];
+    });
+
+    const loaded = await loadRecipeV2(recipeDir, "empty-arrays");
+
+    expect(loaded.manifest.features).toEqual([]);
+    expect(loaded.manifest.validation.screenshots).toEqual([]);
+    expect(Object.isFrozen(loaded.manifest.features)).toBe(true);
+    expect(Object.isFrozen(loaded.manifest.validation.screenshots)).toBe(true);
+    expect(() => loaded.manifest.features.push("media")).toThrow(TypeError);
+    expect(() => loaded.manifest.validation.screenshots.push("home")).toThrow(
+      TypeError,
+    );
+  });
+
+  test.each([
+    [
+      "duplicate features",
+      (manifest: Manifest) => { manifest.features = ["media", "media"]; },
+      /features.*duplicates/i,
+    ],
+    [
+      "unknown features",
+      (manifest: Manifest) => { manifest.features = ["media", "unknown-feature"]; },
+      /features\[1\].*one of/i,
+    ],
+    [
+      "duplicate screenshots",
+      (manifest: Manifest) => { manifest.validation.screenshots = ["home", "home"]; },
+      /validation\.screenshots.*duplicates/i,
+    ],
+    [
+      "unknown screenshots",
+      (manifest: Manifest) => { manifest.validation.screenshots = ["home", "unknown-screenshot"]; },
+      /validation\.screenshots\[1\].*one of/i,
+    ],
+  ] as const)("rejects %s in non-empty enum arrays", async (name, mutate, error) => {
+    const root = temporaryRoot();
+    const recipeDir = makeRecipe(root, `invalid-${name.replaceAll(" ", "-")}`, mutate);
+
+    await expect(loadRecipeV2(recipeDir, `invalid-${name.replaceAll(" ", "-")}`)).rejects.toThrow(error);
+  });
+
   test.each([
     ["unknown-schema", (manifest: Manifest) => { manifest.schemaVersion = 1; }, /schemaVersion.*2/],
     ["id-mismatch", (manifest: Manifest) => { manifest.id = "another-id"; }, /id.*directory/i],

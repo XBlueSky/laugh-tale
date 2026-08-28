@@ -36,8 +36,9 @@ function enumValue(value, allowed, field) {
   return value;
 }
 
-function uniqueEnumArray(value, allowed, field) {
-  if (!Array.isArray(value) || value.length === 0) fail(field, "must be a non-empty array");
+function uniqueEnumArray(value, allowed, field, { allowEmpty = false } = {}) {
+  if (!Array.isArray(value)) fail(field, "must be an array");
+  if (!allowEmpty && value.length === 0) fail(field, "must be a non-empty array");
   const values = value.map((entry, index) => enumValue(entry, allowed, `${field}[${index}]`));
   if (new Set(values).size !== values.length) fail(field, "must not contain duplicates");
   return freezeArray(values);
@@ -134,7 +135,7 @@ function buildManifest(value, expectedId) {
     reducedMotion: enumValue(value.motion.reducedMotion, ["instant"], "motion.reducedMotion"),
   };
 
-  const features = uniqueEnumArray(value.features, [...FEATURES], "features");
+  const features = uniqueEnumArray(value.features, [...FEATURES], "features", { allowEmpty: true });
 
   exactKeys(value.font, ["policy", "assets", "license"], "font");
   const policy = enumValue(value.font.policy, ["system", "local-open-license"], "font.policy");
@@ -154,7 +155,7 @@ function buildManifest(value, expectedId) {
   if (new Set(viewports).size !== viewports.length || !REQUIRED_VIEWPORTS.every((viewport) => viewports.includes(viewport))) {
     fail("validation.viewports", "must contain each required viewport exactly once");
   }
-  const screenshots = uniqueEnumArray(value.validation.screenshots, [...SCREENSHOTS], "validation.screenshots");
+  const screenshots = uniqueEnumArray(value.validation.screenshots, [...SCREENSHOTS], "validation.screenshots", { allowEmpty: true });
 
   return Object.freeze({
     schemaVersion: RECIPE_SCHEMA_VERSION,
