@@ -754,23 +754,45 @@ async function acquireArtifactLock(testOperations) {
   throw new Error(`timed out after ${timeoutMs}ms waiting for the staging artifact cleanup lock`);
 }
 
-async function withArtifactLock(testOperations, operation) {
+async function withArtifactLock(
+  testOperations,
+  operation,
+  { phase = "unspecified", releaseContext = {}, onReleaseError } = {},
+) {
   const release = await acquireArtifactLock(testOperations);
   let result;
   let operationError;
+  let releaseError;
   try {
     result = await operation();
   } catch (error) {
     operationError = error;
   }
   try {
+    await testOperations?.beforeArtifactLockRelease?.({ phase, ...releaseContext });
+  } catch (error) {
+    releaseError = error;
+  }
+  try {
     await release();
-  } catch (releaseError) {
+  } catch (error) {
+    releaseError =
+      releaseError === undefined
+        ? error
+        : new AggregateError(
+            [releaseError, error],
+            "artifact-lock release hook and retirement both failed",
+          );
+  }
+  if (releaseError !== undefined) {
     if (operationError !== undefined) {
       throw new AggregateError(
         [operationError, releaseError],
         "staging operation and artifact-lock release both failed",
       );
+    }
+    if (onReleaseError !== undefined) {
+      return onReleaseError(result, releaseError);
     }
     throw releaseError;
   }
@@ -1312,8 +1334,10 @@ async function reclaimOrphanedStagingArtifactsUnlocked(testOperations = {}) {
 }
 
 export async function reclaimOrphanedStagingArtifacts(testOperations = {}) {
-  return withArtifactLock(testOperations, () =>
-    reclaimOrphanedStagingArtifactsUnlocked(testOperations),
+  return withArtifactLock(
+    testOperations,
+    () => reclaimOrphanedStagingArtifactsUnlocked(testOperations),
+    { phase: "reclaim" },
   );
 }
 
@@ -1337,34 +1361,38 @@ export async function stageStarterConsumer(
 
   try {
     await reclaimOrphanedStagingArtifacts(testOperations);
-    await withArtifactLock(testOperations, async () => {
-      targetState = await validateStagingTarget(requestedTarget);
-      workMarker = {
-        kind: "laugh-tale-staging-work",
-        version: artifactMarkerVersion,
-        invocation,
-        token: randomUUID(),
-        path: normalizedRelative(workRoot),
-        target: normalizedRelative(targetState.target),
-        pid: process.pid,
-        createdAt: Date.now(),
-        prior: serializableTargetState(targetState),
-      };
-      packMarker = {
-        kind: "laugh-tale-staging-packs",
-        version: artifactMarkerVersion,
-        invocation,
-        token: randomUUID(),
-        path: normalizedRelative(packRoot),
-        target: normalizedRelative(targetState.target),
-        pid: process.pid,
-        createdAt: Date.now(),
-        files: [],
-      };
-      packReference = packReferenceFor(packMarker);
-      await createAuxiliaryDirectory(workRoot, workMarker);
-      workCreated = true;
-    });
+    await withArtifactLock(
+      testOperations,
+      async () => {
+        targetState = await validateStagingTarget(requestedTarget);
+        workMarker = {
+          kind: "laugh-tale-staging-work",
+          version: artifactMarkerVersion,
+          invocation,
+          token: randomUUID(),
+          path: normalizedRelative(workRoot),
+          target: normalizedRelative(targetState.target),
+          pid: process.pid,
+          createdAt: Date.now(),
+          prior: serializableTargetState(targetState),
+        };
+        packMarker = {
+          kind: "laugh-tale-staging-packs",
+          version: artifactMarkerVersion,
+          invocation,
+          token: randomUUID(),
+          path: normalizedRelative(packRoot),
+          target: normalizedRelative(targetState.target),
+          pid: process.pid,
+          createdAt: Date.now(),
+          files: [],
+        };
+        packReference = packReferenceFor(packMarker);
+        await createAuxiliaryDirectory(workRoot, workMarker);
+        workCreated = true;
+      },
+      { phase: "work-initialization", releaseContext: { workRoot } },
+    );
     await composeStarter({ stagedRoot: candidate, recipe, recipeCatalogRoot });
     candidateMarker = await writeConsumerMarker(
       candidate,
@@ -1397,90 +1425,112 @@ export async function stageStarterConsumer(
     if (install) {
       run("npm", ["install", "--no-audit", "--no-fund"], candidate, testOperations);
     }
-    return await withArtifactLock(testOperations, async () => {
-      const publication = await publishCandidate({
-        candidate,
-        targetState,
-        workRoot,
-        testOperations,
-        markPublished: () => {
-          published = true;
-        },
-      });
-      const cleanupPending = [...publication.cleanupPending];
-      const cleanupWarnings = [...publication.cleanupWarnings];
+    return await withArtifactLock(
+      testOperations,
+      async () => {
+        const publication = await publishCandidate({
+          candidate,
+          targetState,
+          workRoot,
+          testOperations,
+          markPublished: () => {
+            published = true;
+          },
+        });
+        const cleanupPending = [...publication.cleanupPending];
+        const cleanupWarnings = [...publication.cleanupWarnings];
 
-      if (publication.previousRemoved && targetState.marker?.pack !== undefined) {
-        try {
-          const previousPackRoot = packPathForReference(targetState.marker.pack);
-          await testOperations?.beforePreviousPackCleanup?.({ packRoot: previousPackRoot });
-          await removePriorPackForTargetState(targetState);
-        } catch (error) {
-          let pendingPath;
+        if (publication.previousRemoved && targetState.marker?.pack !== undefined) {
           try {
-            pendingPath = packPathForReference(targetState.marker.pack);
-          } catch {
-            pendingPath = undefined;
+            const previousPackRoot = packPathForReference(targetState.marker.pack);
+            await testOperations?.beforePreviousPackCleanup?.({ packRoot: previousPackRoot });
+            await removePriorPackForTargetState(targetState);
+          } catch (error) {
+            let pendingPath;
+            try {
+              pendingPath = packPathForReference(targetState.marker.pack);
+            } catch {
+              pendingPath = undefined;
+            }
+            if (pendingPath !== undefined) cleanupPending.push(pendingPath);
+            if (!cleanupPending.includes(workRoot)) cleanupPending.push(workRoot);
+            cleanupWarnings.push(
+              `published consumer; prior-pack cleanup remains pending: ${error instanceof Error ? error.message : String(error)}`,
+            );
           }
-          if (pendingPath !== undefined) cleanupPending.push(pendingPath);
-          if (!cleanupPending.includes(workRoot)) cleanupPending.push(workRoot);
-          cleanupWarnings.push(
-            `published consumer; prior-pack cleanup remains pending: ${error instanceof Error ? error.message : String(error)}`,
-          );
         }
-      }
 
-      if (!cleanupPending.includes(workRoot)) {
-        try {
-          await removeOwnedWorkTree(workRoot, workMarker, candidateMarker);
-          workCreated = false;
-        } catch (error) {
-          cleanupPending.push(workRoot);
-          cleanupWarnings.push(
-            `published consumer; staging-work cleanup remains pending: ${error instanceof Error ? error.message : String(error)}`,
-          );
+        if (!cleanupPending.includes(workRoot)) {
+          try {
+            await removeOwnedWorkTree(workRoot, workMarker, candidateMarker);
+            workCreated = false;
+          } catch (error) {
+            cleanupPending.push(workRoot);
+            cleanupWarnings.push(
+              `published consumer; staging-work cleanup remains pending: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
         }
-      }
 
-      if (cleanupPending.includes(workRoot)) {
-        workMarker.status = "cleanup-pending";
-        workMarker.releasedAt = Date.now();
-        try {
-          await updateAuxiliaryMarker(workRoot, workMarker);
-        } catch (error) {
-          cleanupWarnings.push(
-            `published consumer; could not record retryable work cleanup: ${error instanceof Error ? error.message : String(error)}`,
-          );
+        if (cleanupPending.includes(workRoot)) {
+          workMarker.status = "cleanup-pending";
+          workMarker.releasedAt = Date.now();
+          try {
+            await updateAuxiliaryMarker(workRoot, workMarker);
+          } catch (error) {
+            cleanupWarnings.push(
+              `published consumer; could not record retryable work cleanup: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
         }
-      }
 
-      return {
-        stagedRoot: targetState.target,
-        tarballs,
-        ...(cleanupPending.length === 0 ? {} : { cleanupPending }),
-        ...(cleanupWarnings.length === 0 ? {} : { cleanupWarnings }),
-      };
-    });
+        return {
+          stagedRoot: targetState.target,
+          tarballs,
+          ...(cleanupPending.length === 0 ? {} : { cleanupPending }),
+          ...(cleanupWarnings.length === 0 ? {} : { cleanupWarnings }),
+        };
+      },
+      {
+        phase: "publication",
+        releaseContext: { workRoot, target: targetState.target },
+        onReleaseError: (result, error) => {
+          if (!published) throw error;
+          return {
+            ...result,
+            cleanupPending: [...new Set([...(result.cleanupPending ?? []), artifactLockRoot])],
+            cleanupWarnings: [
+              ...(result.cleanupWarnings ?? []),
+              `published consumer; artifact-lock cleanup remains pending: ${error instanceof Error ? error.message : String(error)}`,
+            ],
+          };
+        },
+      },
+    );
   } catch (error) {
     const cleanupErrors = [];
     if (!published && (packCreated || workCreated)) {
       try {
-        await withArtifactLock(testOperations, async () => {
-          if (error?.stagingPreserveWork && workCreated) {
-            workMarker.status = "cleanup-pending";
-            workMarker.releasedAt = Date.now();
-            await updateAuxiliaryMarker(workRoot, workMarker);
-            return;
-          }
-          if (packCreated) {
-            const cleanupReference = await capturePackReference(packRoot);
-            await removeOwnedPackTree(packRoot, cleanupReference, packMarker.target);
-          }
-          if (workCreated) {
-            await removeOwnedWorkTree(workRoot, workMarker, candidateMarker);
-            workCreated = false;
-          }
-        });
+        await withArtifactLock(
+          testOperations,
+          async () => {
+            if (error?.stagingPreserveWork && workCreated) {
+              workMarker.status = "cleanup-pending";
+              workMarker.releasedAt = Date.now();
+              await updateAuxiliaryMarker(workRoot, workMarker);
+              return;
+            }
+            if (packCreated) {
+              const cleanupReference = await capturePackReference(packRoot);
+              await removeOwnedPackTree(packRoot, cleanupReference, packMarker.target);
+            }
+            if (workCreated) {
+              await removeOwnedWorkTree(workRoot, workMarker, candidateMarker);
+              workCreated = false;
+            }
+          },
+          { phase: "failure-cleanup", releaseContext: { workRoot } },
+        );
       } catch (cleanupError) {
         cleanupErrors.push(cleanupError);
       }

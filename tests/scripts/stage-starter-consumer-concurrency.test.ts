@@ -400,7 +400,9 @@ describe("stage-starter-consumer cross-process packaging", () => {
     );
     expect(diagnostic).toContain("STAGE_CHILD_GRANDCHILD_STDOUT");
     expect(diagnostic).toContain("STAGE_CHILD_GRANDCHILD_STDERR");
-    expect(diagnostic).toContain("STAGE_CHILD_GRANDCHILD_IGNORED_TERM");
+    if (process.platform !== "win32") {
+      expect(diagnostic).toContain("STAGE_CHILD_GRANDCHILD_IGNORED_TERM");
+    }
     const grandchildPid = Number(
       /STAGE_CHILD_GRANDCHILD_PID:(\d+)/.exec(diagnostic)?.[1],
     );

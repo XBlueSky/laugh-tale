@@ -76,6 +76,10 @@ const { stageStarterConsumer, validateStagingTarget, reclaimOrphanedStagingArtif
       artifactLockDeadOwnerGraceMs?: number;
       artifactLockPollMs?: number;
       artifactLockTimeoutMs?: number;
+      beforeArtifactLockRelease?: (context: {
+        phase: string;
+        workRoot?: string;
+      }) => void | Promise<void>;
       isProcessAlive?: (pid: number) => boolean;
       afterTargetRevalidated?: (context: { target: string }) => void;
       beforeCandidateRename?: (context: {
@@ -502,6 +506,7 @@ describe("stage-starter-consumer", () => {
   });
 
   test("refuses a non-empty unowned destination through the staging API", async () => {
+    mkdirSync(repositoryTmpRoot, { recursive: true });
     const outDir = ownedPath(join(repositoryTmpRoot, ".stage-target-api-unowned"));
     const sentinel = join(outDir, "sentinel.txt");
     mkdirSync(outDir);
@@ -825,6 +830,88 @@ describe("stage-starter-consumer", () => {
     expect(existsSync(packageLockRoot)).toBe(false);
   }, 120_000);
 
+  test("reports artifact-lock release cleanup as committed publication success", async () => {
+    const outDir = stagedRoot("staged-artifact-release-warning-test");
+    const initial = await stageStarterConsumer({ install: false, outDir });
+    rememberPackRoots(initial.tarballs);
+    ownedPath(artifactLockRoot);
+    const unknownLockEntry = join(artifactLockRoot, "unknown-release-sentinel.txt");
+
+    const refreshed = await stageStarterConsumer(
+      { install: false, outDir },
+      {
+        beforeCandidateRename: () => {
+          writeFileSync(unknownLockEntry, "unknown lock bytes stay intact\n");
+        },
+      },
+    );
+    rememberPackRoots(refreshed.tarballs);
+
+    expect(readConsumerMarker(outDir).invocation).toBe(readConsumerMarker(outDir).pack?.invocation);
+    expect(existsSync(join(outDir, "package.json"))).toBe(true);
+    expect(readFileSync(unknownLockEntry, "utf8")).toBe("unknown lock bytes stay intact\n");
+    expect(refreshed.cleanupPending).toContain(artifactLockRoot);
+    expect(refreshed.cleanupWarnings?.join("\n")).toMatch(
+      /published consumer.*artifact-lock cleanup remains pending/i,
+    );
+  }, 120_000);
+
+  test("reports changed artifact-lock ownership as committed publication success", async () => {
+    const outDir = stagedRoot("staged-artifact-owner-warning-test");
+    const initial = await stageStarterConsumer({ install: false, outDir });
+    rememberPackRoots(initial.tarballs);
+    ownedPath(artifactLockRoot);
+    let changedOwnerSource: string | undefined;
+
+    const refreshed = await stageStarterConsumer(
+      { install: false, outDir },
+      {
+        beforeCandidateRename: () => {
+          const owner = JSON.parse(readFileSync(artifactLockOwnerPath, "utf8")) as object;
+          changedOwnerSource = `${JSON.stringify({ ...owner, changedByTest: true })}\n`;
+          writeFileSync(artifactLockOwnerPath, changedOwnerSource);
+        },
+      },
+    );
+    rememberPackRoots(refreshed.tarballs);
+
+    expect(readConsumerMarker(outDir).invocation).toBe(readConsumerMarker(outDir).pack?.invocation);
+    expect(readFileSync(artifactLockOwnerPath, "utf8")).toBe(changedOwnerSource);
+    expect(refreshed.cleanupPending).toContain(artifactLockRoot);
+    expect(refreshed.cleanupWarnings?.join("\n")).toMatch(
+      /published consumer.*artifact-lock cleanup remains pending/i,
+    );
+  }, 120_000);
+
+  test("throws on artifact-lock release failure before publication", async () => {
+    const outDir = stagedRoot("staged-artifact-prepublication-failure-test");
+    let ownedWorkRoot: string | undefined;
+    const unknownLockEntry = join(artifactLockRoot, "prepublication-unknown.txt");
+    ownedPath(artifactLockRoot);
+
+    await expect(
+      stageStarterConsumer(
+        { install: false, outDir },
+        {
+          artifactLockPollMs: 5,
+          artifactLockTimeoutMs: 25,
+          beforeArtifactLockRelease: ({ phase, workRoot }) => {
+            if (phase !== "work-initialization") return;
+            if (workRoot === undefined) throw new Error("missing owned work root context");
+            ownedWorkRoot = ownedPath(workRoot);
+            writeFileSync(unknownLockEntry, "prepublication lock bytes stay intact\n");
+          },
+        },
+      ),
+    ).rejects.toThrow(/artifact|owned cleanup/i);
+
+    expect(existsSync(outDir)).toBe(false);
+    expect(ownedWorkRoot).toBeDefined();
+    expect(readFileSync(unknownLockEntry, "utf8")).toBe(
+      "prepublication lock bytes stay intact\n",
+    );
+  });
+
   test("keeps the candidate pack when rollback must preserve unresolved work", async () => {
     const outDir = stagedRoot("staged-preserved-rollback-pack-test");
     const initial = await stageStarterConsumer({ install: false, outDir });
@@ -1006,6 +1093,7 @@ describe("stage-starter-consumer", () => {
   });
 
   test("refuses to restore an interrupted consumer through a replaced symlink parent", async () => {
+    mkdirSync(repositoryTmpRoot, { recursive: true });
     const suffix = `${process.pid}-${Date.now()}`;
     const outsideRoot = ownedPath(mkdtempSync(join(tmpdir(), "laugh-tale-orphan-outside-")));
     const outsideSentinel = join(outsideRoot, "outside-sentinel.txt");
@@ -1039,6 +1127,7 @@ describe("stage-starter-consumer", () => {
   });
 
   test("recovers an interrupted prior consumer before considering its exact pack orphaned", async () => {
+    mkdirSync(repositoryTmpRoot, { recursive: true });
     const suffix = `${process.pid}-${Date.now()}`;
     const targetParent = ownedPath(join(repositoryTmpRoot, `.orphan-target-${suffix}`));
     const target = join(targetParent, "consumer");
@@ -1077,6 +1166,7 @@ describe("stage-starter-consumer", () => {
   });
 
   test("keeps an exact prior pack referenced by a still-active interrupted refresh", async () => {
+    mkdirSync(repositoryTmpRoot, { recursive: true });
     const suffix = `${process.pid}-${Date.now()}`;
     const targetParent = ownedPath(join(repositoryTmpRoot, `.active-target-${suffix}`));
     const target = join(targetParent, "consumer");
