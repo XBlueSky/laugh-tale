@@ -21,3 +21,7 @@ docs/specs/laugh-tale-eternal-pose-plugin-design.md
 /site/dist/
 /site/.astro/
 /site/src/data/
+
+# ChatGPT-generated art sources: masters of shipped assets + unused library.
+# Too heavy for git — keep local (see art/README.md).
+art/**/*.png
