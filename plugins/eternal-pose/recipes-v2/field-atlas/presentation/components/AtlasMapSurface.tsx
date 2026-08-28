@@ -22,6 +22,7 @@ export function AtlasMapSurface({ map, binding, retry }: AtlasMapSurfaceProps) {
         ref={containerRef(binding)}
         className="itinerary-map atlas-map-canvas"
         data-testid="itinerary-map"
+        data-contract-surface="map"
         data-map-canvas="persistent"
         data-provider-canvas="bounded"
         data-map-status={map.status}

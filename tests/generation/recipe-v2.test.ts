@@ -12,7 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, describe, expect, test } from "vitest";
 
@@ -42,8 +42,8 @@ type LoadedRecipe = {
 };
 type RecipeV2Module = {
   RECIPE_SCHEMA_VERSION: number;
-  loadRecipeV2(recipeDir: string, expectedId: string): Promise<LoadedRecipe>;
-  loadRecipeV2Catalog(catalogRoot: string): Promise<ReadonlyMap<string, LoadedRecipe>>;
+  loadRecipeV2: (recipeDir: string, expectedId: string) => Promise<LoadedRecipe>;
+  loadRecipeV2Catalog: (catalogRoot: string) => Promise<ReadonlyMap<string, LoadedRecipe>>;
 };
 type MutationEvent = { phase: string; path: string; stageDir: string; targetDir: string };
 type CreateTripProject = (

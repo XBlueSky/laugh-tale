@@ -72,12 +72,17 @@ export function AtlasReservationPanel({
   };
 
   return (
-    <section className="atlas-utility" data-surface="reservations">
+    <section
+      className="atlas-utility"
+      data-surface="reservations"
+      data-contract-surface="reservations"
+    >
       <button
         ref={triggerRef}
         type="button"
         className="atlas-utility__trigger"
         aria-label="Open reservation information"
+        data-contract-action="open-reservations"
         data-touch-target="44"
         onClick={open}
       >
@@ -89,6 +94,7 @@ export function AtlasReservationPanel({
       <dialog
         ref={dialogRef}
         className="atlas-dialog"
+        data-contract-dialog="reservations"
         aria-labelledby={`atlas-reservation-${id}`}
         onCancel={(event) => {
           event.preventDefault();
@@ -102,7 +108,13 @@ export function AtlasReservationPanel({
           <header>
             <span className="atlas-key">LEDGER</span>
             <h2 id={`atlas-reservation-${id}`}>Reservation information</h2>
-            <button type="button" aria-label="Close reservation information" data-touch-target="44" onClick={close}>×</button>
+            <button
+              type="button"
+              aria-label="Close reservation information"
+              data-contract-action="close-reservations"
+              data-touch-target="44"
+              onClick={close}
+            >×</button>
           </header>
           {reservations.length === 0 ? (
             <p>No reservation information.</p>
@@ -124,6 +136,7 @@ export function AtlasReservationPanel({
                       <button
                         type="button"
                         aria-label={`Show ${reservation.title} reservation code`}
+                        data-contract-action="reveal-reservation"
                         data-touch-target="44"
                         onClick={() => setRevealed((current) => new Set([...current, reservation.id]))}
                       >
@@ -196,12 +209,17 @@ export function AtlasTaskPanel({
   };
 
   return (
-    <section className="atlas-utility" data-surface="day-tasks">
+    <section
+      className="atlas-utility"
+      data-surface="day-tasks"
+      data-contract-surface="day-tasks"
+    >
       <button
         ref={triggerRef}
         type="button"
         className="atlas-utility__trigger"
         aria-label={`Open tasks for ${dayTitle}`}
+        data-contract-action="open-tasks"
         data-touch-target="44"
         onClick={open}
       >
@@ -213,6 +231,7 @@ export function AtlasTaskPanel({
       <dialog
         ref={dialogRef}
         className="atlas-dialog"
+        data-contract-dialog="tasks"
         aria-labelledby={`atlas-task-${id}`}
         onCancel={(event) => {
           event.preventDefault();
@@ -226,7 +245,13 @@ export function AtlasTaskPanel({
           <header>
             <span className="atlas-key">TASKS</span>
             <h2 id={`atlas-task-${id}`}>Tasks for {dayTitle}</h2>
-            <button type="button" aria-label="Close day tasks" data-touch-target="44" onClick={close}>×</button>
+            <button
+              type="button"
+              aria-label="Close day tasks"
+              data-contract-action="close-tasks"
+              data-touch-target="44"
+              onClick={close}
+            >×</button>
           </header>
           <ul>
             {tasks.map((task, taskIndex) => {
@@ -241,6 +266,8 @@ export function AtlasTaskPanel({
                     <label>
                       <input
                         type="checkbox"
+                        data-contract-owner="task"
+                        data-owner-id={taskKey}
                         checked={completedIds.has(taskKey)}
                         onChange={(event) =>
                           onCompletedChange(taskKey, event.currentTarget.checked)

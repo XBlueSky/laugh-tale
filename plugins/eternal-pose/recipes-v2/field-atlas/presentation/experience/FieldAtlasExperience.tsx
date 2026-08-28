@@ -85,6 +85,7 @@ export function FieldAtlasExperience({
       <main
         className="trip-experience field-atlas-experience"
         data-testid="trip-experience"
+        data-contract-surface="experience"
         data-geometry-source="shared"
         data-header-expanded={model.header.expanded ? "true" : "false"}
         data-motion={model.motion}
@@ -138,6 +139,8 @@ export function FieldAtlasExperience({
                 type="button"
                 aria-label={`Day ${index + 1}: ${dayLabel(day.title, day.date)}`}
                 aria-pressed={day.id === model.effectiveDay.day.id}
+                data-contract-owner="day"
+                data-owner-id={day.id}
                 data-current={day.id === model.effectiveDay.day.id ? "true" : "false"}
                 data-touch-target="44"
                 tabIndex={model.header.expanded ? 0 : -1}
@@ -152,7 +155,13 @@ export function FieldAtlasExperience({
           </header>
 
           <div className="map-controls atlas-map-controls" role="toolbar" aria-label="Map controls">
-          <button type="button" aria-label="Return to trip home" data-touch-target="44" onClick={actions.returnHome}>HOME</button>
+          <button
+            type="button"
+            aria-label="Return to trip home"
+            data-contract-action="return-home"
+            data-touch-target="44"
+            onClick={actions.returnHome}
+          >HOME</button>
           <AtlasReservationPanel reservations={model.trip.reservations} />
           <button
             type="button"
@@ -164,15 +173,27 @@ export function FieldAtlasExperience({
                   : "Use my location"
             }
             data-touch-target="44"
+            data-contract-action={model.location.status === "active" ? "location-recenter" : "location-start"}
             disabled={model.location.status === "requesting"}
             onClick={model.location.status === "active" ? actions.recenterLocation : actions.startLocation}
           >
             LOC
           </button>
           {model.location.status === "active" ? (
-            <button type="button" aria-label="Stop location sharing" data-touch-target="44" onClick={actions.stopLocation}>STOP</button>
+            <button
+              type="button"
+              aria-label="Stop location sharing"
+              data-contract-action="location-stop"
+              data-touch-target="44"
+              onClick={actions.stopLocation}
+            >STOP</button>
           ) : null}
-          <span className="atlas-map-controls__status" aria-live="polite">
+          <span
+            className="atlas-map-controls__status"
+            aria-live="polite"
+            data-contract-status="location"
+            data-state={model.location.status}
+          >
             {locationLabel(model.location.status)}
           </span>
           </div>
@@ -181,6 +202,7 @@ export function FieldAtlasExperience({
             {...sheetProps}
             className="itinerary-sheet atlas-detail-surface"
             aria-label="Itinerary"
+            data-contract-surface="itinerary-sheet"
             style={{
               ...sheetProps.style,
               bottom: "var(--safe-area-bottom)",

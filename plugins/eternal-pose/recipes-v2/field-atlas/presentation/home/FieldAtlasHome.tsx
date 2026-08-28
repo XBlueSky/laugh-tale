@@ -35,7 +35,12 @@ export function FieldAtlasHome({ model, actions }: HomeViewProps) {
           Progress is stored on this page only.
         </p>
       ) : null}
-      <main className="atlas-home" data-testid="trip-home" data-surface="trip-home">
+      <main
+        className="atlas-home"
+        data-testid="trip-home"
+        data-surface="trip-home"
+        data-contract-surface="home"
+      >
         <header className="atlas-home__mast">
           <div className="atlas-home__identity">
             <span className="atlas-key">FIELD ATLAS</span>
@@ -148,6 +153,7 @@ export function FieldAtlasHome({ model, actions }: HomeViewProps) {
               key={day.id}
               type="button"
               aria-label={`Enter Day ${index + 1} · ${day.title}`}
+              data-contract-action="enter-day"
               data-touch-target="44"
               onClick={() => actions.enterDay(day.id)}
             >

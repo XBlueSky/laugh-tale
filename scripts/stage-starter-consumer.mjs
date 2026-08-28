@@ -1,12 +1,22 @@
 import { spawnSync } from "node:child_process";
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { join, relative, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { createTripProject } from "../plugins/eternal-pose/scripts/create-trip-project.mjs";
+
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
+const pluginRoot = join(repoRoot, "plugins/eternal-pose");
 const starterRoot = join(repoRoot, "plugins/eternal-pose/starter/react");
+const defaultRecipeCatalogRoot = join(pluginRoot, "recipes-v2");
 const defaultStagedRoot = join(repoRoot, "tmp/staged-starter");
 const packRoot = join(repoRoot, "tmp/staged-packs");
+const REMOVE_TREE_OPTIONS = {
+  recursive: true,
+  force: true,
+  maxRetries: 5,
+  retryDelay: 100,
+};
 const EXCLUDED = new Set([
   "node_modules",
   "dist",
@@ -18,7 +28,18 @@ const EXCLUDED = new Set([
 ]);
 
 function run(command, commandArguments, cwd) {
-  const result = spawnSync(command, commandArguments, { cwd, encoding: "utf8", shell: false });
+  const executable =
+    command === "npm" && process.env.npm_execpath
+      ? { command: process.execPath, arguments: [process.env.npm_execpath, ...commandArguments] }
+      : {
+          command: command === "npm" && process.platform === "win32" ? "npm.cmd" : command,
+          arguments: commandArguments,
+        };
+  const result = spawnSync(executable.command, executable.arguments, {
+    cwd,
+    encoding: "utf8",
+    shell: false,
+  });
   if (result.status !== 0) {
     throw new Error(
       `${command} ${commandArguments.join(" ")} failed (${result.status}):\n${result.stdout}\n${result.stderr}`,
@@ -28,18 +49,28 @@ function run(command, commandArguments, cwd) {
 }
 
 async function packWorkspacePackages() {
-  await rm(packRoot, { recursive: true, force: true });
+  await rm(packRoot, REMOVE_TREE_OPTIONS);
   await mkdir(packRoot, { recursive: true });
   const tarballs = [];
-  for (const name of (await readdir(join(repoRoot, "packages"))).sort()) {
-    const packageDir = join(repoRoot, "packages", name);
+  const packageEntries = await readdir(join(repoRoot, "packages"), { withFileTypes: true });
+  const packageDirectories = packageEntries
+    .filter((candidate) => candidate.isDirectory())
+    .sort((left, right) => left.name.localeCompare(right.name));
+  for (const entry of packageDirectories) {
+    const packageDir = join(repoRoot, "packages", entry.name);
+    try {
+      JSON.parse(await readFile(join(packageDir, "package.json"), "utf8"));
+    } catch (error) {
+      if (error?.code === "ENOENT") continue;
+      throw error;
+    }
     run("npm", ["run", "build"], packageDir);
     const output = JSON.parse(
       run("npm", ["pack", "--json", "--pack-destination", packRoot], packageDir),
     );
     const filename = output[0]?.filename;
     if (typeof filename !== "string") {
-      throw new Error(`npm pack reported no filename for packages/${name}`);
+      throw new Error(`npm pack reported no filename for packages/${entry.name}`);
     }
     tarballs.push(join(packRoot, filename));
   }
@@ -52,10 +83,20 @@ function packageNameForTarball(tarball) {
   return `@laugh-tale-island/${bareName}`;
 }
 
-export async function stageStarterConsumer({ install = true, outDir } = {}) {
-  const stagedRoot = outDir === undefined ? defaultStagedRoot : resolve(outDir);
-  const tarballs = await packWorkspacePackages();
-  await rm(stagedRoot, { recursive: true, force: true });
+async function composeStarter({ stagedRoot, recipe, recipeCatalogRoot }) {
+  await rm(stagedRoot, REMOVE_TREE_OPTIONS);
+  await mkdir(dirname(stagedRoot), { recursive: true });
+  if (recipe !== undefined) {
+    await createTripProject({
+      pluginRoot,
+      targetDir: stagedRoot,
+      recipe,
+      starterDir: starterRoot,
+      recipeCatalogRoot: recipeCatalogRoot ?? defaultRecipeCatalogRoot,
+    });
+    return;
+  }
+
   await mkdir(stagedRoot, { recursive: true });
   await cp(starterRoot, stagedRoot, {
     recursive: true,
@@ -65,6 +106,17 @@ export async function stageStarterConsumer({ install = true, outDir } = {}) {
       return !relativePath.split(sep).some((part) => EXCLUDED.has(part));
     },
   });
+}
+
+export async function stageStarterConsumer({
+  install = true,
+  outDir,
+  recipe,
+  recipeCatalogRoot,
+} = {}) {
+  const stagedRoot = outDir === undefined ? defaultStagedRoot : resolve(outDir);
+  await composeStarter({ stagedRoot, recipe, recipeCatalogRoot });
+  const tarballs = await packWorkspacePackages();
 
   const manifestPath = join(stagedRoot, "package.json");
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));

@@ -56,8 +56,10 @@ export function AtlasCandidateDecision({
   return (
     <section
       className="atlas-decision candidate-decision"
+      data-contract-surface="candidate"
       data-candidate-mode={model.group.mode}
       data-expanded={model.open ? "true" : "false"}
+      data-committed-owner-id={model.committedOptionId}
       aria-label="Candidate decision"
     >
       <header className="atlas-decision__header">
@@ -71,6 +73,7 @@ export function AtlasCandidateDecision({
         <button
           type="button"
           aria-label={triggerLabel}
+          data-contract-action="candidate-toggle"
           data-touch-target="44"
           {...binding.getTriggerProps()}
         >
@@ -91,6 +94,8 @@ export function AtlasCandidateDecision({
                   name={radioName}
                   value={option.id}
                   aria-label={label}
+                  data-contract-owner="candidate-option"
+                  data-owner-id={option.id}
                   checked={model.draftOptionId === option.id}
                   onChange={() => actions.previewCandidate(option.id)}
                 />
@@ -104,6 +109,7 @@ export function AtlasCandidateDecision({
             <button
               type="button"
               data-touch-target="44"
+              data-contract-action="candidate-cancel"
               aria-label="Cancel candidate comparison"
               onClick={actions.closeCandidate}
             >
@@ -112,6 +118,7 @@ export function AtlasCandidateDecision({
             <button
               type="button"
               data-touch-target="44"
+              data-contract-action="candidate-commit"
               disabled={model.draftOptionId === undefined}
               aria-label={
                 model.draftOptionId === undefined
@@ -142,6 +149,8 @@ export function AtlasCandidateDecision({
                   <button
                     ref={binding.registerOption(option.id)}
                     type="button"
+                    data-contract-owner="candidate-option"
+                    data-owner-id={option.id}
                     data-touch-target="44"
                     aria-label={`Locate ${label}`}
                     onClick={() => actions.previewCandidate(option.id)}

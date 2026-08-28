@@ -279,6 +279,8 @@ function AtlasStop({
         aria-describedby={descriptionId}
         aria-pressed={selected}
         aria-current={current ? "step" : undefined}
+        data-contract-owner="node"
+        data-owner-id={effective.sourceNodeId}
         data-kind={effective.node.kind}
         data-completed={effective.completed ? "true" : "false"}
         data-selection-source={selected ? selectionSource : undefined}
@@ -403,6 +405,8 @@ function AtlasRouteBand({
           className="route-band"
           role="status"
           aria-label="Loading route"
+          data-contract-owner="route"
+          data-owner-id={route.edge.id}
           data-route-owner={route.edge.id}
           data-state="loading"
           data-display={route.display}
@@ -412,6 +416,7 @@ function AtlasRouteBand({
           <button
             type="button"
             aria-label="Retry route"
+            data-contract-action="retry-route"
             data-touch-target="44"
             onClick={() => onRetry(route.edge.id)}
           >
@@ -424,6 +429,8 @@ function AtlasRouteBand({
           className="route-band"
           role="status"
           aria-label="Route unavailable"
+          data-contract-owner="route"
+          data-owner-id={route.edge.id}
           data-route-owner={route.edge.id}
           data-state="error"
           data-display={route.display}
@@ -438,6 +445,7 @@ function AtlasRouteBand({
           <button
             type="button"
             aria-label="Retry route"
+            data-contract-action="retry-route"
             data-touch-target="44"
             onClick={() => onRetry(route.edge.id)}
           >
@@ -452,10 +460,13 @@ function AtlasRouteBand({
           aria-label={expanded && canDisclose ? "Hide transit route details" : summary}
           aria-pressed={model?.selected ?? false}
           {...(canDisclose ? { "aria-controls": detailsId, "aria-expanded": expanded } : {})}
+          data-contract-owner="route"
+          data-owner-id={route.edge.id}
           data-route-id={route.edge.id}
           data-route-owner={route.edge.id}
           data-selected={model?.selected ? "true" : "false"}
           data-selection-source={model?.selectionSource ?? undefined}
+          data-state="ready"
           data-display={route.display}
           data-touch-target="44"
           onClick={() => {
@@ -467,7 +478,15 @@ function AtlasRouteBand({
           <span>{expanded && canDisclose ? "Transit details" : summary}</span>
         </button>
       ) : (
-        <div ref={controlRef} className="route-band" data-route-owner={route.edge.id} data-display={route.display}>
+        <div
+          ref={controlRef}
+          className="route-band"
+          data-contract-owner="route"
+          data-owner-id={route.edge.id}
+          data-route-owner={route.edge.id}
+          data-state="static"
+          data-display={route.display}
+        >
           <span className="atlas-key">{route.edge.mode.slice(0, 3).toUpperCase()}</span>
           <span>{summary}</span>
         </div>
