@@ -29,6 +29,7 @@ const test = base.extend<{ externalRequests: string[] }>({
 });
 
 test.beforeEach(async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await installContractGeolocation(page);
 });
 

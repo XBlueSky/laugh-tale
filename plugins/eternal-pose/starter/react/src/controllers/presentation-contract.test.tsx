@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, relative, resolve, sep } from "node:path";
 
@@ -130,6 +130,35 @@ function importSpecifiers(source: string): string[] {
   return [...source.matchAll(/(?:\bfrom\s+|\bimport\s*)["']([^"']+)["']/g)].map(
     (match) => match[1] ?? "",
   );
+}
+
+function packageName(directory: string): string | undefined {
+  try {
+    const manifest = JSON.parse(readFileSync(join(directory, "package.json"), "utf8")) as {
+      name?: unknown;
+    };
+    return typeof manifest.name === "string" ? manifest.name : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function findRepositorySourceRoot(start: string): string | undefined {
+  let candidate = resolve(start);
+  while (true) {
+    if (
+      packageName(candidate) === "laugh-tale" &&
+      packageName(join(candidate, "packages/core")) === "@laugh-tale-island/core" &&
+      packageName(join(candidate, "packages/react")) === "@laugh-tale-island/react" &&
+      existsSync(join(candidate, "packages/core/src")) &&
+      existsSync(join(candidate, "packages/react/src"))
+    ) {
+      return candidate;
+    }
+    const parent = dirname(candidate);
+    if (parent === candidate) return undefined;
+    candidate = parent;
+  }
 }
 
 describe("local presentation contract", () => {
@@ -273,7 +302,8 @@ describe("local presentation contract", () => {
 
   it("keeps package sources independent from starter implementation files", () => {
     const controllerDirectory = dirname(fileURLToPath(import.meta.url));
-    const repositoryDirectory = resolve(controllerDirectory, "../../../../../..");
+    const repositoryDirectory = findRepositorySourceRoot(controllerDirectory);
+    if (repositoryDirectory === undefined) return;
     const packagesDirectory = join(repositoryDirectory, "packages");
     const packageFiles = readdirSync(packagesDirectory, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())

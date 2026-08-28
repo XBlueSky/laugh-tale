@@ -131,12 +131,19 @@ export function AtlasReservationPanel({
                       <span>Arrive {reservation.booking.arrivalBufferMinutes} min early</span>
                     )}
                     {reservation.booking.reference === undefined ? null : isRevealed ? (
-                      <code>{reservation.booking.reference}</code>
+                      <code
+                        data-contract-owner="reservation-reference"
+                        data-owner-id={reservation.id}
+                        data-state="revealed"
+                      >
+                        {reservation.booking.reference}
+                      </code>
                     ) : (
                       <button
                         type="button"
                         aria-label={`Show ${reservation.title} reservation code`}
                         data-contract-action="reveal-reservation"
+                        data-owner-id={reservation.id}
                         data-touch-target="44"
                         onClick={() => setRevealed((current) => new Set([...current, reservation.id]))}
                       >

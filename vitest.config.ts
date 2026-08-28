@@ -6,6 +6,7 @@ import { defineConfig } from "vitest/config";
 const PACKAGE_BUILDING_TESTS = [
   "tests/packages/artifacts.test.ts",
   "tests/packages/clean-consumer.test.ts",
+  "tests/scripts/stage-starter-consumer-concurrency.test.ts",
   "tests/scripts/stage-starter-consumer.test.ts",
 ];
 

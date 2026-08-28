@@ -77,6 +77,10 @@ export async function installContractGeolocation(page: Page): Promise<void> {
 }
 
 async function openFirstDay(page: Page): Promise<void> {
+  const reducedMotion = await page.evaluate(
+    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
+  expect(reducedMotion).toBe(true);
   await page.goto("/");
   const home = page.locator(surface("home"));
   await expect(home).toBeVisible();
@@ -207,8 +211,14 @@ async function exerciseReservationDialog(page: Page): Promise<void> {
   await surfaceOwner.locator(action("open-reservations")).click();
   const dialog = page.locator('[data-contract-dialog="reservations"]');
   await expect(dialog).toBeVisible();
-  await dialog.locator(action("reveal-reservation")).first().click();
-  await expect(dialog.locator("code").first()).toBeVisible();
+  const reveal = dialog.locator(action("reveal-reservation")).first();
+  const reservationId = await reveal.getAttribute("data-owner-id");
+  expect(reservationId).not.toBeNull();
+  await reveal.click();
+  const references = dialog.locator(owner("reservation-reference"));
+  const reference = await locatorWithOwnerId(references, reservationId!);
+  await expect(reference).toHaveAttribute("data-state", "revealed");
+  await expect(reference).toBeVisible();
   await dialog.locator(action("close-reservations")).click();
   await expect(dialog).not.toBeVisible();
 }
@@ -228,10 +238,13 @@ async function exerciseTaskDialog(page: Page): Promise<void> {
 }
 
 async function exerciseSheetSnaps(page: Page): Promise<void> {
+  const sheetSnapStressCycles = 5;
   const sheet = page.locator(surface("itinerary-sheet"));
-  for (const snap of ["collapsed", "half", "expanded"] as const) {
-    await page.locator(`[data-snap-target="${snap}"]`).click();
-    await expect(sheet).toHaveAttribute("data-snap", snap);
+  for (let cycle = 0; cycle < sheetSnapStressCycles; cycle += 1) {
+    for (const snap of ["collapsed", "half", "expanded"] as const) {
+      await page.locator(`[data-snap-target="${snap}"]`).click();
+      await expect(sheet).toHaveAttribute("data-snap", snap);
+    }
   }
 }
 
