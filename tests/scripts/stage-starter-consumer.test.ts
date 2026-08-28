@@ -5,13 +5,14 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   symlinkSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, sep } from "node:path";
+import { basename, dirname, join, relative, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, describe, expect, test } from "vitest";
 
@@ -38,25 +39,54 @@ interface CommandObservation {
   cwd: string;
 }
 
-const { stageStarterConsumer, validateStagingTarget } = (await import(
+interface PackReference {
+  directoryIdentity: { dev: string; ino: string };
+  invocation: string;
+  markerIdentity: { dev: string; ino: string };
+  markerSource: string;
+  path: string;
+  token: string;
+}
+
+interface StageResult {
+  stagedRoot: string;
+  tarballs: string[];
+  cleanupPending?: string[];
+  cleanupWarnings?: string[];
+}
+
+const { stageStarterConsumer, validateStagingTarget, reclaimOrphanedStagingArtifacts } = (await import(
   pathToFileURL(script).href
 )) as {
-  stageStarterConsumer: (options?: {
-    install?: boolean;
-    outDir?: string;
-    recipe?: string;
-    recipeCatalogRoot?: string;
-  }, testOperations?: {
-    onCommand?: (observation: CommandObservation) => void;
-    lockTimeoutMs?: number;
-    lockPollMs?: number;
-    lockDeadOwnerGraceMs?: number;
-    isProcessAlive?: (pid: number) => boolean;
-  }) => Promise<{ stagedRoot: string; tarballs: string[] }>;
+  stageStarterConsumer: (
+    options?: {
+      install?: boolean;
+      outDir?: string;
+      recipe?: string;
+      recipeCatalogRoot?: string;
+    },
+    testOperations?: {
+      onCommand?: (observation: CommandObservation) => void;
+      lockTimeoutMs?: number;
+      lockPollMs?: number;
+      lockDeadOwnerGraceMs?: number;
+      artifactGraceMs?: number;
+      isProcessAlive?: (pid: number) => boolean;
+      afterTargetRevalidated?: (context: { target: string }) => void;
+      beforeCandidateRename?: (context: { candidate: string; previous?: string }) => void;
+      beforePreviousPackCleanup?: (context: { packRoot: string }) => void;
+      beforePreviousCleanup?: (context: { previous: string }) => void;
+    },
+  ) => Promise<StageResult>;
   validateStagingTarget: (outDir: string) => Promise<unknown>;
+  reclaimOrphanedStagingArtifacts: (testOperations?: {
+    artifactGraceMs?: number;
+    isProcessAlive?: (pid: number) => boolean;
+  }) => Promise<{ removed: string[]; preserved: string[] }>;
 };
 const stagedRoots: string[] = [];
 const ownedCleanupPaths: string[] = [];
+const ownedPackRoots: string[] = [];
 
 function stagedRoot(name: string): string {
   const root = join(repoRoot, `tmp/${name}`);
@@ -80,6 +110,7 @@ function expectWorkspaceTarballs(staged: string, tarballs: readonly string[]): v
 
   expect(tarballs).toHaveLength(2);
   expect(new Set(tarballs).size).toBe(tarballs.length);
+  rememberPackRoots(tarballs);
   for (const tarball of tarballs) expect(existsSync(tarball)).toBe(true);
   expect(manifest.dependencies["@laugh-tale-island/core"]).toMatch(
     new RegExp(`^file:.*laugh-tale-island-core-${escapedVersion}\\.tgz$`),
@@ -87,6 +118,24 @@ function expectWorkspaceTarballs(staged: string, tarballs: readonly string[]): v
   expect(manifest.dependencies["@laugh-tale-island/react"]).toMatch(
     /^file:.*laugh-tale-island-react-\d+\.\d+\.\d+.*\.tgz$/,
   );
+}
+
+function rememberPackRoots(tarballs: readonly string[]): void {
+  for (const root of new Set(tarballs.map((tarball) => dirname(tarball)))) {
+    if (!ownedPackRoots.includes(root)) ownedPackRoots.push(root);
+  }
+}
+
+function readConsumerMarker(staged: string): {
+  invocation: string;
+  pack?: PackReference;
+  target: string;
+} {
+  return JSON.parse(readFileSync(join(staged, ownershipMarkerName), "utf8")) as {
+    invocation: string;
+    pack?: PackReference;
+    target: string;
+  };
 }
 
 function expectOwnedConsumer(staged: string): void {
@@ -139,6 +188,9 @@ function ownedPath(path: string): string {
 
 afterEach(() => {
   for (const root of stagedRoots.splice(0)) rmSync(root, { recursive: true, force: true });
+  for (const root of ownedPackRoots.splice(0).reverse()) {
+    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
   for (const path of ownedCleanupPaths.splice(0).reverse()) {
     if (!existsSync(path) && !lstatMaybe(path)) continue;
     const stat = lstatSync(path);
@@ -238,6 +290,7 @@ describe("stage-starter-consumer", () => {
   test("rejects composition before mutating package-build output", async () => {
     const outDir = stagedRoot("staged-unknown-recipe-test");
     const sentinel = ownedPath(join(packRoot, "composition-must-precede-packing.txt"));
+    mkdirSync(packRoot, { recursive: true });
     writeFileSync(sentinel, "keep\n");
 
     const { commands, testOperations } = observeCommands();
@@ -331,7 +384,8 @@ describe("stage-starter-consumer", () => {
 
   test("keeps a prior owned consumer intact on partial failure and refreshes it on retry", async () => {
     const outDir = stagedRoot("staged-refresh-retry-test");
-    await stageStarterConsumer({ install: false, outDir });
+    const initial = await stageStarterConsumer({ install: false, outDir });
+    rememberPackRoots(initial.tarballs);
     const priorManifest = readFileSync(join(outDir, "package.json"));
     const priorMarker = readFileSync(join(outDir, ownershipMarkerName));
     const priorSentinel = join(outDir, "prior-output-sentinel.txt");
@@ -355,7 +409,8 @@ describe("stage-starter-consumer", () => {
     expect(readFileSync(priorSentinel, "utf8")).toBe("old output remains until publication\n");
     expect(existsSync(packageLockRoot)).toBe(false);
 
-    await stageStarterConsumer({ install: false, outDir });
+    const retried = await stageStarterConsumer({ install: false, outDir });
+    rememberPackRoots(retried.tarballs);
     expectOwnedConsumer(outDir);
     expect(existsSync(priorSentinel)).toBe(false);
   }, 120_000);
@@ -365,6 +420,8 @@ describe("stage-starter-consumer", () => {
     const secondOutDir = stagedRoot("staged-pack-lifetime-b");
     const first = await stageStarterConsumer({ install: false, outDir: firstOutDir });
     const second = await stageStarterConsumer({ install: false, outDir: secondOutDir });
+    rememberPackRoots(first.tarballs);
+    rememberPackRoots(second.tarballs);
 
     expect(dirname(first.tarballs[0])).not.toBe(dirname(second.tarballs[0]));
     for (const tarball of [...first.tarballs, ...second.tarballs]) {
@@ -445,9 +502,241 @@ describe("stage-starter-consumer", () => {
         isProcessAlive: () => false,
       },
     );
+    rememberPackRoots(result.tarballs);
 
     expectOwnedConsumer(result.stagedRoot);
     expectExactlyOneWorkspaceBuildAndPack(commands);
     expect(existsSync(packageLockRoot)).toBe(false);
   }, 120_000);
+
+  test("rolls back when the authorized target identity is swapped after revalidation", async () => {
+    const outDir = stagedRoot("staged-identity-swap-test");
+    const initial = await stageStarterConsumer({ install: false, outDir });
+    rememberPackRoots(initial.tarballs);
+    const originalSentinel = join(outDir, "original-sentinel.txt");
+    writeFileSync(originalSentinel, "authorized bytes stay intact\n");
+    const authorizedBackup = ownedPath(
+      join(repositoryTmpRoot, `.stage-identity-authorized-${process.pid}-${Date.now()}`),
+    );
+    const replacementSentinel = join(outDir, "replacement-sentinel.txt");
+
+    await expect(
+      stageStarterConsumer(
+        { install: false, outDir },
+        {
+          afterTargetRevalidated: () => {
+            renameSync(outDir, authorizedBackup);
+            mkdirSync(outDir);
+            writeFileSync(replacementSentinel, "replacement bytes stay intact\n");
+          },
+        },
+      ),
+    ).rejects.toThrow(/identity.*changed|changed.*identity/i);
+
+    expect(readFileSync(replacementSentinel, "utf8")).toBe("replacement bytes stay intact\n");
+    expect(readFileSync(join(authorizedBackup, "original-sentinel.txt"), "utf8")).toBe(
+      "authorized bytes stay intact\n",
+    );
+    expect(existsSync(join(outDir, "package.json"))).toBe(false);
+    expect(existsSync(packageLockRoot)).toBe(false);
+  }, 120_000);
+
+  test("restores the exact prior consumer when candidate publication rename fails", async () => {
+    const outDir = stagedRoot("staged-candidate-rename-failure-test");
+    const initial = await stageStarterConsumer({ install: false, outDir });
+    rememberPackRoots(initial.tarballs);
+    const priorMarker = readFileSync(join(outDir, ownershipMarkerName));
+    const priorSentinel = join(outDir, "prior-candidate-failure-sentinel.txt");
+    writeFileSync(priorSentinel, "restore this exact consumer\n");
+    const candidateBackup = ownedPath(
+      join(repositoryTmpRoot, `.stage-candidate-backup-${process.pid}-${Date.now()}`),
+    );
+
+    await expect(
+      stageStarterConsumer(
+        { install: false, outDir },
+        {
+          beforeCandidateRename: ({ candidate }) => {
+            renameSync(candidate, candidateBackup);
+          },
+        },
+      ),
+    ).rejects.toThrow();
+
+    expect(readFileSync(join(outDir, ownershipMarkerName))).toEqual(priorMarker);
+    expect(readFileSync(priorSentinel, "utf8")).toBe("restore this exact consumer\n");
+    expect(existsSync(packageLockRoot)).toBe(false);
+  }, 120_000);
+
+  test("reports post-publication cleanup as recoverable success without deleting unknown data", async () => {
+    const outDir = stagedRoot("staged-post-publication-cleanup-test");
+    const initial = await stageStarterConsumer({ install: false, outDir });
+    rememberPackRoots(initial.tarballs);
+    const priorSentinel = join(outDir, "prior-cleanup-sentinel.txt");
+    writeFileSync(priorSentinel, "do not delete on cleanup mismatch\n");
+
+    const refreshed = await stageStarterConsumer(
+      { install: false, outDir },
+      {
+        beforePreviousCleanup: ({ previous }) => {
+          const markerPath = join(previous, ownershipMarkerName);
+          writeFileSync(markerPath, `${readFileSync(markerPath, "utf8")} `);
+        },
+      },
+    );
+    rememberPackRoots(refreshed.tarballs);
+
+    expect(readConsumerMarker(outDir).invocation).toBe(readConsumerMarker(outDir).pack?.invocation);
+    expect(refreshed.cleanupWarnings?.join("\n")).toMatch(/cleanup|ownership|identity/i);
+    expect(refreshed.cleanupPending).toHaveLength(1);
+    const [recoveryRoot] = refreshed.cleanupPending!;
+    ownedPath(recoveryRoot);
+    expect(readFileSync(join(recoveryRoot, "previous/prior-cleanup-sentinel.txt"), "utf8")).toBe(
+      "do not delete on cleanup mismatch\n",
+    );
+    expect(existsSync(join(outDir, "package.json"))).toBe(true);
+    expect(existsSync(packageLockRoot)).toBe(false);
+  }, 120_000);
+
+  test("records pack ownership and reclaims only the previous consumer's exact pack on refresh", async () => {
+    const outDir = stagedRoot("staged-pack-refresh-test");
+    const first = await stageStarterConsumer({ install: false, outDir });
+    rememberPackRoots(first.tarballs);
+    const firstPackRoot = dirname(first.tarballs[0]);
+    const firstMarker = readConsumerMarker(outDir);
+
+    expect(firstMarker.pack).toMatchObject({
+      invocation: firstMarker.invocation,
+      path: relative(repositoryTmpRoot, firstPackRoot).split(sep).join("/"),
+    });
+    expect(firstMarker.pack?.token).toMatch(/^[0-9a-f-]+$/i);
+    expect(typeof firstMarker.pack?.directoryIdentity.dev).toBe("string");
+    expect(typeof firstMarker.pack?.directoryIdentity.ino).toBe("string");
+    expect(typeof firstMarker.pack?.markerIdentity.dev).toBe("string");
+    expect(typeof firstMarker.pack?.markerIdentity.ino).toBe("string");
+    expect(firstMarker.pack?.markerSource).toContain(firstMarker.pack!.token);
+
+    const second = await stageStarterConsumer({ install: false, outDir });
+    rememberPackRoots(second.tarballs);
+    const secondPackRoot = dirname(second.tarballs[0]);
+
+    expect(secondPackRoot).not.toBe(firstPackRoot);
+    expect(existsSync(firstPackRoot)).toBe(false);
+    expect(existsSync(secondPackRoot)).toBe(true);
+    expect(readConsumerMarker(outDir).pack?.path).toBe(
+      relative(repositoryTmpRoot, secondPackRoot).split(sep).join("/"),
+    );
+  }, 120_000);
+
+  test("preserves a replaced prior pack root whose copied marker no longer has the authorized identity", async () => {
+    const outDir = stagedRoot("staged-pack-identity-swap-test");
+    const first = await stageStarterConsumer({ install: false, outDir });
+    rememberPackRoots(first.tarballs);
+    const firstPackRoot = dirname(first.tarballs[0]);
+    const ownerSource = readFileSync(join(firstPackRoot, ".laugh-tale-staging-owner.json"), "utf8");
+    const originalPackBackup = ownedPath(
+      join(repositoryTmpRoot, `.stage-pack-identity-authorized-${process.pid}-${Date.now()}`),
+    );
+    const replacementSentinel = join(firstPackRoot, "replacement-pack-sentinel.txt");
+
+    const second = await stageStarterConsumer(
+      { install: false, outDir },
+      {
+        beforePreviousPackCleanup: ({ packRoot: previousPackRoot }) => {
+          expect(previousPackRoot).toBe(firstPackRoot);
+          renameSync(previousPackRoot, originalPackBackup);
+          mkdirSync(previousPackRoot);
+          writeFileSync(join(previousPackRoot, ".laugh-tale-staging-owner.json"), ownerSource);
+          writeFileSync(replacementSentinel, "replacement pack stays byte-for-byte\n");
+        },
+      },
+    );
+    rememberPackRoots(second.tarballs);
+
+    expect(readFileSync(replacementSentinel, "utf8")).toBe(
+      "replacement pack stays byte-for-byte\n",
+    );
+    expect(existsSync(join(originalPackBackup, basename(first.tarballs[0])))).toBe(true);
+    expect(second.cleanupWarnings?.join("\n")).toMatch(/prior-pack cleanup remains pending/i);
+    expect(second.cleanupPending).toContain(firstPackRoot);
+    expect(existsSync(join(outDir, "package.json"))).toBe(true);
+  }, 120_000);
+
+  test("reclaims only dead, expired, exactly-owned orphan artifacts and preserves unknown entries", async () => {
+    mkdirSync(packRoot, { recursive: true });
+    const suffix = `${process.pid}-${Date.now()}`;
+    const orphanPack = ownedPath(join(packRoot, `orphan-${suffix}`));
+    const guardedPack = ownedPath(join(packRoot, `guarded-${suffix}`));
+    const orphanWork = ownedPath(join(repositoryTmpRoot, `.stage-starter-work-orphan-${suffix}`));
+    const unknownWork = ownedPath(join(repositoryTmpRoot, `.stage-starter-work-unknown-${suffix}`));
+    const unknownPackEntry = join(guardedPack, "unknown-sentinel.txt");
+    const unknownWorkEntry = join(unknownWork, "unknown-sentinel.txt");
+    const oldCreatedAt = Date.now() - 60_000;
+
+    for (const [path, marker] of [
+      [
+        orphanPack,
+        {
+          kind: "laugh-tale-staging-packs",
+          version: 2,
+          invocation: `orphan-${suffix}`,
+          token: `pack-token-${suffix}`,
+          path: relative(repositoryTmpRoot, orphanPack).split(sep).join("/"),
+          target: `orphan-target-${suffix}/consumer`,
+          pid: 424_242,
+          createdAt: oldCreatedAt,
+          files: ["artifact.tgz"],
+        },
+      ],
+      [
+        guardedPack,
+        {
+          kind: "laugh-tale-staging-packs",
+          version: 2,
+          invocation: `guarded-${suffix}`,
+          token: `guarded-token-${suffix}`,
+          path: relative(repositoryTmpRoot, guardedPack).split(sep).join("/"),
+          target: `guarded-target-${suffix}/consumer`,
+          pid: 424_242,
+          createdAt: oldCreatedAt,
+          files: ["artifact.tgz"],
+        },
+      ],
+    ] as const) {
+      mkdirSync(path);
+      writeFileSync(join(path, ".laugh-tale-staging-owner.json"), `${JSON.stringify(marker)}\n`);
+      writeFileSync(join(path, "artifact.tgz"), "owned artifact\n");
+    }
+    writeFileSync(unknownPackEntry, "unknown pack bytes\n");
+
+    mkdirSync(orphanWork);
+    writeFileSync(
+      join(orphanWork, ".laugh-tale-staging-owner.json"),
+      `${JSON.stringify({
+        kind: "laugh-tale-staging-work",
+        version: 2,
+        invocation: `work-${suffix}`,
+        token: `work-token-${suffix}`,
+        path: relative(repositoryTmpRoot, orphanWork).split(sep).join("/"),
+        target: `work-target-${suffix}/consumer`,
+        pid: 424_242,
+        createdAt: oldCreatedAt,
+        prior: { state: "missing" },
+      })}\n`,
+    );
+    mkdirSync(unknownWork);
+    writeFileSync(unknownWorkEntry, "unknown work bytes\n");
+
+    const reclaimed = await reclaimOrphanedStagingArtifacts({
+      artifactGraceMs: 0,
+      isProcessAlive: () => false,
+    });
+
+    expect(reclaimed.removed).toEqual(expect.arrayContaining([orphanPack, orphanWork]));
+    expect(existsSync(orphanPack)).toBe(false);
+    expect(existsSync(orphanWork)).toBe(false);
+    expect(readFileSync(unknownPackEntry, "utf8")).toBe("unknown pack bytes\n");
+    expect(readFileSync(unknownWorkEntry, "utf8")).toBe("unknown work bytes\n");
+    expect(reclaimed.preserved).toEqual(expect.arrayContaining([guardedPack, unknownWork]));
+  });
 });
