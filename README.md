@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/logo-dark.png">
+    <img src="docs/brand/logo.png" alt="Laugh Tale — a laughing, mustached mouth with an island seascape inside" width="220">
+  </picture>
+</p>
+
 # Laugh Tale
 
 [![CI](https://github.com/XBlueSky/laugh-tale/actions/workflows/ci.yml/badge.svg)](https://github.com/XBlueSky/laugh-tale/actions/workflows/ci.yml)
@@ -26,23 +33,25 @@ The common contract is a real persistent map, a synchronized mobile itinerary, i
 2. **Build a custom React site on the packages.** `@laugh-tale-island/core` (framework-neutral trip behavior) and `@laugh-tale-island/react` (behavior hooks and prop-getters) are designed for direct installation — see `packages/core/README.md` and `packages/react/README.md`. Neither ships a visual system; your site owns every visible element.
 3. **Contribute to this repository.** See “Develop and contribute” below. Releases run on three SemVer lines — the Eternal Pose plugin, `@laugh-tale-island/core`, and `@laugh-tale-island/react` — and `RELEASING.md` gates every external action behind explicit approval.
 
-## Install from a local checkout
+## Install
 
-This repository does not claim a published marketplace release. Clone or open a trusted local checkout, change into its root, and add that checkout explicitly.
+Add the marketplace straight from GitHub — no clone needed — then install the plugin.
 
 Claude Code:
 
 ```bash
-claude plugin marketplace add "$PWD"
+claude plugin marketplace add XBlueSky/laugh-tale
 claude plugin install eternal-pose@laugh-tale
 ```
 
 Codex:
 
 ```bash
-codex plugin marketplace add "$PWD"
+codex plugin marketplace add https://github.com/XBlueSky/laugh-tale
 codex plugin add eternal-pose@laugh-tale
 ```
+
+Working from a local clone instead (for example while developing)? Run the same commands from the repository root with `"$PWD"` in place of the URL.
 
 Use natural language, such as “turn these itinerary notes into a map-first mobile trip site.” You can also invoke `$eternal-pose` in Codex or `/eternal-pose:eternal-pose` in Claude Code.
 
