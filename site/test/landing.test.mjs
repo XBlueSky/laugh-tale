@@ -114,13 +114,40 @@ test('panels ink themselves in as the reader scrolls', { skip: !built }, () => {
   assert.match(javascript, /clip/i, 'panel reveal does not use an ink wipe')
 })
 
-test('the storm act shouts and the finale pours a drink', { skip: !built }, () => {
+test('the storm act shouts and the finale raises a toast', { skip: !built }, () => {
   const html = readFileSync(join(distDir, 'index.html'), 'utf8')
   const storm = html.split('data-voyage-act="storm"')[1]?.split('data-voyage-act=')[0]
 
   assert.ok(storm, 'storm act missing')
   assert.match(storm, /class="sfx/, 'storm act has no shout lettering')
-  assert.match(html, /journey-sake/, 'finale is missing the shared drink')
+  assert.match(html, /crew-toast/, 'finale is missing the shared toast')
+})
+
+test('the voyage is drawn in scene panels, not captioned boxes', { skip: !built }, () => {
+  const html = readFileSync(join(distDir, 'index.html'), 'utf8')
+
+  for (const scene of ['harbor-departure', 'chart-spread', 'storm-spread', 'helm-grip', 'island-light']) {
+    assert.match(html, new RegExp(scene), `missing ${scene} scene art`)
+  }
+})
+
+test('chapters open as numbered serial title cards', { skip: !built }, () => {
+  const html = readFileSync(join(distDir, 'index.html'), 'utf8')
+
+  for (const title of ['第1話', '第2話', '第3話', '最終話']) {
+    assert.ok(html.includes(title), `missing ${title} title card`)
+  }
+})
+
+test('panels compose into manga page grids', { skip: !built }, () => {
+  const stylesheets = readdirSync(distDir, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.css'))
+    .map((entry) => readFileSync(join(entry.parentPath, entry.name), 'utf8'))
+    .join('\n')
+  const gridRule = stylesheets.match(/\.koma-grid\{([^}]*)\}/)?.[1]
+
+  assert.ok(gridRule, 'compiled stylesheet has no .koma-grid rule')
+  assert.match(gridRule, /display:grid/, 'koma pages are not composed on a grid')
 })
 
 test('no internal superpowers docs leak into dist', { skip: !built }, () => {

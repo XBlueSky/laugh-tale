@@ -107,19 +107,40 @@ if (!motionPreference.matches) {
     })
   })
 
-  // Final Voyage serial: koma panels ink themselves in as the reader scrolls.
+  // Final Voyage serial: koma panels ink themselves in as the reader scrolls,
+  // staggered in reading order within their page grid.
   const panels = Array.from(document.querySelectorAll<HTMLElement>('[data-panel]'))
 
   panels.forEach((panel, index) => {
-    const hidden = index % 2 === 0 ? 'inset(0 100% 0 0)' : 'inset(0 0 0 100%)'
+    const grid = panel.closest('.koma-grid')
+    const pageIndex = grid
+      ? Array.from(grid.querySelectorAll<HTMLElement>('[data-panel]')).indexOf(panel)
+      : 0
+    const delay = pageIndex * 0.12
+    // Slanted panels keep their CSS clip-path, and the tempest has its own
+    // thunder entrance — reveal those by drift instead of an ink wipe.
+    const slanted =
+      panel.classList.contains('koma--slant-r') ||
+      panel.classList.contains('koma--slant-l') ||
+      panel.classList.contains('koma--tempest')
 
     inView(
       panel,
       () => {
+        if (slanted) {
+          animate(
+            panel,
+            { opacity: [0, 1], y: [34, 0] },
+            { duration: 0.5, ease: easeOut, delay },
+          )
+          return
+        }
+
+        const hidden = index % 2 === 0 ? 'inset(0 100% 0 0)' : 'inset(0 0 0 100%)'
         const reveal = animate(
           panel,
           { clipPath: [hidden, 'inset(0 0 0 0)'], opacity: [0.35, 1] },
-          { duration: 0.55, ease: easeOut, delay: (index % 3) * 0.08 },
+          { duration: 0.55, ease: easeOut, delay },
         )
 
         // Captions and shout lettering overhang the frame — unclip once inked.
@@ -127,7 +148,7 @@ if (!motionPreference.matches) {
         // commits the final keyframe back onto the inline style.
         reveal.then(() => {
           requestAnimationFrame(() => {
-            panel.style.clipPath = 'none'
+            panel.style.clipPath = ''
             panel.style.opacity = ''
           })
         })
@@ -149,6 +170,42 @@ if (!motionPreference.matches) {
       },
       { amount: 0.3 },
     )
+  }
+
+  // The storm splash: lightning flash, then the whole panel shudders.
+  const tempest = document.querySelector<HTMLElement>('.koma--tempest')
+  const flash = tempest?.querySelector<HTMLElement>('.storm-flash')
+
+  if (tempest && flash) {
+    inView(
+      tempest,
+      () => {
+        animate(
+          flash,
+          { opacity: [0, 0.85, 0, 0.55, 0] },
+          { duration: 0.7, times: [0, 0.12, 0.3, 0.42, 1], delay: 0.35 },
+        )
+        animate(
+          tempest,
+          { x: [0, -7, 6, -4, 3, 0], y: [0, 3, -2, 2, -1, 0] },
+          { duration: 0.6, delay: 0.4 },
+        )
+      },
+      { amount: 0.45 },
+    )
+  }
+
+  // Big scene panels drift against the scroll — the sea keeps moving.
+  const { scroll } = await import('motion')
+  for (const art of document.querySelectorAll<HTMLElement>(
+    '.koma--depart .koma-art, .koma--tempest .koma-art, .koma--landfall .koma-art',
+  )) {
+    const frame = art.closest<HTMLElement>('.koma')
+    if (!frame) continue
+    scroll(animate(art, { y: ['-3.5%', '3.5%'] }, { ease: 'linear' }), {
+      target: frame,
+      offset: ['start end', 'end start'],
+    })
   }
 
   const crew = document.querySelector<HTMLElement>('.crew-epilogue')

@@ -3,15 +3,20 @@ import { Image } from 'astro:assets'
 import Base from '../layouts/Base.astro'
 import logo from '../assets/logo.png'
 import captainCutlass from '../assets/tribute/captain-cutlass.webp'
+import chartSpread from '../assets/tribute/chart-spread.webp'
 import crewArrival from '../assets/tribute/crew-arrival.webp'
 import crewAssembled from '../assets/tribute/crew-assembled.webp'
+import crewToast from '../assets/tribute/crew-toast.webp'
 import doctorKit from '../assets/tribute/doctor-kit.webp'
 import firstMateGlasses from '../assets/tribute/first-mate-glasses.webp'
 import firstMateSword from '../assets/tribute/first-mate-sword.webp'
-import journeySake from '../assets/tribute/journey-sake.webp'
+import harborDeparture from '../assets/tribute/harbor-departure.webp'
+import helmGrip from '../assets/tribute/helm-grip.webp'
+import islandLight from '../assets/tribute/island-light.webp'
 import navigatorAxes from '../assets/tribute/navigator-axes.webp'
 import readerJournal from '../assets/tribute/reader-journal.webp'
 import readerSwords from '../assets/tribute/reader-swords.webp'
+import stormSpread from '../assets/tribute/storm-spread.webp'
 import strawHat from '../assets/tribute/straw-hat.webp'
 import voyageLogbook from '../assets/tribute/voyage-logbook.webp'
 import manifest from '../data/manifest.json'
@@ -46,6 +51,7 @@ const burstRays = Array.from({ length: RAY_COUNT }, (_, i) => {
     <div class="wrap masthead">
       <a class="wordmark" href="/">Laugh Tale</a>
       <nav>
+        <a href="/themes/">Theme gallery</a>
         <a href={repoUrl}>GitHub</a>
         <a href="https://www.npmjs.com/package/@laugh-tale-island/core">npm</a>
       </nav>
@@ -86,7 +92,7 @@ const burstRays = Array.from({ length: RAY_COUNT }, (_, i) => {
           widths={[240, 480, 720]}
           sizes="(max-width: 44rem) 176px, 272px"
         />
-        <p class="don" aria-hidden="true">DON!!</p>
+        <p class="don" aria-hidden="true">ドン!!</p>
       </div>
       <h1 data-hero-copy>Laugh Tale</h1>
       <p class="lede" data-hero-copy>
@@ -95,7 +101,7 @@ const burstRays = Array.from({ length: RAY_COUNT }, (_, i) => {
         links — and get an independent React travel site that never needs the plugin at runtime.
       </p>
       <p class="eternal" data-hero-copy>Eternal Pose</p>
-      <p class="serial-note" data-hero-copy>Final Voyage · a serial in four acts</p>
+      <p class="serial-note" data-hero-copy>最終航路 — Final Voyage・全4話</p>
       <div class="hero-links" data-hero-copy>
         <a href={repoUrl}>XBlueSky/laugh-tale</a>
         <a href="https://www.npmjs.com/package/@laugh-tale-island/core">@laugh-tale-island/core</a>
@@ -104,19 +110,16 @@ const burstRays = Array.from({ length: RAY_COUNT }, (_, i) => {
     </section>
 
     <div class="act" data-voyage-act="chart">
-      <header class="act-plate" data-panel>
-        <p class="act-heading">
-          <span class="act-kicker">Act I</span>
-          <span class="act-name">The Chart</span>
+      <header class="chapter-card" data-panel>
+        <p class="chapter-card__title">
+          <span class="chapter-card__no">第1話</span>
+          <span class="chapter-card__kanji">海図</span>
+          <span class="chapter-card__en">The Chart</span>
         </p>
-        <p class="narration">
-          Somewhere past the last safe harbor, a chart changes hands. The final voyage begins
-          with one line in a terminal.
-        </p>
+        <p class="narration">Somewhere past the last safe harbor, a chart changes hands.</p>
       </header>
 
-      <section class="chapter chapter--with-relic" aria-labelledby="quickstart">
-        <p class="chapter-no" aria-hidden="true">CH.01</p>
+      <section class="manga-page manga-page--with-relic" aria-labelledby="quickstart">
         <div
           class="chapter-relic relic--first-mate"
           data-relic="first-mate"
@@ -143,55 +146,86 @@ const burstRays = Array.from({ length: RAY_COUNT }, (_, i) => {
           />
           <span class="relic-label">FIRST MATE</span>
         </div>
-        <h2 id="quickstart">Install Eternal Pose straight from GitHub</h2>
-        <p>
-          Add the marketplace directly from the repository — no clone needed — then install the
-          plugin.
-        </p>
-        <div class="helm helm--charted">
-          <figure class="console" data-panel>
-            <figcaption>Claude Code</figcaption>
-            <pre><code><span class="prompt">$ </span>claude plugin marketplace add XBlueSky/laugh-tale
-<span class="prompt">$ </span>claude plugin install eternal-pose@laugh-tale</code></pre>
+        <h2 class="page-title" id="quickstart">Install Eternal Pose straight from GitHub</h2>
+
+        <div class="koma-grid koma-grid--chart">
+          <figure class="koma koma--scene koma--depart" data-panel>
+            <Image
+              class="koma-art"
+              src={harborDeparture}
+              alt="Ink panel: a captain carrying a bag walks the pier toward a tall ship at dawn"
+              widths={[720, 1200, 1600]}
+              sizes="(max-width: 44rem) calc(100vw - 3rem), 700px"
+              loading="lazy"
+              decoding="async"
+            />
+            <figcaption class="narration narration--in narration--tl">
+              The final voyage begins at dawn.
+            </figcaption>
+            <span class="sfx sfx--kana sfx--depart" aria-hidden="true">ドン!!</span>
           </figure>
-          <figure class="console" data-panel>
-            <figcaption>Codex</figcaption>
-            <pre><code><span class="prompt">$ </span>codex plugin marketplace add https://github.com/XBlueSky/laugh-tale
-<span class="prompt">$ </span>codex plugin add eternal-pose@laugh-tale</code></pre>
-          </figure>
-          <figure class="koma koma--art koma--logbook" data-panel aria-hidden="true">
+
+          <figure class="koma koma--still koma--logbook" data-panel aria-hidden="true">
             <Image
               src={voyageLogbook}
               alt=""
               widths={[320, 640]}
-              sizes="(max-width: 44rem) 200px, 280px"
+              sizes="(max-width: 44rem) 160px, 220px"
               loading="lazy"
               decoding="async"
             />
-            <figcaption class="koma-caption">THE CHART, BOUND AND KEPT</figcaption>
+            <figcaption class="koma-caption">BOUND AND KEPT</figcaption>
           </figure>
+
+          <figure class="koma koma--scene koma--slant-r koma--chart" data-panel>
+            <Image
+              class="koma-art"
+              src={chartSpread}
+              alt="Ink panel: two hands spread an old sea chart across a table beside a lantern and a knife"
+              widths={[640, 1200, 1600]}
+              sizes="(max-width: 44rem) calc(100vw - 3rem), 520px"
+              loading="lazy"
+              decoding="async"
+            />
+            <figcaption class="narration narration--in narration--bl">
+              One line in a terminal, and the route is real.
+            </figcaption>
+          </figure>
+
+          <div class="koma koma--talk koma--slant-l koma--orders" data-panel>
+            <figure class="console console--bubble">
+              <figcaption>Claude Code</figcaption>
+              <pre><code><span class="prompt">$ </span>claude plugin marketplace add XBlueSky/laugh-tale
+<span class="prompt">$ </span>claude plugin install eternal-pose@laugh-tale</code></pre>
+            </figure>
+            <figure class="console console--bubble console--bubble-alt">
+              <figcaption>Codex</figcaption>
+              <pre><code><span class="prompt">$ </span>codex plugin marketplace add https://github.com/XBlueSky/laugh-tale
+<span class="prompt">$ </span>codex plugin add eternal-pose@laugh-tale</code></pre>
+            </figure>
+          </div>
+
+          <div class="koma koma--quote" data-panel>
+            <p class="bubble bubble--shout">
+              “Turn these itinerary notes into a <strong>map-first mobile trip site</strong>.”
+            </p>
+            <p class="quote-hint">Then just describe the trip — that is the whole ritual.</p>
+          </div>
         </div>
-        <p class="then">
-          Then just describe the trip:
-          <em>“turn these itinerary notes into a map-first mobile trip site.”</em>
-        </p>
       </section>
     </div>
 
     <div class="act" data-voyage-act="crew">
-      <header class="act-plate" data-panel>
-        <p class="act-heading">
-          <span class="act-kicker">Act II</span>
-          <span class="act-name">The Crew</span>
+      <header class="chapter-card" data-panel>
+        <p class="chapter-card__title">
+          <span class="chapter-card__no">第2話</span>
+          <span class="chapter-card__kanji">船員</span>
+          <span class="chapter-card__en">The Crew</span>
         </p>
-        <p class="narration">
-          No one sails the last stretch alone. One by one, the crew answers the call — each with
-          a trade, each with a tool.
-        </p>
+        <p class="narration">No one sails the last stretch alone.</p>
       </header>
 
-      <section class="chapter chapter--with-relic" aria-labelledby="marketplace">
-        <p class="chapter-no" aria-hidden="true">CH.02</p>
+      <section class="manga-page manga-page--with-relic" aria-labelledby="marketplace">
         <div
           class="chapter-relic relic--navigator"
           data-relic="navigator"
@@ -210,28 +244,33 @@ const burstRays = Array.from({ length: RAY_COUNT }, (_, i) => {
           />
           <span class="relic-label">NAVIGATOR</span>
         </div>
-        <h2 id="marketplace">One shared skill, honestly described</h2>
-        <figure class="koma koma--art koma--crew" data-panel>
-          <Image
-            src={crewAssembled}
-            alt="An original ink silhouette of the assembled crew standing before their ship"
-            widths={[720, 1200, 1600]}
-            sizes="(max-width: 44rem) calc(100vw - 4rem), 880px"
-            loading="lazy"
-            decoding="async"
-          />
-          <figcaption class="koma-caption">ONE BY ONE, THEY ANSWER</figcaption>
-        </figure>
-        {
-          plugins.map((plugin) => (
-            <article class="plugin-spread" data-panel>
-              {groupNote(plugin.group) && (
-                <p class="group-note">
-                  {groupLabel(plugin.group)} — {groupNote(plugin.group)}
-                </p>
-              )}
-              <div class="plugin">
-                <div>
+        <h2 class="page-title" id="marketplace">One shared skill, honestly described</h2>
+
+        <div class="koma-grid koma-grid--crew">
+          <figure class="koma koma--scene koma--muster" data-panel>
+            <Image
+              class="koma-art"
+              src={crewAssembled}
+              alt="An original ink silhouette of the assembled crew standing before their ship"
+              widths={[720, 1200, 1600]}
+              sizes="(max-width: 44rem) calc(100vw - 3rem), 880px"
+              loading="lazy"
+              decoding="async"
+            />
+            <figcaption class="narration narration--in narration--tl">
+              One by one, they answer.
+            </figcaption>
+          </figure>
+
+          {
+            plugins.map((plugin) => (
+              <>
+                <article class="koma koma--dossier" data-panel>
+                  {groupNote(plugin.group) && (
+                    <p class="group-note">
+                      {groupLabel(plugin.group)} — {groupNote(plugin.group)}
+                    </p>
+                  )}
                   <div class="plugin-id">
                     <h3>{plugin.name}</h3>
                     <span class="stamp">v{plugin.version}</span>
@@ -246,10 +285,10 @@ const burstRays = Array.from({ length: RAY_COUNT }, (_, i) => {
                       <li>{plugin.license}</li>
                     </ul>
                   )}
-                </div>
+                </article>
                 {plugin.skills.map((skill) => (
-                  <div class="skill">
-                    <h4>When the skill triggers</h4>
+                  <div class="koma koma--talk koma--calls" data-panel>
+                    <h4 class="talk-title">When the skill triggers</h4>
                     <p class="trigger">{skill.trigger}</p>
                     {skill.examples?.length > 0 && (
                       <ul class="examples">
@@ -260,14 +299,13 @@ const burstRays = Array.from({ length: RAY_COUNT }, (_, i) => {
                     )}
                   </div>
                 ))}
-              </div>
-            </article>
-          ))
-        }
+              </>
+            ))
+          }
+        </div>
       </section>
 
-      <section class="chapter chapter--with-relic" aria-labelledby="packages">
-        <p class="chapter-no" aria-hidden="true">CH.03</p>
+      <section class="manga-page manga-page--with-relic" aria-labelledby="packages">
         <div
           class="chapter-relic relic--doctor"
           data-relic="doctor"
@@ -286,44 +324,47 @@ const burstRays = Array.from({ length: RAY_COUNT }, (_, i) => {
           />
           <span class="relic-label">SHIP'S DOCTOR</span>
         </div>
-        <h2 id="packages">Build a custom site on the same behavior</h2>
-        <p>
-          The packages carry the tested trip behavior without a visual system — your site owns
-          every visible element.
-        </p>
-        <div class="koma koma--hold" data-panel>
-          <div class="packages">
-            <div class="package">
-              <a href="https://www.npmjs.com/package/@laugh-tale-island/core">@laugh-tale-island/core</a>
-              <p>Framework-neutral trip behavior: the semantic model, candidate decisions, route lifecycles.</p>
-            </div>
-            <div class="package">
-              <a href="https://www.npmjs.com/package/@laugh-tale-island/react">@laugh-tale-island/react</a>
-              <p>React behavior hooks and prop-getters over the same core.</p>
+        <h2 class="page-title" id="packages">Build a custom site on the same behavior</h2>
+
+        <div class="koma-grid koma-grid--cargo">
+          <div class="koma koma--hold" data-panel>
+            <p class="hold-note">
+              The packages carry the tested trip behavior without a visual system — your site owns
+              every visible element.
+            </p>
+            <div class="packages">
+              <div class="package">
+                <a href="https://www.npmjs.com/package/@laugh-tale-island/core">@laugh-tale-island/core</a>
+                <p>Framework-neutral trip behavior: the semantic model, candidate decisions, route lifecycles.</p>
+              </div>
+              <div class="package">
+                <a href="https://www.npmjs.com/package/@laugh-tale-island/react">@laugh-tale-island/react</a>
+                <p>React behavior hooks and prop-getters over the same core.</p>
+              </div>
             </div>
           </div>
-          <figure class="console install-line">
-            <pre><code><span class="prompt">$ </span>npm install @laugh-tale-island/core @laugh-tale-island/react</code></pre>
-          </figure>
+          <div class="koma koma--talk koma--install" data-panel>
+            <p class="talk-title">Below deck</p>
+            <figure class="console console--bubble">
+              <pre><code><span class="prompt">$ </span>npm install @laugh-tale-island/core @laugh-tale-island/react</code></pre>
+            </figure>
+          </div>
         </div>
       </section>
     </div>
 
     <div class="act act--storm" data-voyage-act="storm">
       <span class="rumble" aria-hidden="true">ゴゴゴゴゴゴゴ</span>
-      <header class="act-plate" data-panel>
-        <p class="act-heading">
-          <span class="act-kicker">Act III</span>
-          <span class="act-name">The Storm</span>
+      <header class="chapter-card" data-panel>
+        <p class="chapter-card__title">
+          <span class="chapter-card__no">第3話</span>
+          <span class="chapter-card__kanji">嵐</span>
+          <span class="chapter-card__en">The Storm</span>
         </p>
-        <p class="narration">
-          The sea turns. Rig the sails your own way — and whatever the storm takes, it takes
-          nothing from the hold.
-        </p>
+        <p class="narration">The sea turns.</p>
       </header>
 
-      <section class="chapter chapter--with-relic" aria-labelledby="recipes">
-        <p class="chapter-no" aria-hidden="true">CH.04</p>
+      <section class="manga-page manga-page--with-relic" aria-labelledby="recipes">
         <div
           class="chapter-relic relic--reader"
           data-relic="reader"
@@ -350,66 +391,121 @@ const burstRays = Array.from({ length: RAY_COUNT }, (_, i) => {
           />
           <span class="relic-label">STONE READER</span>
         </div>
-        <h2 id="recipes">Three compile-time starting points</h2>
-        <div class="koma koma--strip" data-panel>
-          <div class="recipes">
-            <div class="swatch swatch-quiet-wood">
-              <strong>Quiet Wood</strong>
-              <p>Warm, restrained, and softly tactile.</p>
+        <h2 class="page-title" id="recipes">Three compile-time starting points</h2>
+
+        <div class="koma-grid koma-grid--storm">
+          <figure class="koma koma--scene koma--tempest" data-panel>
+            <Image
+              class="koma-art"
+              src={stormSpread}
+              alt="Ink splash panel: a tall ship heels through towering storm waves as lightning splits the sky"
+              widths={[720, 1280, 1920]}
+              sizes="(max-width: 44rem) calc(100vw - 3rem), 1010px"
+              loading="lazy"
+              decoding="async"
+            />
+            <figcaption class="narration narration--in narration--tl">Whatever the storm takes —</figcaption>
+            <span class="sfx sfx--kana sfx--tempest" aria-hidden="true">ザァァン!!</span>
+            <span class="storm-flash" aria-hidden="true"></span>
+          </figure>
+
+          <figure class="koma koma--scene koma--slant-r koma--helm" data-panel>
+            <Image
+              class="koma-art"
+              src={helmGrip}
+              alt="Ink panel: two hands grip the ship's wheel hard as spray flies, speed lines bursting behind"
+              widths={[480, 1000]}
+              sizes="(max-width: 44rem) calc(100vw - 3rem), 330px"
+              loading="lazy"
+              decoding="async"
+            />
+            <figcaption class="narration narration--in narration--bl">Rig the sails your own way.</figcaption>
+          </figure>
+
+          <div class="koma koma--rigs koma--slant-l" data-panel>
+            <div class="recipes">
+              <div class="swatch swatch-quiet-wood">
+                <strong>Quiet Wood</strong>
+                <p>Warm, restrained, and softly tactile.</p>
+              </div>
+              <div class="swatch swatch-sticker-brutalist">
+                <strong>Sticker Brutalist</strong>
+                <p>High-contrast editorial labels and crisp borders.</p>
+              </div>
+              <div class="swatch swatch-native-minimal">
+                <strong>Native Minimal</strong>
+                <p>Neutral, platform-minded clarity.</p>
+              </div>
             </div>
-            <div class="swatch swatch-sticker-brutalist">
-              <strong>Sticker Brutalist</strong>
-              <p>High-contrast editorial labels and crisp borders.</p>
-            </div>
-            <div class="swatch swatch-native-minimal">
-              <strong>Native Minimal</strong>
-              <p>Neutral, platform-minded clarity.</p>
-            </div>
+            <p class="recipes-note">
+              Recipes are starting points, not lock-in: generated information architecture, home
+              pages, type renderers, and visual systems remain yours to change. <a href="/themes/">See
+              the four internal product worlds →</a>
+            </p>
           </div>
         </div>
-        <p class="recipes-note">
-          Recipes are starting points, not lock-in: generated information architecture, home pages,
-          type renderers, and visual systems remain yours to change.
-        </p>
       </section>
 
-      <section class="chapter chapter--storm" aria-labelledby="privacy">
-        <p class="chapter-no" aria-hidden="true">CH.05</p>
-        <span class="sfx sfx--storm" aria-hidden="true">ZAAAN!!</span>
-        <h2 id="privacy">Nothing leaves your machine without you</h2>
-        <ul class="pledge">
-          <li>Work stays local and private by default.</li>
-          <li>Eternal Pose does not invent coordinates, reservations, routes, or other facts.</li>
-          <li>
-            It does not create a remote, make a repository public, push, publish, or deploy without
-            explicit approval for that action.
-          </li>
-        </ul>
+      <section class="manga-page manga-page--ink" aria-labelledby="privacy">
+        <span class="sfx sfx--kana sfx--pledge" aria-hidden="true">ドドド!!</span>
+        <h2 class="page-title page-title--ink" id="privacy">Nothing leaves your machine without you</h2>
+        <div class="koma-grid koma-grid--pledge">
+          <div class="koma koma--ink" data-panel>
+            <p class="narration narration--lead">— it takes nothing from the hold.</p>
+            <ul class="pledge">
+              <li>Work stays local and private by default.</li>
+              <li>Eternal Pose does not invent coordinates, reservations, routes, or other facts.</li>
+              <li>
+                It does not create a remote, make a repository public, push, publish, or deploy
+                without explicit approval for that action.
+              </li>
+            </ul>
+          </div>
+        </div>
       </section>
     </div>
 
     <div class="act" data-voyage-act="arrival">
-      <header class="act-plate" data-panel>
-        <p class="act-heading">
-          <span class="act-kicker">Final Act</span>
-          <span class="act-name">The Arrival</span>
+      <header class="chapter-card" data-panel>
+        <p class="chapter-card__title">
+          <span class="chapter-card__no">最終話</span>
+          <span class="chapter-card__kanji">到着</span>
+          <span class="chapter-card__en">The Arrival</span>
         </p>
-        <p class="narration">
-          Past the storm, the horizon breaks. At the end of every true chart, there is laughter.
-        </p>
+        <p class="narration">Past the storm, the horizon breaks.</p>
       </header>
 
-      <figure class="koma koma--art koma--sake" data-panel aria-hidden="true">
-        <Image
-          src={journeySake}
-          alt=""
-          widths={[320, 640]}
-          sizes="(max-width: 44rem) 180px, 240px"
-          loading="lazy"
-          decoding="async"
-        />
-        <figcaption class="koma-caption">POUR ONE FOR THE CREW</figcaption>
-      </figure>
+      <section class="manga-page" aria-label="The arrival">
+        <div class="koma-grid koma-grid--arrival">
+          <figure class="koma koma--scene koma--landfall" data-panel>
+            <Image
+              class="koma-art"
+              src={islandLight}
+              alt="Ink panel: from the ship's bow, a shaft of light breaks the clouds over a distant island"
+              widths={[720, 1200, 1600]}
+              sizes="(max-width: 44rem) calc(100vw - 3rem), 700px"
+              loading="lazy"
+              decoding="async"
+            />
+            <figcaption class="narration narration--in narration--tl">
+              At the end of every true chart —
+            </figcaption>
+          </figure>
+          <figure class="koma koma--scene koma--toast" data-panel>
+            <Image
+              class="koma-art"
+              src={crewToast}
+              alt="Ink panel: wooden mugs crash together in a toast, drink flying, burst lines behind"
+              widths={[480, 1000]}
+              sizes="(max-width: 44rem) calc(100vw - 3rem), 330px"
+              loading="lazy"
+              decoding="async"
+            />
+            <figcaption class="narration narration--in narration--br">— there is laughter.</figcaption>
+            <span class="sfx sfx--kana sfx--toast" aria-hidden="true">カン!!</span>
+          </figure>
+        </div>
+      </section>
 
       <figure class="crew-epilogue" aria-labelledby="crew-epilogue-caption">
         <div class="crew-epilogue__sun" aria-hidden="true"></div>
@@ -428,7 +524,7 @@ const burstRays = Array.from({ length: RAY_COUNT }, (_, i) => {
           <span class="crew-epilogue__kicker">THE ONES WHO REACHED THE END</span>
           <strong>Every map needs a crew willing to sail past its edge.</strong>
         </figcaption>
-        <span class="crew-epilogue__sfx" aria-hidden="true">DOOM!!</span>
+        <span class="crew-epilogue__sfx" aria-hidden="true">ドーン!!</span>
       </figure>
     </div>
   </main>

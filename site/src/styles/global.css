@@ -1,8 +1,8 @@
-/* Laugh Tale — manga page aesthetic, in tribute to ONE PIECE's medium:
-   white paper, black ink, koma panels with hard offset shadows, screentone
-   dots, concentration-line burst, speech bubbles, one Jump-red accent.
-   Single committed look. Body-text pairs measure ≥ 4.5:1 (AA); red is
-   links, labels, and shout lettering. */
+/* Laugh Tale — weekly-serial manga aesthetic, in tribute to ONE PIECE's medium:
+   white paper, black ink, true koma page grids with hard offset shadows,
+   screentone dots, concentration-line burst, speech bubbles, katakana SFX,
+   one Jump-red accent. Single committed look. Body-text pairs measure ≥ 4.5:1
+   (AA); red is links, labels, and shout lettering. */
 
 /* Bangers (OFL) self-hosted from Google Fonts — see /fonts/bangers-latin.woff2. */
 @font-face {
@@ -23,6 +23,7 @@
   --gutter: oklch(90% 0.008 95);
 
   --shout: 'Bangers', 'Arial Black', 'Avenir Next Condensed', impact, sans-serif;
+  --kana: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Arial Black', sans-serif;
   --sans: 'Avenir Next', Avenir, Seravek, 'Gill Sans', 'Helvetica Neue', system-ui, sans-serif;
   --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
   --mono: ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
@@ -206,7 +207,8 @@ code, pre { font-family: var(--mono); }
   z-index: 3;
   right: clamp(0.25rem, 6vw, 5rem);
   top: 12%;
-  font-family: var(--shout);
+  font-family: var(--kana);
+  font-weight: 800;
   font-size: clamp(1.75rem, 5vw, 3rem);
   color: var(--red);
   transform: rotate(9deg);
@@ -266,92 +268,144 @@ code, pre { font-family: var(--mono); }
   position: relative;
   z-index: 1;
   margin-top: 0.4rem;
-  font-family: var(--shout);
+  font-family: var(--kana);
+  font-weight: 800;
   font-size: 0.95rem;
   letter-spacing: 0.09em;
-  text-transform: uppercase;
   color: var(--red);
 }
 
-/* ---------- acts: the Final Voyage serial structure ---------- */
+/* ---------- acts and chapter title cards (話) ---------- */
 
 .act { position: relative; }
 
-.act-plate {
+.chapter-card {
   position: relative;
   display: grid;
   gap: 0.9rem;
   justify-items: start;
-  border: var(--border);
-  background: var(--ink);
-  color: var(--paper);
-  box-shadow: var(--shadow);
-  padding: clamp(1.1rem, 3vw, 1.75rem) clamp(1.25rem, 3.5vw, 2rem);
-  margin-block: clamp(1rem, 3vw, 2rem) clamp(2rem, 5vw, 3.25rem);
+  margin-block: clamp(2rem, 5vw, 3.5rem) clamp(1.75rem, 4vw, 2.75rem);
 }
 
-.act-heading {
+.chapter-card__title {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 0.85rem;
+  align-items: baseline;
+  gap: 0.9rem;
+  background: var(--ink);
+  color: var(--paper);
+  border: var(--border);
+  box-shadow: var(--shadow);
+  padding: 0.55em 1em 0.6em;
 }
 
-.act-kicker {
-  font-family: var(--shout);
-  font-size: clamp(0.85rem, 1.8vw, 1.05rem);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.chapter-card__no {
+  font-family: var(--kana);
+  font-weight: 800;
+  font-size: clamp(0.9rem, 1.9vw, 1.1rem);
+  letter-spacing: 0.1em;
   background: var(--red);
   color: var(--paper);
   border: 2px solid var(--paper);
-  padding: 0.1em 0.6em;
+  padding: 0.1em 0.55em;
   rotate: -2deg;
+  align-self: center;
 }
 
-.act-name {
-  font-family: var(--shout);
-  font-size: clamp(1.9rem, 5vw, 3rem);
+.chapter-card__kanji {
+  font-family: var(--kana);
+  font-weight: 800;
+  font-size: clamp(2.1rem, 5.5vw, 3.4rem);
   line-height: 1;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  letter-spacing: 0.12em;
 }
 
-.narration {
+.chapter-card__en {
   font-family: var(--serif);
   font-style: italic;
-  font-size: 0.9875rem;
-  line-height: 1.55;
-  max-width: 34rem;
-  background: var(--paper);
-  color: var(--ink);
-  border: 2.5px solid var(--ink);
-  box-shadow: 3px 3px 0 var(--straw);
-  padding: 0.55em 0.95em;
-  text-wrap: pretty;
+  font-size: clamp(0.95rem, 2vw, 1.15rem);
+  color: var(--straw);
+  letter-spacing: 0.03em;
 }
 
-/* ---------- koma: panels cut inside a chapter page ---------- */
+.chapter-card .narration { max-width: 30rem; }
+
+/* ---------- manga pages: paper sheets holding koma grids ---------- */
+
+.manga-page {
+  position: relative;
+  border: var(--border);
+  border-width: 4px;
+  background: var(--paper);
+  box-shadow: var(--shadow);
+  padding: clamp(0.8rem, 2.4vw, 1.3rem);
+  margin-bottom: clamp(2.25rem, 5vw, 3.5rem);
+}
+
+.page-title {
+  display: inline-block;
+  color: var(--ink);
+  font-family: var(--shout);
+  font-size: clamp(1.05rem, 2.3vw, 1.45rem);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  background: var(--paper);
+  border: 2.5px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  padding: 0.2em 0.7em;
+  margin: 0.15rem 0 clamp(0.8rem, 2.2vw, 1.2rem) 0.15rem;
+  transform: rotate(-1deg);
+}
+
+.manga-page--with-relic .page-title { max-width: calc(100% - 7.5rem); }
+
+.koma-grid {
+  display: grid;
+  gap: clamp(0.6rem, 1.6vw, 0.95rem);
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+/* ---------- koma: the panels ---------- */
 
 .koma {
   position: relative;
   border: var(--border);
   background: var(--paper);
   box-shadow: 4px 4px 0 var(--ink);
+  min-width: 0;
 }
 
-.koma--art {
+/* scene panels: ink art fills the frame, text rides on top */
+.koma--scene {
+  overflow: hidden;
+  padding: 0;
+}
+
+.koma--scene .koma-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* parallax scenes get oversized art so scroll drift never shows edges */
+.koma--depart .koma-art,
+.koma--tempest .koma-art,
+.koma--landfall .koma-art {
+  height: 116%;
+  top: -8%;
+}
+
+/* still-life panels: art floats on paper */
+.koma--still {
   display: grid;
   place-items: center;
   padding: clamp(0.9rem, 2.5vw, 1.4rem);
   overflow: visible;
 }
 
-.koma--art img {
-  display: block;
-  max-width: 100%;
-  height: auto;
-}
+.koma--still img { display: block; max-width: 100%; height: auto; }
 
 .koma-caption {
   position: absolute;
@@ -369,42 +423,194 @@ code, pre { font-family: var(--mono); }
   rotate: -2deg;
 }
 
-.koma--logbook img { width: min(100%, 16rem); }
-
-.koma--crew {
-  margin-block: 1.25rem 2.25rem;
-  padding: 0;
+/* talk panels: dialogue over faint screentone */
+.koma--talk {
+  padding: clamp(0.9rem, 2.5vw, 1.4rem);
+  display: grid;
+  gap: 1rem;
+  align-content: start;
 }
 
-.koma--crew img { width: 100%; }
+.koma--talk::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--tone);
+  background-size: 9px 9px;
+  opacity: 0.35;
+  pointer-events: none;
+}
 
-.koma--crew .koma-caption { right: auto; left: 0.75rem; rotate: 2deg; }
+.koma--talk > * { position: relative; }
 
-.koma--sake {
+.talk-title {
+  justify-self: start;
+  border: 2.5px solid var(--ink);
+  background: var(--paper);
+  padding: 0.15em 0.7em;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 0.875rem;
+}
+
+/* ---------- chapter page grids ---------- */
+
+.koma-grid--chart {
+  grid-template-areas:
+    'depart depart depart depart depart depart depart depart log log log log'
+    'chart chart chart chart chart orders orders orders orders orders orders orders'
+    'quote quote quote quote quote quote quote quote quote quote quote quote';
+}
+
+.koma--depart { grid-area: depart; aspect-ratio: 16 / 10; }
+.koma--logbook { grid-area: log; }
+.koma--chart { grid-area: chart; min-height: 16rem; }
+.koma--orders { grid-area: orders; }
+.koma--quote { grid-area: quote; }
+
+.koma-grid--crew {
+  grid-template-areas:
+    'muster muster muster muster muster muster muster muster muster muster muster muster'
+    'dossier dossier dossier dossier dossier dossier dossier calls calls calls calls calls';
+}
+
+.koma--muster { grid-area: muster; aspect-ratio: 16 / 9; }
+.koma--dossier { grid-area: dossier; padding: clamp(1rem, 2.8vw, 1.6rem); }
+.koma--calls { grid-area: calls; }
+
+.koma-grid--cargo {
+  grid-template-areas:
+    'hold hold hold hold hold hold hold install install install install install';
+}
+
+.koma--hold { grid-area: hold; padding: clamp(1rem, 2.8vw, 1.6rem); }
+.koma--install { grid-area: install; }
+
+.koma-grid--storm {
+  grid-template-areas:
+    'tempest tempest tempest tempest tempest tempest tempest tempest tempest tempest tempest tempest'
+    'helm helm helm helm rigs rigs rigs rigs rigs rigs rigs rigs';
+}
+
+.koma--tempest { grid-area: tempest; aspect-ratio: 21 / 10; }
+.koma--helm { grid-area: helm; min-height: 20rem; }
+.koma--rigs { grid-area: rigs; padding: clamp(1rem, 2.8vw, 1.6rem); }
+
+.koma-grid--pledge { grid-template-areas: 'pledge pledge pledge pledge pledge pledge pledge pledge pledge pledge pledge pledge'; }
+
+.koma--ink { grid-area: pledge; }
+
+.koma-grid--arrival {
+  grid-template-areas:
+    'landfall landfall landfall landfall landfall landfall landfall landfall toast toast toast toast';
+}
+
+.koma--landfall { grid-area: landfall; aspect-ratio: 16 / 9; }
+.koma--toast { grid-area: toast; min-height: 14rem; }
+
+/* diagonal cuts (斜めコマ): paired panels share a slanted gutter */
+@media (min-width: 44.0625rem) {
+  .koma--slant-r {
+    clip-path: polygon(0 0, 100% 0, calc(100% - 2.4rem) 100%, 0 100%);
+    margin-right: -1.2rem;
+  }
+
+  .koma--slant-l {
+    clip-path: polygon(2.4rem 0, 100% 0, 100% 100%, 0 100%);
+    margin-left: -1.2rem;
+  }
+
+  .koma--slant-l.koma--orders > .console--bubble { margin-left: 1.6rem; }
+  .koma--slant-l.koma--rigs > * { margin-left: 1.4rem; }
+}
+
+/* ---------- narration boxes (角ネーム) ---------- */
+
+.narration {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 0.9875rem;
+  line-height: 1.55;
+  background: var(--paper);
+  color: var(--ink);
+  border: 2.5px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--straw);
+  padding: 0.55em 0.95em;
+  text-wrap: pretty;
   width: fit-content;
-  margin-inline: auto;
-  margin-bottom: clamp(2.5rem, 6vw, 4rem);
-  rotate: 2deg;
 }
 
-.koma--sake img { width: clamp(9.5rem, 24vw, 13rem); }
-
-.koma--sake .koma-caption { right: 50%; translate: 50% 0; }
-
-.koma--hold,
-.koma--strip {
-  margin-top: 1.75rem;
-  padding: clamp(1.1rem, 3vw, 1.6rem);
+.narration--in {
+  position: absolute;
+  z-index: 2;
+  margin: 0;
+  max-width: min(72%, 21rem);
+  font-size: 0.9rem;
+  box-shadow: none;
 }
 
-.koma--hold .packages,
-.koma--strip .recipes { margin-top: 0; }
+.narration--tl { top: 0; left: 0; border-top: none; border-left: none; }
+.narration--br { bottom: 0; right: 0; border-bottom: none; border-right: none; }
+.narration--bl { bottom: 0; left: 0; border-bottom: none; border-left: none; }
 
-.koma--hold .install-line { margin-bottom: 0; }
+.narration--lead {
+  box-shadow: 3px 3px 0 var(--red);
+  margin-bottom: 1.25rem;
+}
 
-.plugin-spread { margin-top: 1.5rem; }
+/* ---------- SFX shout lettering ---------- */
 
-/* ---------- storm act: the inverted night-sea spread ---------- */
+.sfx {
+  position: absolute;
+  z-index: 3;
+  font-family: var(--kana);
+  font-weight: 800;
+  color: var(--red);
+  letter-spacing: 0.04em;
+  text-shadow: 2px 2px 0 var(--paper), 4px 4px 0 var(--ink);
+  pointer-events: none;
+}
+
+.sfx--depart {
+  top: 7%;
+  right: 4%;
+  font-size: clamp(1.7rem, 4vw, 2.9rem);
+  rotate: -8deg;
+}
+
+.sfx--tempest {
+  top: 5%;
+  right: 4%;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  letter-spacing: 0.08em;
+  font-size: clamp(1.9rem, 4.5vw, 3.4rem);
+}
+
+.sfx--pledge {
+  top: -1.4rem;
+  right: clamp(1rem, 6vw, 3rem);
+  font-size: clamp(1.6rem, 4vw, 2.6rem);
+  rotate: -6deg;
+}
+
+.sfx--toast {
+  top: 6%;
+  left: 6%;
+  font-size: clamp(1.5rem, 3.5vw, 2.4rem);
+  rotate: -10deg;
+}
+
+.storm-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: var(--paper);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---------- storm act: rumble + ink pledge page ---------- */
 
 .rumble {
   position: absolute;
@@ -412,7 +618,7 @@ code, pre { font-family: var(--mono); }
   top: clamp(4rem, 10vw, 7rem);
   left: -3.6rem;
   writing-mode: vertical-rl;
-  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', var(--shout);
+  font-family: var(--kana);
   font-weight: 800;
   font-size: clamp(1.6rem, 4vw, 2.6rem);
   letter-spacing: 0.35em;
@@ -422,12 +628,12 @@ code, pre { font-family: var(--mono); }
   user-select: none;
 }
 
-.chapter.chapter--storm {
+.manga-page--ink {
   background: var(--ink);
   color: var(--paper);
 }
 
-.chapter--storm::before {
+.manga-page--ink::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -440,80 +646,27 @@ code, pre { font-family: var(--mono); }
   );
 }
 
-.chapter--storm > * { position: relative; z-index: 1; }
+.manga-page--ink > :not(.sfx) { position: relative; z-index: 1; }
 
-.chapter--storm h2 { padding-right: clamp(4.5rem, 12vw, 7rem); }
+.page-title--ink { transform: rotate(-1deg); }
 
-.sfx {
-  position: absolute;
-  z-index: 2;
-  font-family: var(--shout);
-  color: var(--red);
-  letter-spacing: 0.04em;
-  text-shadow: 2px 2px 0 var(--paper), 4px 4px 0 var(--ink);
-  pointer-events: none;
-}
-
-.sfx--storm {
-  top: -1.5rem;
-  right: clamp(1rem, 6vw, 3rem);
-  font-size: clamp(1.6rem, 4.5vw, 2.75rem);
-  rotate: -6deg;
+.koma--ink {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--paper);
+  box-shadow: none;
+  padding: clamp(1.1rem, 3vw, 1.75rem);
 }
 
 @media (max-width: 74rem) {
   .rumble { display: none; }
 }
 
-/* ---------- chapters: koma panels ---------- */
+/* ---------- crew relics: inked marginalia on the pages ---------- */
 
-.chapter {
-  position: relative;
-  border: var(--border);
-  box-shadow: var(--shadow);
-  background: var(--paper);
-  padding: clamp(1.5rem, 4vw, 2.75rem);
-  margin-bottom: clamp(2.25rem, 5vw, 3.75rem);
-}
-
-.chapter { --tilt: -0.35deg; transform: rotate(var(--tilt)); }
-.chapter:nth-of-type(even) { --tilt: 0.35deg; }
-
-.chapter-no {
-  position: absolute;
-  top: -1.1rem;
-  left: clamp(0.75rem, 3vw, 2rem);
-  font-family: var(--shout);
-  font-size: 1.25rem;
-  letter-spacing: 0.06em;
-  color: var(--paper);
-  background: var(--red);
-  border: 2.5px solid var(--ink);
-  padding: 0.05em 0.6em;
-  transform: rotate(-2deg);
-  box-shadow: 3px 3px 0 var(--ink);
-}
-
-.chapter h2 {
-  font-family: var(--shout);
-  font-size: clamp(1.75rem, 4vw, 2.5rem);
-  font-weight: 400;
-  line-height: 1.05;
-  letter-spacing: 0.03em;
-  margin-block: 0.5rem 1rem;
-  text-wrap: balance;
-}
-
-.chapter > p { max-width: var(--measure); text-wrap: pretty; }
-
-.chapter--with-relic h2 {
-  padding-right: clamp(5rem, 15vw, 9rem);
-}
-
-/* Crew relics live outside the copy column like inked marginalia. */
 .chapter-relic {
   position: absolute;
-  z-index: 3;
+  z-index: 5;
   top: -3.25rem;
   right: clamp(-1.35rem, -1vw, -0.5rem);
   width: clamp(7.25rem, 15vw, 9.5rem);
@@ -629,7 +782,7 @@ code, pre { font-family: var(--mono); }
 }
 
 @media (max-width: 44rem) {
-  .chapter--with-relic h2 { padding-right: 4.5rem; }
+  .manga-page--with-relic .page-title { max-width: calc(100% - 5rem); }
 
   .chapter-relic {
     top: -2.15rem;
@@ -644,35 +797,7 @@ code, pre { font-family: var(--mono); }
   .relic-label { display: none; }
 }
 
-/* ---------- quickstart ---------- */
-
-.helm { display: grid; gap: 1.5rem; margin-top: 1.75rem; }
-
-.helm--charted {
-  grid-template-columns: minmax(0, 5fr) minmax(0, 3fr);
-  grid-template-areas:
-    'claude art'
-    'codex art';
-  align-items: stretch;
-}
-
-.helm--charted .console pre { white-space: pre-wrap; overflow-wrap: anywhere; }
-
-.helm--charted .console:nth-of-type(1) { grid-area: claude; }
-.helm--charted .console:nth-of-type(2) { grid-area: codex; }
-.helm--charted .koma--logbook { grid-area: art; }
-
-@media (max-width: 44rem) {
-  .helm--charted {
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      'claude'
-      'codex'
-      'art';
-  }
-
-  .console pre { white-space: pre-wrap; overflow-wrap: anywhere; }
-}
+/* ---------- consoles as speech: the crew speaks in terminals ---------- */
 
 .console {
   width: 100%;
@@ -703,32 +828,96 @@ code, pre { font-family: var(--mono); }
 
 .console .prompt { color: oklch(65% 0.02 270); user-select: none; }
 
-.then {
-  max-width: var(--measure);
-  margin-top: 1.75rem;
-  padding-left: 1.25rem;
-  border-left: 4px solid var(--red);
+.console--bubble { position: relative; }
+
+.console--bubble figcaption {
+  border-bottom: 2.5px solid var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+  position: relative;
+  z-index: 1;
+  rotate: -1.5deg;
+  margin-bottom: -0.4rem;
+}
+
+.console--bubble pre {
+  border-radius: 0.9rem;
+  box-shadow: 3px 3px 0 var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.console--bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -0.7rem;
+  left: 2rem;
+  width: 1rem;
+  height: 1rem;
+  background: var(--ink);
+  clip-path: polygon(0 0, 100% 0, 30% 100%);
+}
+
+.console--bubble-alt::after { left: auto; right: 2.5rem; clip-path: polygon(0 0, 100% 0, 70% 100%); }
+
+/* the big spoken line */
+.koma--quote {
+  display: grid;
+  justify-items: center;
+  gap: 0.9rem;
+  padding: clamp(1.25rem, 3.5vw, 2rem);
+  text-align: center;
+}
+
+.koma--quote::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--tone);
+  background-size: 9px 9px;
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.koma--quote > * { position: relative; }
+
+.bubble--shout {
+  position: relative;
+  font-size: clamp(1.05rem, 2.4vw, 1.4rem);
+  line-height: 1.45;
+  border: 3px solid var(--ink);
+  border-radius: 1.4em;
+  background: var(--paper);
+  box-shadow: 4px 4px 0 var(--ink);
+  padding: 0.8em 1.3em;
+  max-width: 34rem;
+}
+
+.bubble--shout::after {
+  content: '';
+  position: absolute;
+  bottom: -0.72em;
+  left: 18%;
+  width: 1em;
+  height: 1em;
+  background: var(--paper);
+  border-right: 3px solid var(--ink);
+  border-bottom: 3px solid var(--ink);
+  transform: skewX(35deg) rotate(45deg);
+}
+
+.quote-hint {
   font-family: var(--serif);
   font-style: italic;
+  font-size: 0.9375rem;
   color: var(--ink-soft);
 }
 
-.then em { color: var(--ink); }
-
-/* ---------- marketplace ---------- */
+/* ---------- marketplace dossier + calls ---------- */
 
 .group-note {
   font-size: 0.875rem;
   color: var(--ink-soft);
-  margin-bottom: 1.75rem;
-}
-
-.plugin {
-  display: grid;
-  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
-  gap: clamp(1.5rem, 4vw, 3rem);
-  border-top: 2.5px solid var(--ink);
-  padding-top: 1.75rem;
+  margin-bottom: 1.25rem;
 }
 
 .plugin-id {
@@ -755,7 +944,7 @@ code, pre { font-family: var(--mono); }
   transform: rotate(-2deg);
 }
 
-.plugin .tagline {
+.koma--dossier .tagline {
   font-size: clamp(1.25rem, 2.5vw, 1.5rem);
   font-weight: 600;
   line-height: 1.3;
@@ -763,7 +952,7 @@ code, pre { font-family: var(--mono); }
   margin-bottom: 0.75rem;
 }
 
-.plugin .intro { color: var(--ink-soft); text-wrap: pretty; }
+.koma--dossier .intro { color: var(--ink-soft); text-wrap: pretty; }
 
 .tags {
   display: flex;
@@ -784,22 +973,10 @@ code, pre { font-family: var(--mono); }
   background: var(--paper-shade);
 }
 
-.skill h4 {
-  display: inline-block;
-  border: 2.5px solid var(--ink);
-  background: var(--paper);
-  padding: 0.2em 0.75em;
-  font-family: var(--serif);
-  font-style: italic;
-  font-size: 0.875rem;
-  margin-bottom: 1rem;
-}
-
-.skill .trigger {
+.trigger {
   font-family: var(--serif);
   font-style: italic;
   color: var(--ink-soft);
-  margin-bottom: 1.25rem;
 }
 
 /* speech bubbles — the examples are things people say to their agent */
@@ -830,15 +1007,13 @@ code, pre { font-family: var(--mono); }
   transform: skewX(35deg) rotate(45deg);
 }
 
-.examples li:nth-child(even) { margin-left: clamp(0.5rem, 4vw, 2.5rem); }
+.examples li:nth-child(even) { margin-left: clamp(0.5rem, 3vw, 1.75rem); }
 
-@media (max-width: 44rem) {
-  .plugin { grid-template-columns: 1fr; }
-}
+/* ---------- cargo hold: packages ---------- */
 
-/* ---------- packages ---------- */
+.hold-note { max-width: var(--measure); text-wrap: pretty; margin-bottom: 1rem; }
 
-.packages { display: grid; gap: 0; margin-top: 1.75rem; max-width: 46rem; }
+.packages { display: grid; gap: 0; }
 
 .package {
   display: grid;
@@ -853,8 +1028,6 @@ code, pre { font-family: var(--mono); }
 
 .package p { font-size: 0.9375rem; color: var(--ink-soft); }
 
-.install-line { margin-top: 1.5rem; max-width: 46rem; }
-
 @media (max-width: 44rem) {
   .package { grid-template-columns: 1fr; }
 }
@@ -863,12 +1036,11 @@ code, pre { font-family: var(--mono); }
 
 .recipes {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
   gap: 1.25rem;
-  margin-top: 1.75rem;
 }
 
-.swatch { padding: 1.75rem 1.5rem; min-height: 11rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.swatch { padding: 1.5rem 1.25rem; min-height: 10rem; display: flex; flex-direction: column; gap: 0.5rem; }
 
 .swatch p { font-size: 0.9375rem; margin-top: auto; }
 
@@ -911,14 +1083,14 @@ code, pre { font-family: var(--mono); }
 
 .recipes-note {
   max-width: var(--measure);
-  margin-top: 1.5rem;
+  margin-top: 1.25rem;
   font-size: 0.9375rem;
   color: var(--ink-soft);
 }
 
-/* ---------- privacy ---------- */
+/* ---------- privacy pledge ---------- */
 
-.pledge { list-style: none; padding: 0; margin-top: 1.5rem; max-width: var(--measure); display: grid; gap: 1rem; }
+.pledge { list-style: none; padding: 0; max-width: var(--measure); display: grid; gap: 1rem; }
 
 .pledge li { position: relative; padding-left: 1.75rem; }
 
@@ -1035,7 +1207,8 @@ code, pre { font-family: var(--mono); }
   top: 15%;
   right: clamp(0.75rem, 4vw, 2.5rem);
   color: var(--red);
-  font-family: var(--shout);
+  font-family: var(--kana);
+  font-weight: 800;
   font-size: clamp(1.4rem, 5vw, 3.25rem);
   letter-spacing: 0.04em;
   rotate: 7deg;
@@ -1055,6 +1228,39 @@ code, pre { font-family: var(--mono); }
 
   .crew-epilogue figcaption { max-width: 72%; }
   .crew-epilogue__sfx { top: 38%; }
+}
+
+/* ---------- responsive: pages collapse to a vertical strip ---------- */
+
+@media (max-width: 44rem) {
+  .koma-grid--chart,
+  .koma-grid--crew,
+  .koma-grid--cargo,
+  .koma-grid--storm,
+  .koma-grid--pledge,
+  .koma-grid--arrival {
+    grid-template-columns: 1fr;
+    grid-template-areas: none;
+  }
+
+  .koma-grid--chart > .koma,
+  .koma-grid--crew > .koma,
+  .koma-grid--cargo > .koma,
+  .koma-grid--storm > .koma,
+  .koma-grid--pledge > .koma,
+  .koma-grid--arrival > .koma { grid-area: auto; }
+
+  .koma--depart { aspect-ratio: 16 / 10; }
+  .koma--chart { aspect-ratio: 16 / 10; min-height: 0; }
+  .koma--muster { aspect-ratio: 16 / 9; }
+  .koma--tempest { aspect-ratio: 16 / 10; }
+  .koma--helm { aspect-ratio: 3 / 4; min-height: 0; }
+  .koma--landfall { aspect-ratio: 16 / 9; }
+  .koma--toast { aspect-ratio: 1; min-height: 0; }
+
+  .koma--logbook img { max-width: 12rem; }
+
+  .console pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 }
 
 /* ---------- footer: end page ---------- */
@@ -1108,14 +1314,14 @@ code, pre { font-family: var(--mono); }
 
   .burst { animation: burst-boil 0.8s 4; }
 
-  .chapter {
+  .manga-page {
     transition:
       transform 0.26s cubic-bezier(0.22, 1, 0.36, 1),
       box-shadow 0.26s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
-  .chapter:hover {
-    transform: translate(-2px, -2px) rotate(var(--tilt));
+  .manga-page:hover {
+    transform: translate(-2px, -2px);
     box-shadow: 8px 8px 0 var(--ink);
   }
 
@@ -1134,17 +1340,6 @@ code, pre { font-family: var(--mono); }
 
   .stamp { transition: rotate 0.18s cubic-bezier(0.25, 1, 0.5, 1); }
   .stamp:hover { rotate: 2deg; }
-
-  .koma--art {
-    transition:
-      translate 0.22s cubic-bezier(0.22, 1, 0.36, 1),
-      box-shadow 0.22s cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  .koma--art:hover {
-    translate: -2px -2px;
-    box-shadow: 6px 6px 0 var(--ink);
-  }
 
   .console,
   .swatch {
