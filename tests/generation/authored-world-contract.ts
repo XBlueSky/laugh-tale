@@ -228,7 +228,7 @@ function stripComments(source: string): string {
 
 interface DependencyDiscovery {
   specifiers: string[];
-  unresolvedLocalDynamicImports: number;
+  unresolvedDynamicImports: number;
 }
 
 function scriptKind(path: string): ts.ScriptKind {
@@ -267,18 +267,6 @@ function staticModuleSpecifier(expression: ts.Expression): string | undefined {
     : undefined;
 }
 
-function isInterpolatedLocalImport(expression: ts.Expression): boolean {
-  const unwrapped = unwrapExpression(expression);
-  if (ts.isTemplateExpression(unwrapped)) {
-    return unwrapped.head.text.startsWith(".");
-  }
-  if (ts.isBinaryExpression(unwrapped)) {
-    const left = unwrapExpression(unwrapped.left);
-    return ts.isStringLiteral(left) && left.text.startsWith(".");
-  }
-  return false;
-}
-
 function typescriptDependencies(file: SourceFile): DependencyDiscovery {
   const sourceFile = ts.createSourceFile(
     file.absolutePath,
@@ -288,7 +276,7 @@ function typescriptDependencies(file: SourceFile): DependencyDiscovery {
     scriptKind(file.absolutePath),
   );
   const specifiers = new Set<string>();
-  let unresolvedLocalDynamicImports = 0;
+  let unresolvedDynamicImports = 0;
   const visit = (node: ts.Node): void => {
     if (
       (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
@@ -298,14 +286,16 @@ function typescriptDependencies(file: SourceFile): DependencyDiscovery {
       specifiers.add(node.moduleSpecifier.text);
     } else if (
       ts.isCallExpression(node) &&
-      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
-      node.arguments[0] !== undefined
+      node.expression.kind === ts.SyntaxKind.ImportKeyword
     ) {
-      const specifier = staticModuleSpecifier(node.arguments[0]);
+      const argument = node.arguments[0];
+      const specifier = argument === undefined
+        ? undefined
+        : staticModuleSpecifier(argument);
       if (specifier !== undefined) {
         specifiers.add(specifier);
-      } else if (isInterpolatedLocalImport(node.arguments[0])) {
-        unresolvedLocalDynamicImports += 1;
+      } else {
+        unresolvedDynamicImports += 1;
       }
     }
     ts.forEachChild(node, visit);
@@ -313,7 +303,7 @@ function typescriptDependencies(file: SourceFile): DependencyDiscovery {
   visit(sourceFile);
   return {
     specifiers: [...specifiers].sort((left, right) => left.localeCompare(right)),
-    unresolvedLocalDynamicImports,
+    unresolvedDynamicImports,
   };
 }
 
@@ -442,16 +432,54 @@ function cssDependencies(file: SourceFile): DependencyDiscovery {
   }
   return {
     specifiers: [...specifiers].sort((left, right) => left.localeCompare(right)),
-    unresolvedLocalDynamicImports: 0,
+    unresolvedDynamicImports: 0,
   };
 }
 
 function dependencies(file: SourceFile): DependencyDiscovery {
   if (file.path.endsWith(".css")) return cssDependencies(file);
   if (file.path.endsWith(".json")) {
-    return { specifiers: [], unresolvedLocalDynamicImports: 0 };
+    return { specifiers: [], unresolvedDynamicImports: 0 };
   }
   return typescriptDependencies(file);
+}
+
+type ImportSpecifierKind = "relative" | "bare" | "remote" | "unsafe";
+
+function isBarePackageSpecifier(specifier: string): boolean {
+  if (specifier === "" || specifier.includes("\\") || specifier.startsWith("#")) {
+    return false;
+  }
+  const segments = specifier.split("/");
+  const scoped = specifier.startsWith("@");
+  const comparableSegments = scoped
+    ? [segments[0]?.slice(1) ?? "", ...segments.slice(1)]
+    : segments;
+  if (comparableSegments.some((segment) =>
+    segment === "" ||
+    segment === "." ||
+    segment === ".." ||
+    !/^[a-z0-9_~.-]+$/i.test(segment)
+  )) {
+    return false;
+  }
+  return scoped
+    ? segments.length >= 2
+    : !specifier.startsWith(".");
+}
+
+function importSpecifierKind(specifier: string): ImportSpecifierKind {
+  if (/^(?:https?|ftps?|wss?):/i.test(specifier)) return "remote";
+  if (
+    specifier.includes("\\") ||
+    specifier.startsWith("/") ||
+    /^[a-z]:[\\/]/i.test(specifier) ||
+    /^[a-z][a-z0-9+.-]*:/i.test(specifier)
+  ) {
+    return "unsafe";
+  }
+  if (/^\.{1,2}(?:\/|$)/.test(specifier)) return "relative";
+  return isBarePackageSpecifier(specifier) ? "bare" : "unsafe";
 }
 
 function importCandidates(candidate: string): string[] {
@@ -532,7 +560,7 @@ function collectReachableSource(
     if (file === undefined || files.has(file.absolutePath)) continue;
     files.set(file.absolutePath, file);
     const discovered = dependencies(file);
-    if (discovered.unresolvedLocalDynamicImports > 0) {
+    if (discovered.unresolvedDynamicImports > 0) {
       addFinding(
         findings,
         "unresolved-dynamic-import",
@@ -541,7 +569,28 @@ function collectReachableSource(
       );
     }
     for (const specifier of discovered.specifiers) {
-      if (!specifier.startsWith(".")) continue;
+      const kind = importSpecifierKind(specifier);
+      if (kind === "remote") {
+        addFinding(
+          findings,
+          "forbidden-remote-import",
+          file.path,
+          `Presentation source must not import ${specifier}`,
+        );
+        continue;
+      }
+      if (kind === "bare" && !file.path.endsWith(".css")) continue;
+      if (kind !== "relative") {
+        addFinding(
+          findings,
+          "unsafe-import-specifier",
+          file.path,
+          file.path.endsWith(".css")
+            ? `CSS @import ${specifier} must use a relative local path within presentation.source`
+            : `Import ${specifier} must be a relative local path or a bare package specifier`,
+        );
+        continue;
+      }
       const resolution = resolveLocalImport(
         recipeRoot,
         presentationRoot,
@@ -916,41 +965,15 @@ function resolveExport(
   return undefined;
 }
 
-function isLocallyExported(file: AstSourceFile, name: string): boolean {
-  return file.node.statements.some((statement) =>
-    ts.isExportDeclaration(statement) &&
-    statement.moduleSpecifier === undefined &&
-    statement.exportClause !== undefined &&
-    ts.isNamedExports(statement.exportClause) &&
-    statement.exportClause.elements.some((element) => element.name.text === name)
-  );
-}
-
 function exportedPresentationObject(
   graph: AstGraph,
   entry: AstSourceFile | undefined,
 ): { file: AstSourceFile; object: ts.ObjectLiteralExpression } | undefined {
   if (entry === undefined) return undefined;
-  for (const statement of entry.node.statements) {
-    if (!ts.isVariableStatement(statement)) continue;
-    const exported = hasModifier(statement, ts.SyntaxKind.ExportKeyword) ||
-      isLocallyExported(entry, "presentation");
-    if (!exported) continue;
-    for (const declaration of statement.declarationList.declarations) {
-      if (
-        !ts.isIdentifier(declaration.name) ||
-        declaration.name.text !== "presentation" ||
-        declaration.initializer === undefined
-      ) {
-        continue;
-      }
-      const resolved = resolveValue(graph, entry, declaration.initializer, new Set());
-      if (resolved !== undefined && ts.isObjectLiteralExpression(resolved.node)) {
-        return { file: resolved.file, object: resolved.node };
-      }
-    }
-  }
-  return undefined;
+  const resolved = resolveExport(graph, entry, "presentation", new Set());
+  return resolved !== undefined && ts.isObjectLiteralExpression(resolved.node)
+    ? { file: resolved.file, object: resolved.node }
+    : undefined;
 }
 
 function mediaRanges(css: string): Array<{ min: number; max: number }> {
@@ -1144,9 +1167,21 @@ interface ValueOrigin {
   object: boolean;
 }
 
-interface DestructuredOrigin {
-  property: string;
-  source: ts.Expression;
+type CallbackBindingSource =
+  | { kind: "object" }
+  | { axis: string; kind: "axis" }
+  | { expression: ts.Expression; kind: "initializer" }
+  | { kind: "destructure"; property: string; source: ts.Expression }
+  | { kind: "unknown" };
+
+interface CallbackBinding {
+  declaration: ts.Identifier;
+  source: CallbackBindingSource;
+}
+
+interface CallbackScope {
+  bindings: Map<string, CallbackBinding[]>;
+  parent?: CallbackScope;
 }
 
 function emptyOrigin(): ValueOrigin {
@@ -1176,67 +1211,198 @@ function callbackAxes(callback: ts.Node): Set<string> {
   }
   const parameter = callback.parameters[0];
   if (parameter === undefined) return new Set();
-  const objectParameters = new Set<string>();
-  const parameterAxes = new Map<string, string>();
-  if (ts.isIdentifier(parameter.name)) {
-    objectParameters.add(parameter.name.text);
-  } else if (ts.isObjectBindingPattern(parameter.name)) {
-    for (const element of parameter.name.elements) {
-      const property = bindingElementProperty(element);
-      if (property !== undefined && ts.isIdentifier(element.name)) {
-        parameterAxes.set(element.name.text, property);
-      }
-    }
-  }
-
-  const initializers = new Map<string, ts.Expression>();
-  const destructured = new Map<string, DestructuredOrigin>();
   const body = callback.body;
-  if (body !== undefined && ts.isBlock(body)) {
-    const collect = (node: ts.Node): void => {
-      if (node !== body && isNestedFunction(node)) return;
-      if (ts.isVariableDeclaration(node) && node.initializer !== undefined) {
-        if (ts.isIdentifier(node.name)) {
-          initializers.set(node.name.text, node.initializer);
-        } else if (ts.isObjectBindingPattern(node.name)) {
-          for (const element of node.name.elements) {
-            const property = bindingElementProperty(element);
-            if (property !== undefined && ts.isIdentifier(element.name)) {
-              destructured.set(element.name.text, {
-                property,
-                source: node.initializer,
-              });
-            }
-          }
-        }
-      }
-      ts.forEachChild(node, collect);
-    };
-    collect(body);
-  }
+  if (body === undefined) return new Set();
+  const functionScope: CallbackScope = { bindings: new Map() };
+  const nodeScopes = new WeakMap<ts.Node, CallbackScope>();
 
-  const identifierOrigin = (name: string, seen: Set<string>): ValueOrigin => {
-    if (objectParameters.has(name)) return { axes: new Set(), object: true };
-    const parameterAxis = parameterAxes.get(name);
-    if (parameterAxis !== undefined) {
-      return { axes: new Set([parameterAxis]), object: false };
-    }
-    if (seen.has(name)) return emptyOrigin();
-    const nextSeen = new Set(seen).add(name);
-    const initializer = initializers.get(name);
-    if (initializer !== undefined) return nodeOrigin(initializer, nextSeen);
-    const destructure = destructured.get(name);
-    if (destructure !== undefined) {
-      const source = nodeOrigin(destructure.source, nextSeen);
-      return source.object
-        ? { axes: new Set([destructure.property]), object: false }
-        : emptyOrigin();
-    }
-    return emptyOrigin();
+  const addBinding = (
+    scope: CallbackScope,
+    declaration: ts.Identifier,
+    source: CallbackBindingSource,
+  ): void => {
+    const bindings = scope.bindings.get(declaration.text) ?? [];
+    bindings.push({ declaration, source });
+    scope.bindings.set(declaration.text, bindings);
+    nodeScopes.set(declaration, scope);
   };
 
-  const nodeOrigin = (node: ts.Node, seen: Set<string>): ValueOrigin => {
+  const addUnknownBindingName = (
+    name: ts.BindingName,
+    scope: CallbackScope,
+  ): void => {
+    if (ts.isIdentifier(name)) {
+      addBinding(scope, name, { kind: "unknown" });
+      return;
+    }
+    for (const element of name.elements) {
+      if (ts.isOmittedExpression(element)) continue;
+      addUnknownBindingName(element.name, scope);
+    }
+  };
+
+  const addObjectBindingPattern = (
+    pattern: ts.ObjectBindingPattern,
+    scope: CallbackScope,
+    source: ts.Expression | undefined,
+  ): void => {
+    for (const element of pattern.elements) {
+      const property = bindingElementProperty(element);
+      if (
+        source !== undefined &&
+        property !== undefined &&
+        ts.isIdentifier(element.name)
+      ) {
+        addBinding(scope, element.name, {
+          kind: "destructure",
+          property,
+          source,
+        });
+      } else {
+        addUnknownBindingName(element.name, scope);
+      }
+    }
+  };
+
+  for (const [index, currentParameter] of callback.parameters.entries()) {
+    nodeScopes.set(currentParameter, functionScope);
+    if (index === 0 && ts.isIdentifier(currentParameter.name)) {
+      addBinding(functionScope, currentParameter.name, { kind: "object" });
+    } else if (index === 0 && ts.isObjectBindingPattern(currentParameter.name)) {
+      for (const element of currentParameter.name.elements) {
+        const property = bindingElementProperty(element);
+        if (property !== undefined && ts.isIdentifier(element.name)) {
+          addBinding(functionScope, element.name, { axis: property, kind: "axis" });
+        } else {
+          addUnknownBindingName(element.name, functionScope);
+        }
+      }
+    } else {
+      addUnknownBindingName(currentParameter.name, functionScope);
+    }
+  }
+
+  const registerVariable = (
+    declaration: ts.VariableDeclaration,
+    scope: CallbackScope,
+  ): void => {
+    const declarationList = declaration.parent;
+    const bindingScope = ts.isVariableDeclarationList(declarationList) &&
+        (declarationList.flags & ts.NodeFlags.BlockScoped) === 0
+      ? functionScope
+      : scope;
+    if (ts.isIdentifier(declaration.name)) {
+      addBinding(
+        bindingScope,
+        declaration.name,
+        declaration.initializer === undefined
+          ? { kind: "unknown" }
+          : { expression: declaration.initializer, kind: "initializer" },
+      );
+    } else if (ts.isObjectBindingPattern(declaration.name)) {
+      addObjectBindingPattern(declaration.name, bindingScope, declaration.initializer);
+    } else {
+      addUnknownBindingName(declaration.name, bindingScope);
+    }
+  };
+
+  const mapBindingNameScope = (name: ts.BindingName, scope: CallbackScope): void => {
+    nodeScopes.set(name, scope);
+    if (ts.isIdentifier(name)) return;
+    for (const element of name.elements) {
+      if (ts.isOmittedExpression(element)) continue;
+      nodeScopes.set(element, scope);
+      mapBindingNameScope(element.name, scope);
+      if (element.initializer !== undefined) visit(element.initializer, scope);
+    }
+  };
+
+  const visit = (node: ts.Node, scope: CallbackScope): void => {
+    nodeScopes.set(node, scope);
+    if (node !== callback && ts.isFunctionDeclaration(node)) {
+      if (node.name !== undefined) addBinding(scope, node.name, { kind: "unknown" });
+      return;
+    }
+    if (node !== callback && isNestedFunction(node)) return;
+    if (ts.isClassDeclaration(node)) {
+      if (node.name !== undefined) addBinding(scope, node.name, { kind: "unknown" });
+      return;
+    }
+    if (ts.isBlock(node)) {
+      const blockScope: CallbackScope = { bindings: new Map(), parent: scope };
+      nodeScopes.set(node, blockScope);
+      for (const statement of node.statements) visit(statement, blockScope);
+      return;
+    }
+    if (ts.isCatchClause(node)) {
+      const catchScope: CallbackScope = { bindings: new Map(), parent: scope };
+      nodeScopes.set(node, catchScope);
+      if (node.variableDeclaration !== undefined) {
+        addUnknownBindingName(node.variableDeclaration.name, catchScope);
+        mapBindingNameScope(node.variableDeclaration.name, catchScope);
+      }
+      visit(node.block, catchScope);
+      return;
+    }
+    if (ts.isVariableDeclaration(node)) {
+      registerVariable(node, scope);
+      mapBindingNameScope(node.name, scope);
+      if (node.initializer !== undefined) visit(node.initializer, scope);
+      return;
+    }
+    ts.forEachChild(node, (child) => visit(child, scope));
+  };
+
+  for (const currentParameter of callback.parameters) {
+    mapBindingNameScope(currentParameter.name, functionScope);
+    if (currentParameter.initializer !== undefined) {
+      visit(currentParameter.initializer, functionScope);
+    }
+  }
+  visit(body, functionScope);
+
+  const resolvedBinding = (identifier: ts.Identifier): CallbackBinding | undefined => {
+    let scope = nodeScopes.get(identifier);
+    while (scope !== undefined) {
+      const bindings = scope.bindings.get(identifier.text);
+      if (bindings !== undefined && bindings.length > 0) {
+        return bindings[bindings.length - 1];
+      }
+      scope = scope.parent;
+    }
+    return undefined;
+  };
+
+  function bindingOrigin(
+    binding: CallbackBinding | undefined,
+    seen: Set<CallbackBinding>,
+  ): ValueOrigin {
+    if (binding === undefined || seen.has(binding)) return emptyOrigin();
+    const nextSeen = new Set(seen).add(binding);
+    switch (binding.source.kind) {
+      case "object":
+        return { axes: new Set(), object: true };
+      case "axis":
+        return { axes: new Set([binding.source.axis]), object: false };
+      case "initializer":
+        return nodeOrigin(binding.source.expression, nextSeen);
+      case "destructure": {
+        const source = nodeOrigin(binding.source.source, nextSeen);
+        return source.object
+          ? { axes: new Set([binding.source.property]), object: false }
+          : emptyOrigin();
+      }
+      case "unknown":
+        return emptyOrigin();
+    }
+  }
+
+  function nodeOrigin(node: ts.Node, seen: Set<CallbackBinding>): ValueOrigin {
     if (isNestedFunction(node)) return emptyOrigin();
+    if (ts.isExpression(node)) {
+      const unwrapped = unwrapExpression(node);
+      if (unwrapped !== node) return nodeOrigin(unwrapped, seen);
+    }
     if (ts.isIdentifier(node)) {
       const parent = node.parent;
       if (
@@ -1248,7 +1414,7 @@ function callbackAxes(callback: ts.Node): Set<string> {
       ) {
         return emptyOrigin();
       }
-      return identifierOrigin(node.text, seen);
+      return bindingOrigin(resolvedBinding(node), seen);
     }
     if (ts.isPropertyAccessExpression(node)) {
       const base = nodeOrigin(node.expression, seen);
@@ -1262,19 +1428,27 @@ function callbackAxes(callback: ts.Node): Set<string> {
     ) {
       const base = nodeOrigin(node.expression, seen);
       const property = staticModuleSpecifier(node.argumentExpression);
-      return base.object && property !== undefined
-        ? { axes: new Set([property]), object: false }
-        : base;
+      const origin = emptyOrigin();
+      mergeOrigin(origin, base);
+      mergeOrigin(origin, nodeOrigin(node.argumentExpression, seen));
+      origin.object = false;
+      if (base.object && property !== undefined) origin.axes.add(property);
+      return origin;
     }
     if (ts.isPropertyAssignment(node)) return nodeOrigin(node.initializer, seen);
     if (ts.isShorthandPropertyAssignment(node)) {
-      return identifierOrigin(node.name.text, seen);
+      return bindingOrigin(resolvedBinding(node.name), seen);
     }
-    if (ts.isSpreadAssignment(node)) return nodeOrigin(node.expression, seen);
+    if (ts.isSpreadAssignment(node)) {
+      const origin = nodeOrigin(node.expression, seen);
+      origin.object = false;
+      return origin;
+    }
     const origin = emptyOrigin();
     ts.forEachChild(node, (child) => mergeOrigin(origin, nodeOrigin(child, seen)));
+    origin.object = false;
     return origin;
-  };
+  }
 
   const axes = new Set<string>();
   for (const expression of componentReturnExpressions(callback) ?? []) {
@@ -1472,9 +1646,6 @@ export function inspectAuthoredWorld(
     ...file,
     source: stripComments(file.source),
   }));
-  const originalFiles = new Map(
-    sourceFiles.map((file) => [file.absolutePath, file] as const),
-  );
   const entryPath = entryFile?.path ?? "recipe.json";
   const astGraph = createAstGraph(root, presentationRoot, sourceFiles);
   const entryAst = entryFile === undefined
@@ -1680,18 +1851,6 @@ export function inspectAuthoredWorld(
     ["forbidden-text-clip", /(?:-webkit-)?background-clip\s*:\s*text\b/i, "text background clipping"],
   ] as const;
   for (const file of analyzedFiles) {
-    const dependencySource = originalFiles.get(file.absolutePath) ?? file;
-    const remoteImport = dependencies(dependencySource).specifiers.find((specifier) =>
-      /^https?:/i.test(specifier)
-    );
-    if (remoteImport !== undefined) {
-      addFinding(
-        findings,
-        "forbidden-remote-import",
-        file.path,
-        `Presentation source must not import ${remoteImport}`,
-      );
-    }
     for (const [code, pattern, label] of forbiddenChecks) {
       if (pattern.test(file.source)) {
         addFinding(

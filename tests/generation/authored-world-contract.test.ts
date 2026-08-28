@@ -285,6 +285,74 @@ describe("inspectAuthoredWorld", () => {
     )).toEqual([]);
   });
 
+  test("resolves a presentation directly re-exported from a recipe-owned module", () => {
+    const root = createSyntheticWorld();
+    const entryPath = join(root, "presentation/index.ts");
+    const entrySource = readFileSync(entryPath, "utf8");
+    write(root, "presentation/world.ts", entrySource);
+    write(root, "presentation/index.ts", 'export { presentation } from "./world";\n');
+
+    expect(inspectAuthoredWorld(root, expectation())).toEqual([]);
+  });
+
+  test("resolves an entry-local value exported under the presentation name", () => {
+    const root = createSyntheticWorld();
+    replace(
+      root,
+      "presentation/index.ts",
+      "export const presentation =",
+      "const localPresentation =",
+    );
+    const entryPath = join(root, "presentation/index.ts");
+    writeFileSync(
+      entryPath,
+      `${readFileSync(entryPath, "utf8")}\nexport { localPresentation as presentation };\n`,
+    );
+
+    expect(inspectAuthoredWorld(root, expectation())).toEqual([]);
+  });
+
+  test("resolves an imported alias exported under the presentation name", () => {
+    const root = createSyntheticWorld();
+    const entryPath = join(root, "presentation/index.ts");
+    const worldSource = readFileSync(entryPath, "utf8").replace(
+      "export const presentation =",
+      "export const authoredWorld =",
+    );
+    write(root, "presentation/world.ts", worldSource);
+    write(
+      root,
+      "presentation/index.ts",
+      `import { authoredWorld as importedWorld } from "./world";
+export { importedWorld as presentation };
+`,
+    );
+
+    expect(inspectAuthoredWorld(root, expectation())).toEqual([]);
+  });
+
+  test.each(["cyclic", "unresolved"])(
+    "fails closed deterministically for a %s presentation export graph",
+    (kind) => {
+      const root = createSyntheticWorld();
+      if (kind === "cyclic") {
+        write(root, "presentation/index.ts", 'export { presentation } from "./cycle-a";\n');
+        write(root, "presentation/cycle-a.ts", 'export { presentation } from "./cycle-b";\n');
+        write(root, "presentation/cycle-b.ts", 'export { presentation } from "./cycle-a";\n');
+      } else {
+        write(root, "presentation/index.ts", 'export { missing as presentation } from "./world";\n');
+        write(root, "presentation/world.ts", "export const other = {};\n");
+      }
+
+      const first = inspectAuthoredWorld(root, expectation());
+      const second = inspectAuthoredWorld(root, expectation());
+
+      expect(first).toEqual(second);
+      expect(findingsWithCode(first, "missing-presentation-view")).toHaveLength(5);
+      expect(findingsWithCode(first, "unresolved-map-profile")).toHaveLength(1);
+    },
+  );
+
   test("does not count nested, typed, or string presentation-key decoys", () => {
     const root = createSyntheticWorld();
     replace(
@@ -556,6 +624,105 @@ void deadRequiredMode;
     )).toEqual([]);
   });
 
+  test("traces const alias chains and renamed local destructuring to the route parameter", () => {
+    const root = createSyntheticWorld();
+    replace(
+      root,
+      "presentation/theme-map-profile.ts",
+      [
+        "route: (route: { tone: string; source: string; certainty: string; mode: string }) => ({",
+        '    className: `route--${route.tone} route-source--${route.source} route-certainty--${route.certainty} route-mode--${route.mode}`,',
+        "  }),",
+      ].join("\n"),
+      [
+        "route: (route: { tone: string; source: string; certainty: string; mode: string }) => {",
+        "    const routeFixture = route;",
+        "    const routeAlias = routeFixture;",
+        "    const { tone: routeTone, source: routeSource, certainty: routeCertainty, mode: routeMode } = routeAlias;",
+        "    return {",
+        "      className: `route--${routeTone} route-source--${routeSource} route-certainty--${routeCertainty} route-mode--${routeMode}` ,",
+        "    };",
+        "  },",
+      ].join("\n"),
+    );
+
+    expect(findingsWithCode(
+      inspectAuthoredWorld(root, expectation()),
+      "missing-map-profile-axis",
+    )).toEqual([]);
+  });
+
+  test.each([
+    [
+      "same-name nested block object",
+      [
+        "route: (route: { tone: string; source: string; certainty: string; mode: string }) => {",
+        "    {",
+        '      const route = { tone: "decoy", source: "decoy", certainty: "decoy", mode: "decoy" };',
+        "      return { className: `${route.tone} ${route.source} ${route.certainty} ${route.mode}` };",
+        "    }",
+        "  },",
+      ].join("\n"),
+    ],
+    [
+      "same-name catch binding",
+      [
+        "route: (route: { tone: string; source: string; certainty: string; mode: string }) => {",
+        "    try {",
+        '      throw { tone: "decoy", source: "decoy", certainty: "decoy", mode: "decoy" };',
+        "    } catch (route) {",
+        "      return { className: `${route.tone} ${route.source} ${route.certainty} ${route.mode}` };",
+        "    }",
+        "  },",
+      ].join("\n"),
+    ],
+    [
+      "same-name nested function parameter",
+      [
+        "route: (route: { tone: string; source: string; certainty: string; mode: string }) => {",
+        "    const renderRoute = (route: { tone: string; source: string; certainty: string; mode: string }) =>",
+        "      `${route.tone} ${route.source} ${route.certainty} ${route.mode}`;",
+        '    return { className: renderRoute({ tone: "decoy", source: "decoy", certainty: "decoy", mode: "decoy" }) };',
+        "  },",
+      ].join("\n"),
+    ],
+    [
+      "destructuring source shadow",
+      [
+        "route: (route: { tone: string; source: string; certainty: string; mode: string }) => {",
+        '    const decoy = { tone: "decoy", source: "decoy", certainty: "decoy", mode: "decoy" };',
+        "    {",
+        "      const route = decoy;",
+        "      const { tone, source: routeSource, certainty, mode } = route;",
+        "      return { className: `${tone} ${routeSource} ${certainty} ${mode}` };",
+        "    }",
+        "  },",
+      ].join("\n"),
+    ],
+  ])("does not let a %s impersonate the route fixture", (_label, replacement) => {
+    const root = createSyntheticWorld();
+    replace(
+      root,
+      "presentation/theme-map-profile.ts",
+      [
+        "route: (route: { tone: string; source: string; certainty: string; mode: string }) => ({",
+        '    className: `route--${route.tone} route-source--${route.source} route-certainty--${route.certainty} route-mode--${route.mode}`,',
+        "  }),",
+      ].join("\n"),
+      replacement,
+    );
+
+    expect(findingsWithCode(
+      inspectAuthoredWorld(root, expectation()),
+      "missing-map-profile-axis",
+    ).map(({ message }) => message)).toEqual([
+      "Map profile route must consume its own certainty fixture",
+      "Map profile route must consume its own mode fixture",
+      "Map profile route must consume its own source fixture",
+      "Map profile route must consume its own tone fixture",
+    ]);
+  });
+
   test("fails closed when presentation.mapProfile cannot resolve to the declared profile", () => {
     const root = createSyntheticWorld();
     replace(
@@ -801,6 +968,107 @@ void import(\`./\${selectedModule}.tsx\`, { with: { type: "javascript" } });
         message: "Local dynamic import must use a static string literal",
       },
     ]);
+  });
+
+  test.each([
+    ["bare-looking expression", 'const target = "react"; void import(target);'],
+    ["interpolated remote URL", 'const host = "example.test"; void import(`https://${host}/remote.js`);'],
+    ["interpolated file URL", 'const fileName = "secret.ts"; void import(`file:///tmp/${fileName}`);'],
+    ["interpolated data URL", 'const payload = "export default 1"; void import(`data:text/javascript,${payload}`);'],
+  ])("fails closed for a non-literal dynamic import with a %s", (_label, statement) => {
+    const root = createSyntheticWorld();
+    const entryPath = join(root, "presentation/index.ts");
+    writeFileSync(
+      entryPath,
+      `${readFileSync(entryPath, "utf8")}\n${statement}\n`,
+    );
+
+    expect(findingsWithCode(
+      inspectAuthoredWorld(root, expectation()),
+      "unresolved-dynamic-import",
+    )).toEqual([
+      {
+        code: "unresolved-dynamic-import",
+        path: "presentation/index.ts",
+        message: "Local dynamic import must use a static string literal",
+      },
+    ]);
+  });
+
+  test.each([
+    ["remote scheme", "ftp://example.test/world.js", "forbidden-remote-import"],
+    ["file URL", "file:///tmp/outside.ts", "unsafe-import-specifier"],
+    ["data URL", "data:text/javascript,export default 1", "unsafe-import-specifier"],
+    ["absolute POSIX path", "/tmp/outside.ts", "unsafe-import-specifier"],
+    ["absolute Windows slash path", "C:/outside.ts", "unsafe-import-specifier"],
+    ["absolute Windows backslash path", "C:\\outside.ts", "unsafe-import-specifier"],
+    ["UNC path", "\\\\server\\share\\outside.ts", "unsafe-import-specifier"],
+    ["backslash package lookalike", "package\\subpath", "unsafe-import-specifier"],
+  ])("rejects a static JS/TS %s", (_label, specifier, code) => {
+    const root = createSyntheticWorld();
+    const entryPath = join(root, "presentation/index.ts");
+    writeFileSync(
+      entryPath,
+      `${readFileSync(entryPath, "utf8")}\nimport ${JSON.stringify(specifier)};\n`,
+    );
+
+    expect(findingsWithCode(inspectAuthoredWorld(root, expectation()), code)).toEqual([
+      expect.objectContaining({ path: "presentation/index.ts" }),
+    ]);
+  });
+
+  test("allows true bare JS/TS package specifiers", () => {
+    const root = createSyntheticWorld();
+    const entryPath = join(root, "presentation/index.ts");
+    writeFileSync(
+      entryPath,
+      `${readFileSync(entryPath, "utf8")}\nimport "react";\nimport "@scope/package/subpath";\n`,
+    );
+
+    const findings = inspectAuthoredWorld(root, expectation());
+
+    expect(findingsWithCode(findings, "unsafe-import-specifier")).toEqual([]);
+    expect(findingsWithCode(findings, "forbidden-remote-import")).toEqual([]);
+  });
+
+  test.each([
+    ["remote URL", "https://example.test/world.css", "forbidden-remote-import"],
+    ["file URL", "file:///tmp/outside.css", "unsafe-import-specifier"],
+    ["data URL", "data:text/css,.poison%7Bcolor:red%7D", "unsafe-import-specifier"],
+    ["absolute POSIX path", "/tmp/outside.css", "unsafe-import-specifier"],
+    ["absolute Windows path", "C:/outside.css", "unsafe-import-specifier"],
+    ["UNC path", "\\\\server\\share\\outside.css", "unsafe-import-specifier"],
+    ["backslash path", ".\\outside.css", "unsafe-import-specifier"],
+    ["bare package", "reset-package", "unsafe-import-specifier"],
+  ])("rejects a CSS @import %s", (_label, specifier, code) => {
+    const root = createSyntheticWorld();
+    const cssPath = join(root, "presentation/styles/index.css");
+    writeFileSync(
+      cssPath,
+      `@import ${JSON.stringify(specifier)};\n${readFileSync(cssPath, "utf8")}`,
+    );
+
+    expect(findingsWithCode(inspectAuthoredWorld(root, expectation()), code)).toEqual([
+      expect.objectContaining({ path: "presentation/styles/index.css" }),
+    ]);
+  });
+
+  test("rejects an absolute import without reading or trusting its target", () => {
+    const root = createSyntheticWorld();
+    replace(root, "presentation/home.tsx", "mission-select", "mission-index");
+    write(root, "outside.ts", 'import "https://example.test/poison.js"; export const signal = "mission-select";\n');
+    const outsidePath = join(root, "outside.ts");
+    const entryPath = join(root, "presentation/index.ts");
+    writeFileSync(
+      entryPath,
+      `${readFileSync(entryPath, "utf8")}\nimport ${JSON.stringify(outsidePath)};\n`,
+    );
+
+    const findings = inspectAuthoredWorld(root, expectation());
+
+    expect(findingsWithCode(findings, "unsafe-import-specifier")).toHaveLength(1);
+    expect(findingsWithCode(findings, "missing-required-source-signal")).toHaveLength(1);
+    expect(findingsWithCode(findings, "forbidden-remote-import")).toHaveLength(0);
   });
 
   test.each([
