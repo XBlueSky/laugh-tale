@@ -16,6 +16,8 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, describe, expect, test } from "vitest";
 
+import { inspectAuthoredWorld } from "./authored-world-contract.js";
+
 type Manifest = {
   schemaVersion: number;
   id: string;
@@ -55,6 +57,7 @@ const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 const fixtureCatalog = join(repoRoot, "tests/fixtures/recipe-v2");
 const fixtureRecipe = join(fixtureCatalog, "valid");
 const pluginRoot = join(repoRoot, "plugins/eternal-pose");
+const fieldAtlasRoot = join(pluginRoot, "recipes-v2/field-atlas");
 const recipeV2ModuleUrl = pathToFileURL(join(pluginRoot, "lib/recipe-v2.mjs")).href;
 const createTripProjectModuleUrl = pathToFileURL(join(pluginRoot, "scripts/create-trip-project.mjs")).href;
 const { RECIPE_SCHEMA_VERSION, loadRecipeV2, loadRecipeV2Catalog } = (await import(recipeV2ModuleUrl)) as RecipeV2Module;
@@ -105,6 +108,33 @@ afterEach(() => {
 });
 
 describe("recipe v2 manifest loading", () => {
+  test("keeps the canonical Field Atlas source above the authored-world lower bound", () => {
+    expect(inspectAuthoredWorld(fieldAtlasRoot, {
+      id: "field-atlas",
+      requiredSourceSignals: [
+        /atlas-index/,
+        /atlas-legend/,
+        /route-band/,
+        /stop-number/,
+      ],
+      forbiddenSourceSignals: [
+        /scrapbook|torn|stamp|script-font/i,
+        /rounded card grid|pill cluster/i,
+      ],
+      requiredMapModes: ["topographic"],
+      requiredStates: [
+        "empty",
+        "memory-only",
+        "candidate",
+        "shopping",
+        "reservation",
+        "task",
+        "route-error",
+        "map-error",
+      ],
+    })).toEqual([]);
+  });
+
   test("loads the complete internal fixture catalog", async () => {
     const catalog = await loadRecipeV2Catalog(fixtureCatalog);
     const valid = catalog.get("valid")!;
