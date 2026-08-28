@@ -15,6 +15,8 @@ const script = join(repoRoot, "scripts/stage-starter-consumer.mjs");
 const recipeCatalogRoot = join(repoRoot, "plugins/eternal-pose/recipes-v2");
 const packRoot = join(repoRoot, "tmp/staged-packs");
 const nonPackageWorkspaceDir = join(repoRoot, "packages/.staging-non-package");
+const nonPackageWorkspaceFile = join(repoRoot, "packages/.staging-non-package-file");
+const systemMetadataFile = join(repoRoot, "packages/.DS_Store");
 const coreVersion = (
   JSON.parse(readFileSync(join(repoRoot, "packages/core/package.json"), "utf8")) as {
     version: string;
@@ -64,13 +66,16 @@ function expectWorkspaceTarballs(staged: string, tarballs: readonly string[]): v
 afterEach(() => {
   for (const root of stagedRoots.splice(0)) rmSync(root, { recursive: true, force: true });
   rmSync(nonPackageWorkspaceDir, { recursive: true, force: true });
+  rmSync(nonPackageWorkspaceFile, { force: true });
 });
 
 describe("stage-starter-consumer", () => {
   test("keeps the public starter-copy path clean while ignoring non-package workspace entries", async () => {
     const outDir = stagedRoot("staged-public-starter-test");
+    const systemMetadataWasPresent = existsSync(systemMetadataFile);
     mkdirSync(nonPackageWorkspaceDir);
     writeFileSync(join(nonPackageWorkspaceDir, "README.md"), "not a package\n");
+    writeFileSync(nonPackageWorkspaceFile, "owned non-package fixture\n");
     const { stagedRoot: staged, tarballs } = await stageStarterConsumer({
       install: false,
       outDir,
@@ -78,7 +83,10 @@ describe("stage-starter-consumer", () => {
 
     expect(staged).toBe(outDir);
     expectWorkspaceTarballs(staged, tarballs);
-    expect(existsSync(join(repoRoot, "packages/.DS_Store"))).toBe(true);
+    expect(readFileSync(nonPackageWorkspaceFile, "utf8")).toBe("owned non-package fixture\n");
+    // Finder owns this file and may rewrite or replace its directory metadata.
+    // Only the dedicated fixture above carries deterministic byte assertions.
+    if (systemMetadataWasPresent) expect(existsSync(systemMetadataFile)).toBe(true);
     expect(existsSync(join(staged, "src/App.tsx"))).toBe(true);
     expect(existsSync(join(staged, "src/presentation/DayHeader.tsx"))).toBe(true);
     expect(existsSync(join(staged, "package-lock.json"))).toBe(false);
