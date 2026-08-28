@@ -522,9 +522,37 @@ describe("Field Atlas recipe contract", () => {
     };
     const uncertain = profile.route({ ...routeBase, tone: "default" });
     const selected = profile.route({ ...routeBase, tone: "selected" });
+    const unavailable = profile.route({
+      ...routeBase,
+      mode: "flight",
+      tone: "unavailable",
+    });
     expect(uncertain.casing).toBeDefined();
     expect(uncertain.dash).toEqual(expect.arrayContaining([expect.any(Number)]));
     expect(selected.width).toBeGreaterThan(uncertain.width);
+    expect(selected.dash).toEqual(uncertain.dash);
+    expect(unavailable.opacity).toBeLessThan(uncertain.opacity);
+    expect(unavailable.width).toBeLessThan(selected.width);
+    expect(unavailable.dash).toEqual(uncertain.dash);
+
+    const confirmedRoute = {
+      ...routeBase,
+      source: "provider" as const,
+      certainty: "confirmed" as const,
+      tone: "default" as const,
+    };
+    const modeTreatments = (["walking", "transit", "flight"] as const).map(
+      (mode) => {
+        const visual = profile.route({ ...confirmedRoute, mode });
+        return [visual.width, visual.casing?.width, visual.dash ?? []];
+      },
+    );
+    expect(new Set(modeTreatments.map((treatment) => JSON.stringify(treatment))).size).toBe(3);
+    expect(modeTreatments).toEqual([
+      [3.5, 7.5, [3, 4]],
+      [4.5, 9, [11, 4]],
+      [4, 8, [14, 6, 2, 6]],
+    ]);
   });
 
   test("uses a distinct ruled atlas structure with local system-font resources only", () => {

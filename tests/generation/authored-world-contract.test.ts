@@ -3,6 +3,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -83,7 +84,9 @@ function createSyntheticWorld(): string {
   write(
     root,
     "presentation/index.ts",
-    `export { Home } from "./home";
+    `import type { TripPresentation } from "../controllers/presentation-contract";
+
+export { Home } from "./home";
 export { Experience } from "./experience";
 export { SetupRequired, Loading, FatalError } from "./states/index";
 export { syntheticMapProfile } from "./theme-map-profile";
@@ -100,7 +103,7 @@ export const presentation = {
   Loading,
   FatalError,
   mapProfile: syntheticMapProfile,
-};
+} satisfies TripPresentation;
 `,
   );
   write(
@@ -150,8 +153,8 @@ export function FatalError() { return <main data-state="fatal-error" />; }
   basemap: { mode: "flat", density: "low", contrast: "high", poi: "minimal" },
   marker: (place: { tone: string }) => ({ className: \`marker--\${place.tone}\` }),
   userLocation: () => ({ className: "marker--location" }),
-  route: (route: { tone: string; source: string; certainty: string }) => ({
-    className: \`route--\${route.tone} route-source--\${route.source} route-certainty--\${route.certainty}\`,
+  route: (route: { tone: string; source: string; certainty: string; mode: string }) => ({
+    className: \`route--\${route.tone} route-source--\${route.source} route-certainty--\${route.certainty} route-mode--\${route.mode}\`,
   }),
 };
 `,
@@ -253,6 +256,168 @@ describe("inspectAuthoredWorld", () => {
     expect(missing[0]?.message).toContain(view);
   });
 
+  test("accepts quoted own presentation keys through type, parenthesis, as, and satisfies wrappers", () => {
+    const root = createSyntheticWorld();
+    replace(
+      root,
+      "presentation/index.ts",
+      `export const presentation = {
+  Home,
+  Experience,
+  SetupRequired,
+  Loading,
+  FatalError,
+  mapProfile: syntheticMapProfile,
+} satisfies TripPresentation;`,
+      `export const presentation: TripPresentation = (({
+  "Home": Home,
+  'Experience': Experience,
+  "SetupRequired": SetupRequired,
+  'Loading': Loading,
+  "FatalError": FatalError,
+  mapProfile: syntheticMapProfile,
+} as TripPresentation) satisfies TripPresentation);`,
+    );
+
+    expect(findingsWithCode(
+      inspectAuthoredWorld(root, expectation()),
+      "missing-presentation-view",
+    )).toEqual([]);
+  });
+
+  test("does not count nested, typed, or string presentation-key decoys", () => {
+    const root = createSyntheticWorld();
+    replace(
+      root,
+      "presentation/index.ts",
+      "  Home,\n  Experience,",
+      `  nested: { Home },
+  keyLabel: "Home",
+  Experience,`,
+    );
+    const entryPath = join(root, "presentation/index.ts");
+    writeFileSync(
+      entryPath,
+      `${readFileSync(entryPath, "utf8")}
+type PresentationShapeDecoy = { Home: unknown };
+const deadPresentation = { Home } satisfies PresentationShapeDecoy;
+void deadPresentation;
+`,
+    );
+
+    const missing = findingsWithCode(
+      inspectAuthoredWorld(root, expectation()),
+      "missing-presentation-view",
+    );
+
+    expect(missing).toHaveLength(1);
+    expect(missing[0]?.message).toContain("Home");
+  });
+
+  test("binds root signatures to the referenced components instead of reachable JSX decoys", () => {
+    const root = createSyntheticWorld();
+    const experiencePath = join(root, "presentation/experience.tsx");
+    writeFileSync(
+      experiencePath,
+      `const deadHomeRoot = <main className="synthetic-experience" data-testid="trip-home" />;
+${readFileSync(experiencePath, "utf8")}
+void deadHomeRoot;
+`,
+    );
+
+    const findings = inspectAuthoredWorld(root, expectation());
+
+    expect(findingsWithCode(findings, "identical-root-signature")).toEqual([]);
+    expect(findingsWithCode(findings, "missing-root-signature")).toEqual([]);
+  });
+
+  test("ignores quoted, typed, nested-function, and dead JSX root decoys", () => {
+    const root = createSyntheticWorld();
+    replace(
+      root,
+      "presentation/home.tsx",
+      `export function Home() {
+  const persistence = "memory-only";
+  const items: string[] = [];
+  return <main className="synthetic-home mission-select" data-testid="trip-home">
+    <p data-contract-state={persistence}>Local progress only</p>
+    {items.length === 0 ? <p data-contract-state="empty">No itinerary items.</p> : null}
+  </main>;
+}`,
+      `const quotedRoot = '<main data-testid="trip-home" />';
+type TypedRoot = { "trip-home": string };
+const deadRoot = <main className="synthetic-home mission-select" data-testid="trip-home" />;
+function nestedRootDecoy() {
+  return <main className="synthetic-home mission-select" data-testid="trip-home" />;
+}
+
+export function Home() {
+  const persistence = "memory-only";
+  const items: string[] = [];
+  void quotedRoot; void deadRoot; void nestedRootDecoy;
+  return <section className="actual-home mission-select">
+    <p data-contract-state={persistence}>Local progress only</p>
+    {items.length === 0 ? <p data-contract-state="empty">No itinerary items.</p> : null}
+  </section>;
+}`,
+    );
+
+    const missing = findingsWithCode(
+      inspectAuthoredWorld(root, expectation()),
+      "missing-root-signature",
+    );
+    expect(missing).toHaveLength(1);
+    expect(missing[0]?.message).toContain("Home");
+  });
+
+  test("fails closed when an actual presentation component cannot be resolved", () => {
+    const root = createSyntheticWorld();
+    replace(root, "presentation/index.ts", "  Home,\n", "  Home: MissingHome,\n");
+
+    const findings = inspectAuthoredWorld(root, expectation());
+
+    expect(findingsWithCode(findings, "unresolved-presentation-component")).toEqual([
+      {
+        code: "unresolved-presentation-component",
+        path: "presentation/index.ts",
+        message: "Presentation Home must resolve to a local component declaration",
+      },
+    ]);
+    const missingRoot = findingsWithCode(findings, "missing-root-signature");
+    expect(missingRoot).toHaveLength(1);
+    expect(missingRoot[0]?.message).toContain("Home");
+  });
+
+  test("resolves local arrow-expression and arrow-block presentation components", () => {
+    const root = createSyntheticWorld();
+    replace(root, "presentation/home.tsx", ' data-testid="trip-home"', "");
+    replace(root, "presentation/experience.tsx", ' data-testid="trip-experience"', "");
+    write(
+      root,
+      "presentation/local-components.tsx",
+      `export const LocalHome = () => <main className="local-home" data-testid="trip-home" />;
+export const LocalExperience = () => {
+  return <main className="local-experience" data-testid="trip-experience" />;
+};
+`,
+    );
+    replace(
+      root,
+      "presentation/index.ts",
+      `import { Home } from "./home";`,
+      `import { Home } from "./home";
+import { LocalHome, LocalExperience } from "./local-components";`,
+    );
+    replace(root, "presentation/index.ts", "  Home,\n", "  Home: LocalHome,\n");
+    replace(root, "presentation/index.ts", "  Experience,\n", "  Experience: LocalExperience,\n");
+
+    const findings = inspectAuthoredWorld(root, expectation());
+
+    expect(findingsWithCode(findings, "unresolved-presentation-component")).toEqual([]);
+    expect(findingsWithCode(findings, "missing-root-signature")).toEqual([]);
+    expect(findingsWithCode(findings, "identical-root-signature")).toEqual([]);
+  });
+
   test.each(requiredStates)("reports a missing %s treatment", (state) => {
     const root = createSyntheticWorld();
     const path = state === "empty" || state === "memory-only"
@@ -277,6 +442,7 @@ describe("inspectAuthoredWorld", () => {
     ["route tone", /route\.tone/g, "route.label"],
     ["route source", /route\.source/g, "route.label"],
     ["route certainty", /route\.certainty/g, "route.label"],
+    ["route mode", /route\.mode/g, "route.label"],
   ] as const)("reports a map profile missing the %s fixture axis", (_axis, from, to) => {
     const root = createSyntheticWorld();
     replace(root, "presentation/theme-map-profile.ts", from, to);
@@ -297,6 +463,118 @@ describe("inspectAuthoredWorld", () => {
     expect(missing).toHaveLength(1);
     expect(missing[0]?.path).toBe("presentation/theme-map-profile.ts");
     expect(missing[0]?.message).toContain("flat");
+  });
+
+  test("does not let dead constants and unrelated callbacks satisfy the actual map profile", () => {
+    const root = createSyntheticWorld();
+    replace(root, "presentation/theme-map-profile.ts", /place\.tone/g, "place.label");
+    replace(root, "presentation/theme-map-profile.ts", /route\.tone/g, "route.label");
+    replace(root, "presentation/theme-map-profile.ts", /route\.source/g, "route.label");
+    replace(root, "presentation/theme-map-profile.ts", /route\.certainty/g, "route.label");
+    replace(root, "presentation/theme-map-profile.ts", /route\.mode/g, "route.label");
+    const profilePath = join(root, "presentation/theme-map-profile.ts");
+    writeFileSync(
+      profilePath,
+      `${readFileSync(profilePath, "utf8")}
+const deadFlatMode = "flat";
+const deadMarker = (place: { tone: string }) => place.tone;
+const deadRoute = (route: { tone: string; source: string; certainty: string; mode: string }) =>
+  [route.tone, route.source, route.certainty, route.mode];
+void deadFlatMode; void deadMarker; void deadRoute;
+`,
+    );
+
+    const missing = findingsWithCode(
+      inspectAuthoredWorld(root, expectation()),
+      "missing-map-profile-axis",
+    );
+
+    expect(missing.map(({ message }) => message)).toEqual([
+      "Map profile marker must consume its own tone fixture",
+      "Map profile route must consume its own certainty fixture",
+      "Map profile route must consume its own mode fixture",
+      "Map profile route must consume its own source fixture",
+      "Map profile route must consume its own tone fixture",
+    ]);
+  });
+
+  test("requires the actual basemap mode instead of a dead quoted mode", () => {
+    const root = createSyntheticWorld();
+    replace(root, "presentation/theme-map-profile.ts", 'mode: "flat"', 'mode: "neutral"');
+    const profilePath = join(root, "presentation/theme-map-profile.ts");
+    writeFileSync(
+      profilePath,
+      `${readFileSync(profilePath, "utf8")}
+const deadRequiredMode = "flat";
+void deadRequiredMode;
+`,
+    );
+
+    expect(findingsWithCode(
+      inspectAuthoredWorld(root, expectation()),
+      "missing-map-mode",
+    )).toHaveLength(1);
+  });
+
+  test("traces callback-owned aliases and destructuring back to map fixture parameters", () => {
+    const root = createSyntheticWorld();
+    replace(
+      root,
+      "presentation/theme-map-profile.ts",
+      'marker: (place: { tone: string }) => ({ className: `marker--${place.tone}` }),',
+      [
+        "marker: (place: { tone: string }) => {",
+        "    const markerFixture = place;",
+        "    const { tone: markerTone } = markerFixture;",
+        "    return { className: `marker--${markerTone}` };",
+        "  },",
+      ].join("\n"),
+    );
+    replace(
+      root,
+      "presentation/theme-map-profile.ts",
+      [
+        "route: (route: { tone: string; source: string; certainty: string; mode: string }) => ({",
+        '    className: `route--${route.tone} route-source--${route.source} route-certainty--${route.certainty} route-mode--${route.mode}`,',
+        "  }),",
+      ].join("\n"),
+      [
+        "route: ({ tone, source: routeSource, certainty, mode }: {",
+        "    tone: string;",
+        "    source: string;",
+        "    certainty: string;",
+        "    mode: string;",
+        "  }) => ({",
+        '    className: `route--${tone} route-source--${routeSource} route-certainty--${certainty} route-mode--${mode}`,',
+        "  }),",
+      ].join("\n"),
+    );
+
+    expect(findingsWithCode(
+      inspectAuthoredWorld(root, expectation()),
+      "missing-map-profile-axis",
+    )).toEqual([]);
+  });
+
+  test("fails closed when presentation.mapProfile cannot resolve to the declared profile", () => {
+    const root = createSyntheticWorld();
+    replace(
+      root,
+      "presentation/index.ts",
+      "  mapProfile: syntheticMapProfile,",
+      "  mapProfile: MissingMapProfile,",
+    );
+
+    expect(findingsWithCode(
+      inspectAuthoredWorld(root, expectation()),
+      "unresolved-map-profile",
+    )).toEqual([
+      {
+        code: "unresolved-map-profile",
+        path: "presentation/index.ts",
+        message: "Presentation mapProfile must resolve to the declared local map profile",
+      },
+    ]);
   });
 
   test("reports missing declared and source-level responsive viewport coverage", () => {
@@ -457,6 +735,154 @@ const visual = "neon-grid linear-gradient";
     expect(missingSignal[0]?.message).toContain("mission-select");
     expect(findingsWithCode(findings, "missing-focus-visible")).toHaveLength(1);
     expect(findings.some(({ code }) => code.startsWith("forbidden-") || code === "sibling-recipe-reference")).toBe(false);
+  });
+
+  test("ignores import-like comments, strings, regexes, JSX text, and ordinary templates", () => {
+    const root = createSyntheticWorld();
+    write(
+      root,
+      "presentation/foreign.tsx",
+      'import "https://example.test/poison.js";\nexport const poison = "field-atlas";\n',
+    );
+    const entryPath = join(root, "presentation/experience.tsx");
+    writeFileSync(
+      entryPath,
+      `${readFileSync(entryPath, "utf8")}
+// import "./foreign";
+/* export { poison } from "./foreign"; */
+const quotedImport = 'import "./foreign"';
+const ordinaryTemplate = \`import("./foreign")\`;
+const importPattern = /import\\("\\.\\/foreign"\\)/;
+const jsxText = <span>import("./foreign")</span>;
+void quotedImport; void ordinaryTemplate; void importPattern; void jsxText;
+`,
+    );
+
+    expect(inspectAuthoredWorld(root, expectation())).toEqual([]);
+  });
+
+  test("follows literal dynamic imports with options and rejects remote ones", () => {
+    const root = createSyntheticWorld();
+    write(root, "presentation/dynamic-source.ts", 'export const dynamicSignal = "dynamic-stage";\n');
+    const entryPath = join(root, "presentation/index.ts");
+    writeFileSync(
+      entryPath,
+      `${readFileSync(entryPath, "utf8")}
+void import(\`./dynamic-source\`, { with: { type: "json" } });
+void import(\`https://example.test/remote.js\`, { with: { type: "javascript" } });
+`,
+    );
+
+    const findings = inspectAuthoredWorld(root, expectation({
+      requiredSourceSignals: [/mission-select/, /stage-list/, /dynamic-stage/],
+    }));
+
+    expect(findingsWithCode(findings, "missing-required-source-signal")).toEqual([]);
+    expect(findingsWithCode(findings, "forbidden-remote-import")).toHaveLength(1);
+  });
+
+  test("fails closed for an interpolated local dynamic import", () => {
+    const root = createSyntheticWorld();
+    const entryPath = join(root, "presentation/index.ts");
+    writeFileSync(
+      entryPath,
+      `${readFileSync(entryPath, "utf8")}
+const selectedModule = "dynamic-source";
+void import(\`./\${selectedModule}.tsx\`, { with: { type: "javascript" } });
+`,
+    );
+
+    const findings = inspectAuthoredWorld(root, expectation());
+
+    expect(findingsWithCode(findings, "unresolved-dynamic-import")).toEqual([
+      {
+        code: "unresolved-dynamic-import",
+        path: "presentation/index.ts",
+        message: "Local dynamic import must use a static string literal",
+      },
+    ]);
+  });
+
+  test.each([
+    '@import "./details.css";',
+    "@import './details.css';",
+    "@import url(./details.css);",
+    '@import url("./details.css");',
+    "@import /* local */ url( './details.css' );",
+  ])("follows the CSS dependency form %s", (rule) => {
+    const root = createSyntheticWorld();
+    if (rule !== '@import "./details.css";') {
+      replace(root, "presentation/styles/index.css", '@import "./details.css";', rule);
+    }
+
+    expect(inspectAuthoredWorld(root, expectation())).toEqual([]);
+  });
+
+  test("ignores CSS import-like comments and declaration strings", () => {
+    const root = createSyntheticWorld();
+    write(root, "presentation/styles/foreign.css", ".foreign { background: linear-gradient(red, blue); }\n");
+    const cssPath = join(root, "presentation/styles/index.css");
+    writeFileSync(
+      cssPath,
+      `${readFileSync(cssPath, "utf8")}
+/* @import url("./foreign.css"); */
+.import-example::before { content: '@import url("./foreign.css")'; }
+`,
+    );
+
+    expect(inspectAuthoredWorld(root, expectation())).toEqual([]);
+  });
+
+  test("lets a reachable foreign file satisfy requirements and report poison", () => {
+    const root = createSyntheticWorld();
+    replace(root, "presentation/home.tsx", "mission-select", "mission-index");
+    write(
+      root,
+      "presentation/foreign.tsx",
+      'import "https://example.test/reachable-poison.js";\nexport const sourceSignal = "mission-select";\n',
+    );
+    const entryPath = join(root, "presentation/index.ts");
+    writeFileSync(entryPath, `${readFileSync(entryPath, "utf8")}\nimport "./foreign";\n`);
+
+    const findings = inspectAuthoredWorld(root, expectation());
+
+    expect(findingsWithCode(findings, "missing-required-source-signal")).toEqual([]);
+    expect(findingsWithCode(findings, "forbidden-remote-import")).toHaveLength(1);
+  });
+
+  test("rejects a reachable symbolic-link import without reading its target", () => {
+    const root = createSyntheticWorld();
+    replace(root, "presentation/home.tsx", "mission-select", "mission-index");
+    write(root, "outside.ts", 'export const sourceSignal = "mission-select";\n');
+    symlinkSync(join(root, "outside.ts"), join(root, "presentation/linked.ts"));
+    const entryPath = join(root, "presentation/index.ts");
+    writeFileSync(entryPath, `${readFileSync(entryPath, "utf8")}\nimport "./linked";\n`);
+
+    const findings = inspectAuthoredWorld(root, expectation());
+
+    expect(findingsWithCode(findings, "unsafe-local-import")).toHaveLength(1);
+    expect(findingsWithCode(findings, "missing-required-source-signal")).toHaveLength(1);
+  });
+
+  test("rejects nonregular, escaping, and unresolved reachable imports", () => {
+    const root = createSyntheticWorld();
+    mkdirSync(join(root, "presentation/not-a-file.ts"));
+    write(root, "outside.ts", 'import "https://example.test/outside-poison.js";\n');
+    const entryPath = join(root, "presentation/index.ts");
+    writeFileSync(
+      entryPath,
+      `${readFileSync(entryPath, "utf8")}
+import "./not-a-file.ts";
+import "../outside.ts";
+import "./missing-local-module";
+`,
+    );
+
+    const findings = inspectAuthoredWorld(root, expectation());
+
+    expect(findingsWithCode(findings, "unsafe-local-import")).toHaveLength(2);
+    expect(findingsWithCode(findings, "unresolved-local-import")).toHaveLength(1);
+    expect(findingsWithCode(findings, "forbidden-remote-import")).toHaveLength(0);
   });
 
   test("returns de-duplicated findings in stable path/code/message order", () => {

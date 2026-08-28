@@ -85,12 +85,14 @@ describe("assertMapVisualProfile", () => {
     ["contrast", "extreme"],
     ["poi", "all"],
   ] as const)("rejects unsupported basemap %s=%s", (field, value) => {
-    const profile = validProfile({
-      basemap: {
-        ...validProfile().basemap,
-        [field]: value,
-      } as MapVisualProfile["basemap"],
-    });
+    const invalidBasemap: Record<string, unknown> = {
+      ...validProfile().basemap,
+      [field]: value,
+    };
+    const profile = {
+      ...validProfile(),
+      basemap: invalidBasemap,
+    } as unknown as MapVisualProfile;
 
     expect(() => assertMapVisualProfile(profile)).toThrow(
       new RegExp(`basemap\\.${field}`, "i"),

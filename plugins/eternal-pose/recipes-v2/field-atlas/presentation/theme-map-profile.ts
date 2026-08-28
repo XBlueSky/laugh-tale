@@ -121,16 +121,25 @@ export const fieldAtlasMapProfile = {
       route.certainty === "unverified";
     const selected = route.tone === "selected";
     const unavailable = route.tone === "unavailable";
+    const modeTreatment =
+      route.mode === "walking"
+        ? { width: 3.5, casingWidth: 7.5, dash: [3, 4] }
+        : route.mode === "transit"
+          ? { width: 4.5, casingWidth: 9, dash: [11, 4] }
+          : route.mode === "flight"
+            ? { width: 4, casingWidth: 8, dash: [14, 6, 2, 6] }
+            : { width: 4, casingWidth: 8, dash: undefined };
+    const dash = uncertain || unavailable ? [8, 5] : modeTreatment.dash;
     return {
       stroke: selected ? "#2457c5" : unavailable ? "#596a76" : "#263541",
       opacity: unavailable ? 0.76 : 1,
-      width: selected ? 6 : unavailable ? 3 : 4,
+      width: selected ? 6 : unavailable ? 3 : modeTreatment.width,
       casing: {
         stroke: "#eef2f4",
         opacity: 0.92,
-        width: selected ? 10 : 8,
+        width: selected ? 10 : unavailable ? 7 : modeTreatment.casingWidth,
       },
-      ...(uncertain || unavailable ? { dash: [8, 5] } : {}),
+      ...(dash === undefined ? {} : { dash }),
     };
   },
 } satisfies MapVisualProfile;

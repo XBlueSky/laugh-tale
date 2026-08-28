@@ -12,6 +12,7 @@ import {
   resolve,
   sep,
 } from "node:path";
+import ts from "typescript";
 
 export interface AuthoredWorldExpectation {
   id: string;
@@ -225,21 +226,232 @@ function stripComments(source: string): string {
   return output;
 }
 
-function importSpecifiers(source: string): string[] {
-  const withoutComments = stripComments(source);
-  const specifiers = new Set<string>();
-  const patterns = [
-    /\b(?:import|export)\s+(?!\s*\()(?:type\s+)?(?:(?:(?!;)[\s\S])*?\s+from\s+)?["']([^"'\r\n]+)["']/g,
-    /\bimport\s*\(\s*["']([^"'\r\n]+)["']\s*\)/g,
-    /@import\s+(?:url\(\s*)?["']([^"'\r\n]+)["']/g,
-  ];
-  for (const pattern of patterns) {
-    for (const match of withoutComments.matchAll(pattern)) {
-      const specifier = match[1];
-      if (specifier !== undefined) specifiers.add(specifier);
-    }
+interface DependencyDiscovery {
+  specifiers: string[];
+  unresolvedLocalDynamicImports: number;
+}
+
+function scriptKind(path: string): ts.ScriptKind {
+  switch (extname(path).toLowerCase()) {
+    case ".tsx":
+      return ts.ScriptKind.TSX;
+    case ".jsx":
+      return ts.ScriptKind.JSX;
+    case ".js":
+    case ".mjs":
+      return ts.ScriptKind.JS;
+    case ".json":
+      return ts.ScriptKind.JSON;
+    default:
+      return ts.ScriptKind.TS;
   }
-  return [...specifiers].sort((left, right) => left.localeCompare(right));
+}
+
+function unwrapExpression(expression: ts.Expression): ts.Expression {
+  let current = expression;
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isSatisfiesExpression(current) ||
+    ts.isNonNullExpression(current)
+  ) {
+    current = current.expression;
+  }
+  return current;
+}
+
+function staticModuleSpecifier(expression: ts.Expression): string | undefined {
+  const unwrapped = unwrapExpression(expression);
+  return ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)
+    ? unwrapped.text
+    : undefined;
+}
+
+function isInterpolatedLocalImport(expression: ts.Expression): boolean {
+  const unwrapped = unwrapExpression(expression);
+  if (ts.isTemplateExpression(unwrapped)) {
+    return unwrapped.head.text.startsWith(".");
+  }
+  if (ts.isBinaryExpression(unwrapped)) {
+    const left = unwrapExpression(unwrapped.left);
+    return ts.isStringLiteral(left) && left.text.startsWith(".");
+  }
+  return false;
+}
+
+function typescriptDependencies(file: SourceFile): DependencyDiscovery {
+  const sourceFile = ts.createSourceFile(
+    file.absolutePath,
+    file.source,
+    ts.ScriptTarget.Latest,
+    true,
+    scriptKind(file.absolutePath),
+  );
+  const specifiers = new Set<string>();
+  let unresolvedLocalDynamicImports = 0;
+  const visit = (node: ts.Node): void => {
+    if (
+      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+      node.moduleSpecifier !== undefined &&
+      ts.isStringLiteral(node.moduleSpecifier)
+    ) {
+      specifiers.add(node.moduleSpecifier.text);
+    } else if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      node.arguments[0] !== undefined
+    ) {
+      const specifier = staticModuleSpecifier(node.arguments[0]);
+      if (specifier !== undefined) {
+        specifiers.add(specifier);
+      } else if (isInterpolatedLocalImport(node.arguments[0])) {
+        unresolvedLocalDynamicImports += 1;
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return {
+    specifiers: [...specifiers].sort((left, right) => left.localeCompare(right)),
+    unresolvedLocalDynamicImports,
+  };
+}
+
+function skipCssTrivia(source: string, start: number): number {
+  let index = start;
+  while (index < source.length) {
+    if (/\s/.test(source[index] ?? "")) {
+      index += 1;
+      continue;
+    }
+    if (source[index] === "/" && source[index + 1] === "*") {
+      index += 2;
+      while (
+        index < source.length &&
+        !(source[index] === "*" && source[index + 1] === "/")
+      ) {
+        index += 1;
+      }
+      index = Math.min(index + 2, source.length);
+      continue;
+    }
+    break;
+  }
+  return index;
+}
+
+function readCssQuoted(
+  source: string,
+  start: number,
+): { end: number; value: string } | undefined {
+  const quote = source[start];
+  if (quote !== "\"" && quote !== "'") return undefined;
+  let value = "";
+  let index = start + 1;
+  while (index < source.length) {
+    const character = source[index] ?? "";
+    if (character === "\\" && index + 1 < source.length) {
+      value += source[index + 1] ?? "";
+      index += 2;
+      continue;
+    }
+    if (character === quote) return { end: index + 1, value };
+    value += character;
+    index += 1;
+  }
+  return undefined;
+}
+
+function cssDependencies(file: SourceFile): DependencyDiscovery {
+  const specifiers = new Set<string>();
+  let index = 0;
+  let braceDepth = 0;
+  while (index < file.source.length) {
+    const character = file.source[index] ?? "";
+    if (character === "/" && file.source[index + 1] === "*") {
+      index = skipCssTrivia(file.source, index);
+      continue;
+    }
+    if (character === "\"" || character === "'") {
+      const quoted = readCssQuoted(file.source, index);
+      index = quoted?.end ?? file.source.length;
+      continue;
+    }
+    if (character === "{") {
+      braceDepth += 1;
+      index += 1;
+      continue;
+    }
+    if (character === "}") {
+      braceDepth = Math.max(0, braceDepth - 1);
+      index += 1;
+      continue;
+    }
+    if (
+      character !== "@" ||
+      braceDepth !== 0 ||
+      file.source.slice(index + 1, index + 7).toLowerCase() !== "import" ||
+      /[a-z0-9_-]/i.test(file.source[index + 7] ?? "")
+    ) {
+      index += 1;
+      continue;
+    }
+
+    let cursor = skipCssTrivia(file.source, index + 7);
+    const direct = readCssQuoted(file.source, cursor);
+    if (direct !== undefined) {
+      specifiers.add(direct.value);
+      index = direct.end;
+      continue;
+    }
+    if (
+      file.source.slice(cursor, cursor + 3).toLowerCase() !== "url" ||
+      /[a-z0-9_-]/i.test(file.source[cursor + 3] ?? "")
+    ) {
+      index += 7;
+      continue;
+    }
+    cursor = skipCssTrivia(file.source, cursor + 3);
+    if (file.source[cursor] !== "(") {
+      index = cursor;
+      continue;
+    }
+    cursor = skipCssTrivia(file.source, cursor + 1);
+    const quotedUrl = readCssQuoted(file.source, cursor);
+    if (quotedUrl !== undefined) {
+      const close = skipCssTrivia(file.source, quotedUrl.end);
+      if (file.source[close] === ")") specifiers.add(quotedUrl.value);
+      index = close + 1;
+      continue;
+    }
+    const valueStart = cursor;
+    while (
+      cursor < file.source.length &&
+      file.source[cursor] !== ")" &&
+      file.source[cursor] !== "\"" &&
+      file.source[cursor] !== "'" &&
+      !(file.source[cursor] === "/" && file.source[cursor + 1] === "*")
+    ) {
+      cursor += 1;
+    }
+    if (file.source[cursor] === ")") {
+      const value = file.source.slice(valueStart, cursor).trim();
+      if (value !== "") specifiers.add(value);
+    }
+    index = cursor + 1;
+  }
+  return {
+    specifiers: [...specifiers].sort((left, right) => left.localeCompare(right)),
+    unresolvedLocalDynamicImports: 0,
+  };
+}
+
+function dependencies(file: SourceFile): DependencyDiscovery {
+  if (file.path.endsWith(".css")) return cssDependencies(file);
+  if (file.path.endsWith(".json")) {
+    return { specifiers: [], unresolvedLocalDynamicImports: 0 };
+  }
+  return typescriptDependencies(file);
 }
 
 function importCandidates(candidate: string): string[] {
@@ -266,25 +478,50 @@ function importCandidates(candidate: string): string[] {
   return [...new Set(candidates)];
 }
 
+type LocalImportResolution =
+  | { kind: "resolved"; path: string }
+  | { kind: "controller-boundary" }
+  | { kind: "unsafe" }
+  | { kind: "unresolved" };
+
 function resolveLocalImport(
+  recipeRoot: string,
   presentationRoot: string,
   importer: string,
   specifier: string,
-): string | undefined {
-  if (!specifier.startsWith(".")) return undefined;
+): LocalImportResolution {
   const unresolved = resolve(dirname(importer), specifier);
-  if (!isWithin(presentationRoot, unresolved)) return undefined;
-  for (const candidate of importCandidates(unresolved)) {
-    const canonicalPath = regularLocalFile(presentationRoot, candidate);
-    if (canonicalPath !== undefined) return canonicalPath;
+  const controllersRoot = join(recipeRoot, "controllers");
+  if (isWithin(controllersRoot, unresolved)) {
+    return { kind: "controller-boundary" };
   }
-  return undefined;
+  if (!isWithin(presentationRoot, unresolved)) return { kind: "unsafe" };
+  for (const candidate of importCandidates(unresolved)) {
+    try {
+      const stats = lstatSync(candidate);
+      if (
+        stats.isDirectory() &&
+        candidate === unresolved &&
+        extname(unresolved) === ""
+      ) {
+        continue;
+      }
+      if (!stats.isFile() || stats.isSymbolicLink()) return { kind: "unsafe" };
+      const canonicalPath = realpathSync(candidate);
+      if (!isWithin(presentationRoot, canonicalPath)) return { kind: "unsafe" };
+      return { kind: "resolved", path: canonicalPath };
+    } catch {
+      // A missing candidate can still resolve through an extension or index.
+    }
+  }
+  return { kind: "unresolved" };
 }
 
 function collectReachableSource(
   recipeRoot: string,
   presentationRoot: string,
   seeds: readonly SourceFile[],
+  findings: AuthoredWorldFinding[],
 ): SourceFile[] {
   // The import graph is the declaration boundary. Never enumerate the source
   // directory: an unrelated local draft must neither satisfy nor fail a recipe.
@@ -294,18 +531,57 @@ function collectReachableSource(
     const file = queue.shift();
     if (file === undefined || files.has(file.absolutePath)) continue;
     files.set(file.absolutePath, file);
-    for (const specifier of importSpecifiers(file.source)) {
-      const importedPath = resolveLocalImport(
+    const discovered = dependencies(file);
+    if (discovered.unresolvedLocalDynamicImports > 0) {
+      addFinding(
+        findings,
+        "unresolved-dynamic-import",
+        file.path,
+        "Local dynamic import must use a static string literal",
+      );
+    }
+    for (const specifier of discovered.specifiers) {
+      if (!specifier.startsWith(".")) continue;
+      const resolution = resolveLocalImport(
+        recipeRoot,
         presentationRoot,
         file.absolutePath,
         specifier,
       );
-      if (importedPath === undefined || files.has(importedPath)) continue;
-      queue.push({
-        absolutePath: importedPath,
-        path: toPosix(relative(recipeRoot, importedPath)),
-        source: readFileSync(importedPath, "utf8"),
-      });
+      if (resolution.kind === "controller-boundary") continue;
+      if (resolution.kind === "unsafe") {
+        addFinding(
+          findings,
+          "unsafe-local-import",
+          file.path,
+          `Local import ${specifier} must resolve to a regular file within presentation.source`,
+        );
+        continue;
+      }
+      if (resolution.kind === "unresolved") {
+        addFinding(
+          findings,
+          "unresolved-local-import",
+          file.path,
+          `Local import ${specifier} could not be resolved`,
+        );
+        continue;
+      }
+      if (files.has(resolution.path)) continue;
+      try {
+        queue.push({
+          absolutePath: resolution.path,
+          path: toPosix(relative(recipeRoot, resolution.path)),
+          source: readFileSync(resolution.path, "utf8"),
+        });
+      } catch {
+        addFinding(
+          findings,
+          "unresolved-local-import",
+          file.path,
+          `Local import ${specifier} could not be read`,
+        );
+      }
     }
   }
   return [...files.values()].sort((left, right) => left.path.localeCompare(right.path));
@@ -345,44 +621,336 @@ function requiredStatePattern(state: string): RegExp {
   }
 }
 
-function findBalancedObject(source: string, marker: RegExp): string | undefined {
-  const match = marker.exec(source);
-  if (match === null) return undefined;
-  const start = source.indexOf("{", match.index + match[0].length);
-  if (start < 0) return undefined;
-  let depth = 0;
-  let quote: "\"" | "'" | "`" | null = null;
-  let escaped = false;
-  for (let index = start; index < source.length; index += 1) {
-    const character = source[index] ?? "";
-    if (quote !== null) {
-      if (escaped) {
-        escaped = false;
-      } else if (character === "\\") {
-        escaped = true;
-      } else if (character === quote) {
-        quote = null;
+interface AstSourceFile {
+  file: SourceFile;
+  node: ts.SourceFile;
+}
+
+interface AstGraph {
+  recipeRoot: string;
+  presentationRoot: string;
+  files: Map<string, AstSourceFile>;
+}
+
+interface ResolvedAstValue {
+  file: AstSourceFile;
+  node: ts.Node;
+}
+
+function createAstGraph(
+  recipeRoot: string,
+  presentationRoot: string,
+  files: readonly SourceFile[],
+): AstGraph {
+  const astFiles = new Map<string, AstSourceFile>();
+  for (const file of files) {
+    if (file.path.endsWith(".css") || file.path.endsWith(".json")) continue;
+    astFiles.set(file.absolutePath, {
+      file,
+      node: ts.createSourceFile(
+        file.absolutePath,
+        file.source,
+        ts.ScriptTarget.Latest,
+        true,
+        scriptKind(file.absolutePath),
+      ),
+    });
+  }
+  return { recipeRoot, presentationRoot, files: astFiles };
+}
+
+function hasModifier(node: ts.Node, kind: ts.SyntaxKind): boolean {
+  return ts.canHaveModifiers(node) &&
+    (ts.getModifiers(node)?.some((modifier) => modifier.kind === kind) ?? false);
+}
+
+function propertyNameText(name: ts.PropertyName | undefined): string | undefined {
+  if (name === undefined) return undefined;
+  if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
+    return name.text;
+  }
+  if (ts.isComputedPropertyName(name)) {
+    return staticModuleSpecifier(name.expression);
+  }
+  return undefined;
+}
+
+function ownObjectProperty(
+  object: ts.ObjectLiteralExpression,
+  name: string,
+): ts.ObjectLiteralElementLike | undefined {
+  return object.properties.find((property) =>
+    !ts.isSpreadAssignment(property) && propertyNameText(property.name) === name
+  );
+}
+
+function propertyValue(property: ts.ObjectLiteralElementLike): ts.Node | undefined {
+  if (ts.isPropertyAssignment(property)) return property.initializer;
+  if (ts.isShorthandPropertyAssignment(property)) return property.name;
+  if (ts.isMethodDeclaration(property) || ts.isGetAccessorDeclaration(property)) {
+    return property;
+  }
+  return undefined;
+}
+
+function moduleAstFile(
+  graph: AstGraph,
+  importer: AstSourceFile,
+  specifier: string,
+): AstSourceFile | undefined {
+  if (!specifier.startsWith(".")) return undefined;
+  const resolution = resolveLocalImport(
+    graph.recipeRoot,
+    graph.presentationRoot,
+    importer.file.absolutePath,
+    specifier,
+  );
+  return resolution.kind === "resolved" ? graph.files.get(resolution.path) : undefined;
+}
+
+function resolveNamespaceMember(
+  graph: AstGraph,
+  file: AstSourceFile,
+  namespace: string,
+  member: string,
+  seen: Set<string>,
+): ResolvedAstValue | undefined {
+  for (const statement of file.node.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) {
+      continue;
+    }
+    const bindings = statement.importClause?.namedBindings;
+    if (
+      bindings === undefined ||
+      !ts.isNamespaceImport(bindings) ||
+      bindings.name.text !== namespace
+    ) {
+      continue;
+    }
+    const target = moduleAstFile(graph, file, statement.moduleSpecifier.text);
+    return target === undefined ? undefined : resolveExport(graph, target, member, seen);
+  }
+  return undefined;
+}
+
+function resolveValue(
+  graph: AstGraph,
+  file: AstSourceFile,
+  node: ts.Node,
+  seen: Set<string>,
+): ResolvedAstValue | undefined {
+  if (ts.isExpression(node)) {
+    const expression = unwrapExpression(node);
+    if (ts.isIdentifier(expression)) {
+      return resolveSymbol(graph, file, expression.text, seen);
+    }
+    if (ts.isPropertyAccessExpression(expression)) {
+      const base = unwrapExpression(expression.expression);
+      if (ts.isIdentifier(base)) {
+        const namespaceMember = resolveNamespaceMember(
+          graph,
+          file,
+          base.text,
+          expression.name.text,
+          seen,
+        );
+        if (namespaceMember !== undefined) return namespaceMember;
       }
+      const resolvedBase = resolveValue(graph, file, expression.expression, seen);
+      if (resolvedBase !== undefined && ts.isObjectLiteralExpression(resolvedBase.node)) {
+        const property = ownObjectProperty(resolvedBase.node, expression.name.text);
+        const value = property === undefined ? undefined : propertyValue(property);
+        return value === undefined
+          ? undefined
+          : resolveValue(graph, resolvedBase.file, value, seen);
+      }
+      return undefined;
+    }
+    if (
+      ts.isElementAccessExpression(expression) &&
+      expression.argumentExpression !== undefined
+    ) {
+      const member = staticModuleSpecifier(expression.argumentExpression);
+      const base = unwrapExpression(expression.expression);
+      if (member !== undefined && ts.isIdentifier(base)) {
+        const namespaceMember = resolveNamespaceMember(
+          graph,
+          file,
+          base.text,
+          member,
+          seen,
+        );
+        if (namespaceMember !== undefined) return namespaceMember;
+      }
+      const resolvedBase = resolveValue(graph, file, expression.expression, seen);
+      if (
+        member !== undefined &&
+        resolvedBase !== undefined &&
+        ts.isObjectLiteralExpression(resolvedBase.node)
+      ) {
+        const property = ownObjectProperty(resolvedBase.node, member);
+        const value = property === undefined ? undefined : propertyValue(property);
+        return value === undefined
+          ? undefined
+          : resolveValue(graph, resolvedBase.file, value, seen);
+      }
+      return undefined;
+    }
+    return { file, node: expression };
+  }
+  return { file, node };
+}
+
+function resolveSymbol(
+  graph: AstGraph,
+  file: AstSourceFile,
+  name: string,
+  seen: Set<string>,
+): ResolvedAstValue | undefined {
+  const key = `${file.file.absolutePath}\0local\0${name}`;
+  if (seen.has(key)) return undefined;
+  seen.add(key);
+  for (const statement of file.node.statements) {
+    if (ts.isVariableStatement(statement)) {
+      for (const declaration of statement.declarationList.declarations) {
+        if (
+          ts.isIdentifier(declaration.name) &&
+          declaration.name.text === name &&
+          declaration.initializer !== undefined
+        ) {
+          return resolveValue(graph, file, declaration.initializer, seen);
+        }
+      }
+    }
+    if (
+      (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) &&
+      statement.name?.text === name
+    ) {
+      return { file, node: statement };
+    }
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) {
       continue;
     }
-    if (character === "\"" || character === "'" || character === "`") {
-      quote = character;
-      continue;
+    const clause = statement.importClause;
+    const target = moduleAstFile(graph, file, statement.moduleSpecifier.text);
+    if (target === undefined || clause === undefined) continue;
+    if (clause.name?.text === name) {
+      return resolveExport(graph, target, "default", seen);
     }
-    if (character === "{") depth += 1;
-    if (character === "}") {
-      depth -= 1;
-      if (depth === 0) return source.slice(start, index + 1);
+    if (
+      clause.namedBindings !== undefined &&
+      ts.isNamedImports(clause.namedBindings)
+    ) {
+      const binding = clause.namedBindings.elements.find((element) => element.name.text === name);
+      if (binding !== undefined) {
+        return resolveExport(
+          graph,
+          target,
+          binding.propertyName?.text ?? binding.name.text,
+          seen,
+        );
+      }
     }
   }
   return undefined;
 }
 
-function presentationObject(source: string): string | undefined {
-  return findBalancedObject(
-    stripComments(source),
-    /\b(?:export\s+)?const\s+presentation\s*=/,
+function resolveExport(
+  graph: AstGraph,
+  file: AstSourceFile,
+  name: string,
+  seen: Set<string>,
+): ResolvedAstValue | undefined {
+  const key = `${file.file.absolutePath}\0export\0${name}`;
+  if (seen.has(key)) return undefined;
+  seen.add(key);
+  for (const statement of file.node.statements) {
+    if (
+      name === "default" &&
+      ts.isExportAssignment(statement) &&
+      !statement.isExportEquals
+    ) {
+      return resolveValue(graph, file, statement.expression, seen);
+    }
+    if (
+      (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) &&
+      hasModifier(statement, ts.SyntaxKind.ExportKeyword) &&
+      (
+        statement.name?.text === name ||
+        (name === "default" && hasModifier(statement, ts.SyntaxKind.DefaultKeyword))
+      )
+    ) {
+      return { file, node: statement };
+    }
+    if (ts.isVariableStatement(statement) && hasModifier(statement, ts.SyntaxKind.ExportKeyword)) {
+      for (const declaration of statement.declarationList.declarations) {
+        if (
+          ts.isIdentifier(declaration.name) &&
+          declaration.name.text === name &&
+          declaration.initializer !== undefined
+        ) {
+          return resolveValue(graph, file, declaration.initializer, seen);
+        }
+      }
+    }
+    if (!ts.isExportDeclaration(statement)) continue;
+    const target = statement.moduleSpecifier !== undefined && ts.isStringLiteral(statement.moduleSpecifier)
+      ? moduleAstFile(graph, file, statement.moduleSpecifier.text)
+      : undefined;
+    if (
+      statement.exportClause !== undefined &&
+      ts.isNamedExports(statement.exportClause)
+    ) {
+      const binding = statement.exportClause.elements.find((element) => element.name.text === name);
+      if (binding === undefined) continue;
+      const originalName = binding.propertyName?.text ?? binding.name.text;
+      return target === undefined
+        ? resolveSymbol(graph, file, originalName, seen)
+        : resolveExport(graph, target, originalName, seen);
+    }
+    if (statement.exportClause === undefined && target !== undefined && name !== "default") {
+      const resolved = resolveExport(graph, target, name, seen);
+      if (resolved !== undefined) return resolved;
+    }
+  }
+  return undefined;
+}
+
+function isLocallyExported(file: AstSourceFile, name: string): boolean {
+  return file.node.statements.some((statement) =>
+    ts.isExportDeclaration(statement) &&
+    statement.moduleSpecifier === undefined &&
+    statement.exportClause !== undefined &&
+    ts.isNamedExports(statement.exportClause) &&
+    statement.exportClause.elements.some((element) => element.name.text === name)
   );
+}
+
+function exportedPresentationObject(
+  graph: AstGraph,
+  entry: AstSourceFile | undefined,
+): { file: AstSourceFile; object: ts.ObjectLiteralExpression } | undefined {
+  if (entry === undefined) return undefined;
+  for (const statement of entry.node.statements) {
+    if (!ts.isVariableStatement(statement)) continue;
+    const exported = hasModifier(statement, ts.SyntaxKind.ExportKeyword) ||
+      isLocallyExported(entry, "presentation");
+    if (!exported) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (
+        !ts.isIdentifier(declaration.name) ||
+        declaration.name.text !== "presentation" ||
+        declaration.initializer === undefined
+      ) {
+        continue;
+      }
+      const resolved = resolveValue(graph, entry, declaration.initializer, new Set());
+      if (resolved !== undefined && ts.isObjectLiteralExpression(resolved.node)) {
+        return { file: resolved.file, object: resolved.node };
+      }
+    }
+  }
+  return undefined;
 }
 
 function mediaRanges(css: string): Array<{ min: number; max: number }> {
@@ -406,45 +974,335 @@ function normalizeClassName(value: string): string {
   return value.trim().split(/\s+/).filter(Boolean).sort().join(" ");
 }
 
-function rootSignature(
-  files: readonly SourceFile[],
+type JsxOpening = ts.JsxOpeningElement | ts.JsxSelfClosingElement;
+
+function jsxAttributeName(attribute: ts.JsxAttribute): string {
+  return attribute.name.getText().toLowerCase();
+}
+
+function jsxAttributeValue(
+  attribute: ts.JsxAttribute,
+  sourceFile: ts.SourceFile,
+): string | undefined {
+  const initializer = attribute.initializer;
+  if (initializer === undefined) return "true";
+  if (ts.isStringLiteral(initializer)) return initializer.text;
+  if (ts.isJsxExpression(initializer) && initializer.expression !== undefined) {
+    const expression = unwrapExpression(initializer.expression);
+    if (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression)) {
+      return expression.text;
+    }
+    return expression.getText(sourceFile);
+  }
+  return undefined;
+}
+
+function openingAttribute(
+  opening: JsxOpening,
+  name: string,
+): ts.JsxAttribute | undefined {
+  return opening.attributes.properties.find((attribute): attribute is ts.JsxAttribute =>
+    ts.isJsxAttribute(attribute) && jsxAttributeName(attribute) === name
+  );
+}
+
+function openingHasTestId(
+  opening: JsxOpening,
+  testId: "trip-home" | "trip-experience",
+  sourceFile: ts.SourceFile,
+): boolean {
+  const attribute = openingAttribute(opening, "data-testid");
+  return attribute !== undefined && jsxAttributeValue(attribute, sourceFile) === testId;
+}
+
+function returnedRootOpening(
+  expression: ts.Expression,
+  testId: "trip-home" | "trip-experience",
+  sourceFile: ts.SourceFile,
+): JsxOpening | undefined {
+  const root = unwrapExpression(expression);
+  if (ts.isJsxElement(root)) {
+    if (openingHasTestId(root.openingElement, testId, sourceFile)) {
+      return root.openingElement;
+    }
+    const tag = root.openingElement.tagName.getText(sourceFile);
+    if (tag !== "Fragment" && tag !== "React.Fragment") return undefined;
+    for (const child of root.children) {
+      if (ts.isJsxElement(child)) {
+        if (openingHasTestId(child.openingElement, testId, sourceFile)) {
+          return child.openingElement;
+        }
+      } else if (ts.isJsxSelfClosingElement(child)) {
+        if (openingHasTestId(child, testId, sourceFile)) return child;
+      } else if (ts.isJsxExpression(child) && child.expression !== undefined) {
+        const nested = returnedRootOpening(child.expression, testId, sourceFile);
+        if (nested !== undefined) return nested;
+      }
+    }
+    return undefined;
+  }
+  if (ts.isJsxSelfClosingElement(root)) {
+    return openingHasTestId(root, testId, sourceFile) ? root : undefined;
+  }
+  if (ts.isJsxFragment(root)) {
+    for (const child of root.children) {
+      if (ts.isJsxElement(child)) {
+        if (openingHasTestId(child.openingElement, testId, sourceFile)) {
+          return child.openingElement;
+        }
+      } else if (ts.isJsxSelfClosingElement(child)) {
+        if (openingHasTestId(child, testId, sourceFile)) return child;
+      } else if (ts.isJsxExpression(child) && child.expression !== undefined) {
+        const nested = returnedRootOpening(child.expression, testId, sourceFile);
+        if (nested !== undefined) return nested;
+      }
+    }
+    return undefined;
+  }
+  if (ts.isConditionalExpression(root)) {
+    return returnedRootOpening(root.whenTrue, testId, sourceFile) ??
+      returnedRootOpening(root.whenFalse, testId, sourceFile);
+  }
+  if (ts.isBinaryExpression(root)) {
+    return returnedRootOpening(root.right, testId, sourceFile) ??
+      returnedRootOpening(root.left, testId, sourceFile);
+  }
+  return undefined;
+}
+
+function isNestedFunction(node: ts.Node): boolean {
+  return ts.isFunctionDeclaration(node) ||
+    ts.isFunctionExpression(node) ||
+    ts.isArrowFunction(node) ||
+    ts.isMethodDeclaration(node) ||
+    ts.isGetAccessorDeclaration(node) ||
+    ts.isSetAccessorDeclaration(node) ||
+    ts.isConstructorDeclaration(node);
+}
+
+function componentReturnExpressions(node: ts.Node): ts.Expression[] | undefined {
+  if (
+    !ts.isFunctionDeclaration(node) &&
+    !ts.isFunctionExpression(node) &&
+    !ts.isArrowFunction(node) &&
+    !ts.isMethodDeclaration(node)
+  ) {
+    return undefined;
+  }
+  if (ts.isArrowFunction(node) && !ts.isBlock(node.body)) return [node.body];
+  const body = node.body;
+  if (body === undefined) return [];
+  const expressions: ts.Expression[] = [];
+  const visit = (child: ts.Node): void => {
+    if (child !== body && isNestedFunction(child)) return;
+    if (ts.isReturnStatement(child)) {
+      if (child.expression !== undefined) expressions.push(child.expression);
+      return;
+    }
+    ts.forEachChild(child, visit);
+  };
+  visit(body);
+  return expressions;
+}
+
+function componentRootSignature(
+  component: ResolvedAstValue | undefined,
   testId: "trip-home" | "trip-experience",
 ): RootSignature | undefined {
-  const testIdPattern = escapePattern(testId);
-  const pattern = new RegExp(
-    `<([A-Za-z][A-Za-z0-9_.:-]*)\\b([^<>]*\\bdata-testid\\s*=\\s*["']${testIdPattern}["'][^<>]*)>`,
-    "i",
-  );
-  for (const file of files) {
-    const match = pattern.exec(stripComments(file.source));
-    if (match === null) continue;
-    const tag = (match[1] ?? "").toLowerCase();
-    const attributes = match[2] ?? "";
-    const staticClass = /\bclassName\s*=\s*["']([^"']*)["']/i.exec(attributes)?.[1];
-    const dynamicClass = /\bclassName\s*=\s*\{([^}]*)\}/i.exec(attributes)?.[1];
-    const className = normalizeClassName(staticClass ?? dynamicClass ?? "");
-    const role = /\brole\s*=\s*["']([^"']*)["']/i.exec(attributes)?.[1]?.toLowerCase() ?? "";
-    const dataAttributes = [...attributes.matchAll(/\b(data-[a-z0-9-]+)\s*=/gi)]
-      .map((entry) => (entry[1] ?? "").toLowerCase())
-      .filter((name) => name !== "data-testid")
+  if (component === undefined) return undefined;
+  const returns = componentReturnExpressions(component.node);
+  if (returns === undefined) return undefined;
+  for (const expression of returns) {
+    const opening = returnedRootOpening(expression, testId, component.file.node);
+    if (opening === undefined) continue;
+    const staticClass = openingAttribute(opening, "classname");
+    const roleAttribute = openingAttribute(opening, "role");
+    const className = normalizeClassName(
+      staticClass === undefined
+        ? ""
+        : jsxAttributeValue(staticClass, component.file.node) ?? "",
+    );
+    const role = roleAttribute === undefined
+      ? ""
+      : (jsxAttributeValue(roleAttribute, component.file.node) ?? "").toLowerCase();
+    const dataAttributes = opening.attributes.properties
+      .filter((attribute): attribute is ts.JsxAttribute => ts.isJsxAttribute(attribute))
+      .map(jsxAttributeName)
+      .filter((name) => name.startsWith("data-") && name !== "data-testid")
       .sort()
       .join(",");
     return {
-      path: file.path,
-      signature: `${tag}|class=${className}|role=${role}|data=${dataAttributes}`,
+      path: component.file.file.path,
+      signature: `${opening.tagName.getText(component.file.node).toLowerCase()}|class=${className}|role=${role}|data=${dataAttributes}`,
     };
   }
   return undefined;
 }
 
-function axisAccessCount(source: string, axis: string): number {
-  const propertyAccesses = source.match(
-    new RegExp(`(?:\\?\\.|\\.)\\s*${escapePattern(axis)}\\b`, "g"),
-  )?.length ?? 0;
-  const destructures = source.match(
-    new RegExp(`\\{[^{}]*\\b${escapePattern(axis)}\\b[^{}]*\\}\\s*=`, "g"),
-  )?.length ?? 0;
-  return propertyAccesses + destructures;
+interface ValueOrigin {
+  axes: Set<string>;
+  object: boolean;
+}
+
+interface DestructuredOrigin {
+  property: string;
+  source: ts.Expression;
+}
+
+function emptyOrigin(): ValueOrigin {
+  return { axes: new Set(), object: false };
+}
+
+function mergeOrigin(target: ValueOrigin, source: ValueOrigin): void {
+  for (const axis of source.axes) target.axes.add(axis);
+  target.object ||= source.object;
+}
+
+function bindingElementProperty(element: ts.BindingElement): string | undefined {
+  if (element.dotDotDotToken !== undefined || !ts.isIdentifier(element.name)) {
+    return undefined;
+  }
+  return propertyNameText(element.propertyName ?? element.name);
+}
+
+function callbackAxes(callback: ts.Node): Set<string> {
+  if (
+    !ts.isFunctionDeclaration(callback) &&
+    !ts.isFunctionExpression(callback) &&
+    !ts.isArrowFunction(callback) &&
+    !ts.isMethodDeclaration(callback)
+  ) {
+    return new Set();
+  }
+  const parameter = callback.parameters[0];
+  if (parameter === undefined) return new Set();
+  const objectParameters = new Set<string>();
+  const parameterAxes = new Map<string, string>();
+  if (ts.isIdentifier(parameter.name)) {
+    objectParameters.add(parameter.name.text);
+  } else if (ts.isObjectBindingPattern(parameter.name)) {
+    for (const element of parameter.name.elements) {
+      const property = bindingElementProperty(element);
+      if (property !== undefined && ts.isIdentifier(element.name)) {
+        parameterAxes.set(element.name.text, property);
+      }
+    }
+  }
+
+  const initializers = new Map<string, ts.Expression>();
+  const destructured = new Map<string, DestructuredOrigin>();
+  const body = callback.body;
+  if (body !== undefined && ts.isBlock(body)) {
+    const collect = (node: ts.Node): void => {
+      if (node !== body && isNestedFunction(node)) return;
+      if (ts.isVariableDeclaration(node) && node.initializer !== undefined) {
+        if (ts.isIdentifier(node.name)) {
+          initializers.set(node.name.text, node.initializer);
+        } else if (ts.isObjectBindingPattern(node.name)) {
+          for (const element of node.name.elements) {
+            const property = bindingElementProperty(element);
+            if (property !== undefined && ts.isIdentifier(element.name)) {
+              destructured.set(element.name.text, {
+                property,
+                source: node.initializer,
+              });
+            }
+          }
+        }
+      }
+      ts.forEachChild(node, collect);
+    };
+    collect(body);
+  }
+
+  const identifierOrigin = (name: string, seen: Set<string>): ValueOrigin => {
+    if (objectParameters.has(name)) return { axes: new Set(), object: true };
+    const parameterAxis = parameterAxes.get(name);
+    if (parameterAxis !== undefined) {
+      return { axes: new Set([parameterAxis]), object: false };
+    }
+    if (seen.has(name)) return emptyOrigin();
+    const nextSeen = new Set(seen).add(name);
+    const initializer = initializers.get(name);
+    if (initializer !== undefined) return nodeOrigin(initializer, nextSeen);
+    const destructure = destructured.get(name);
+    if (destructure !== undefined) {
+      const source = nodeOrigin(destructure.source, nextSeen);
+      return source.object
+        ? { axes: new Set([destructure.property]), object: false }
+        : emptyOrigin();
+    }
+    return emptyOrigin();
+  };
+
+  const nodeOrigin = (node: ts.Node, seen: Set<string>): ValueOrigin => {
+    if (isNestedFunction(node)) return emptyOrigin();
+    if (ts.isIdentifier(node)) {
+      const parent = node.parent;
+      if (
+        (ts.isPropertyAccessExpression(parent) && parent.name === node) ||
+        (ts.isPropertyAssignment(parent) && parent.name === node) ||
+        (ts.isBindingElement(parent) && parent.name === node) ||
+        (ts.isVariableDeclaration(parent) && parent.name === node) ||
+        (ts.isParameter(parent) && parent.name === node)
+      ) {
+        return emptyOrigin();
+      }
+      return identifierOrigin(node.text, seen);
+    }
+    if (ts.isPropertyAccessExpression(node)) {
+      const base = nodeOrigin(node.expression, seen);
+      return base.object
+        ? { axes: new Set([node.name.text]), object: false }
+        : base;
+    }
+    if (
+      ts.isElementAccessExpression(node) &&
+      node.argumentExpression !== undefined
+    ) {
+      const base = nodeOrigin(node.expression, seen);
+      const property = staticModuleSpecifier(node.argumentExpression);
+      return base.object && property !== undefined
+        ? { axes: new Set([property]), object: false }
+        : base;
+    }
+    if (ts.isPropertyAssignment(node)) return nodeOrigin(node.initializer, seen);
+    if (ts.isShorthandPropertyAssignment(node)) {
+      return identifierOrigin(node.name.text, seen);
+    }
+    if (ts.isSpreadAssignment(node)) return nodeOrigin(node.expression, seen);
+    const origin = emptyOrigin();
+    ts.forEachChild(node, (child) => mergeOrigin(origin, nodeOrigin(child, seen)));
+    return origin;
+  };
+
+  const axes = new Set<string>();
+  for (const expression of componentReturnExpressions(callback) ?? []) {
+    const origin = nodeOrigin(expression, new Set());
+    for (const axis of origin.axes) axes.add(axis);
+  }
+  return axes;
+}
+
+function resolvedObjectProperty(
+  graph: AstGraph,
+  owner: ResolvedAstValue,
+  name: string,
+): ResolvedAstValue | undefined {
+  if (!ts.isObjectLiteralExpression(owner.node)) return undefined;
+  const property = ownObjectProperty(owner.node, name);
+  const value = property === undefined ? undefined : propertyValue(property);
+  return value === undefined
+    ? undefined
+    : resolveValue(graph, owner.file, value, new Set());
+}
+
+function staticString(node: ts.Node | undefined): string | undefined {
+  if (node === undefined || !ts.isExpression(node)) return undefined;
+  const expression = unwrapExpression(node);
+  return ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression)
+    ? expression.text
+    : undefined;
 }
 
 function parseManifest(
@@ -609,19 +1467,33 @@ export function inspectAuthoredWorld(
 
   const seeds = [entryFile, ...cssFiles, profileFile]
     .filter((file): file is SourceFile => file !== undefined);
-  const sourceFiles = collectReachableSource(root, presentationRoot, seeds);
+  const sourceFiles = collectReachableSource(root, presentationRoot, seeds, findings);
   const analyzedFiles = sourceFiles.map((file) => ({
     ...file,
     source: stripComments(file.source),
   }));
-  const profileSource = profileFile === undefined ? "" : stripComments(profileFile.source);
-  const entrySource = entryFile === undefined ? "" : entryFile.source;
+  const originalFiles = new Map(
+    sourceFiles.map((file) => [file.absolutePath, file] as const),
+  );
   const entryPath = entryFile?.path ?? "recipe.json";
-  const objectSource = presentationObject(entrySource) ?? "";
+  const astGraph = createAstGraph(root, presentationRoot, sourceFiles);
+  const entryAst = entryFile === undefined
+    ? undefined
+    : astGraph.files.get(entryFile.absolutePath);
+  const presentation = exportedPresentationObject(astGraph, entryAst);
+  const presentationProperties = new Map<string, ts.ObjectLiteralElementLike>();
+  if (presentation !== undefined) {
+    for (const property of presentation.object.properties) {
+      if (ts.isSpreadAssignment(property)) continue;
+      const name = propertyNameText(property.name);
+      if (name !== undefined && !presentationProperties.has(name)) {
+        presentationProperties.set(name, property);
+      }
+    }
+  }
 
   for (const view of REQUIRED_VIEWS) {
-    const property = new RegExp(`(?:^|[,{\\n])\\s*${view}\\s*(?=[:,}\\n])`, "m");
-    if (!property.test(objectSource)) {
+    if (!presentationProperties.has(view)) {
       addFinding(
         findings,
         "missing-presentation-view",
@@ -629,6 +1501,27 @@ export function inspectAuthoredWorld(
         `Presentation must export the ${view} view`,
       );
     }
+  }
+
+  const presentationComponents = new Map<"Home" | "Experience", ResolvedAstValue>();
+  for (const view of ["Home", "Experience"] as const) {
+    const property = presentationProperties.get(view);
+    const value = property === undefined ? undefined : propertyValue(property);
+    const component = value === undefined || presentation === undefined
+      ? undefined
+      : resolveValue(astGraph, presentation.file, value, new Set());
+    const isComponent = component !== undefined &&
+      componentReturnExpressions(component.node) !== undefined;
+    if (property !== undefined && !isComponent) {
+      addFinding(
+        findings,
+        "unresolved-presentation-component",
+        entryPath,
+        `Presentation ${view} must resolve to a local component declaration`,
+      );
+      continue;
+    }
+    if (component !== undefined) presentationComponents.set(view, component);
   }
 
   const uiFiles = analyzedFiles.filter((file) =>
@@ -668,35 +1561,63 @@ export function inspectAuthoredWorld(
     }
   }
 
-  const markerToneCount = axisAccessCount(profileSource, "tone");
-  // Runtime profile validation owns the exhaustive semantic fixture matrix.
-  // These checks only prove that authored source consumes its semantic axes.
-  if (markerToneCount < 2) {
+  const mapProfileProperty = presentationProperties.get("mapProfile");
+  const mapProfileValue = mapProfileProperty === undefined
+    ? undefined
+    : propertyValue(mapProfileProperty);
+  const resolvedMapProfile = mapProfileValue === undefined || presentation === undefined
+    ? undefined
+    : resolveValue(astGraph, presentation.file, mapProfileValue, new Set());
+  const actualMapProfile =
+    resolvedMapProfile !== undefined &&
+    ts.isObjectLiteralExpression(resolvedMapProfile.node) &&
+    resolvedMapProfile.file.file.absolutePath === profileFile?.absolutePath
+      ? resolvedMapProfile
+      : undefined;
+  if (actualMapProfile === undefined) {
     addFinding(
       findings,
-      "missing-map-profile-axis",
-      profileFile?.path ?? "recipe.json",
-      "Map profile must consume marker and route tone fixtures",
+      "unresolved-map-profile",
+      entryPath,
+      "Presentation mapProfile must resolve to the declared local map profile",
     );
-  }
-  for (const axis of ["source", "certainty"] as const) {
-    if (axisAccessCount(profileSource, axis) === 0) {
+  } else {
+    // Runtime validation owns the exhaustive fixture matrix. This source check
+    // proves that the actual exported callbacks consume their own parameters.
+    const marker = resolvedObjectProperty(astGraph, actualMapProfile, "marker");
+    const markerAxes = marker === undefined ? new Set<string>() : callbackAxes(marker.node);
+    const route = resolvedObjectProperty(astGraph, actualMapProfile, "route");
+    const routeAxes = route === undefined ? new Set<string>() : callbackAxes(route.node);
+    const requiredAxes = [
+      ["marker", "tone"],
+      ["route", "tone"],
+      ["route", "source"],
+      ["route", "certainty"],
+      ["route", "mode"],
+    ] as const;
+    for (const [callback, axis] of requiredAxes) {
+      const axes = callback === "marker" ? markerAxes : routeAxes;
+      if (axes.has(axis)) continue;
       addFinding(
         findings,
         "missing-map-profile-axis",
         profileFile?.path ?? "recipe.json",
-        `Map profile must consume route ${axis} fixtures`,
+        `Map profile ${callback} must consume its own ${axis} fixture`,
       );
     }
-  }
-  for (const mode of [...new Set(expectation.requiredMapModes)]) {
-    const quotedMode = new RegExp(`["']${escapePattern(mode)}["']`, "i");
-    if (!quotedMode.test(profileSource)) {
+
+    const basemap = resolvedObjectProperty(astGraph, actualMapProfile, "basemap");
+    const mode = basemap === undefined
+      ? undefined
+      : resolvedObjectProperty(astGraph, basemap, "mode");
+    const actualMode = staticString(mode?.node);
+    for (const requiredMode of [...new Set(expectation.requiredMapModes)]) {
+      if (actualMode === requiredMode) continue;
       addFinding(
         findings,
         "missing-map-mode",
         profileFile?.path ?? "recipe.json",
-        `Map profile must declare the ${mode} basemap mode`,
+        `Map profile must declare the ${requiredMode} basemap mode`,
       );
     }
   }
@@ -759,7 +1680,10 @@ export function inspectAuthoredWorld(
     ["forbidden-text-clip", /(?:-webkit-)?background-clip\s*:\s*text\b/i, "text background clipping"],
   ] as const;
   for (const file of analyzedFiles) {
-    const remoteImport = importSpecifiers(file.source).find((specifier) => /^https?:/i.test(specifier));
+    const dependencySource = originalFiles.get(file.absolutePath) ?? file;
+    const remoteImport = dependencies(dependencySource).specifiers.find((specifier) =>
+      /^https?:/i.test(specifier)
+    );
     if (remoteImport !== undefined) {
       addFinding(
         findings,
@@ -807,8 +1731,14 @@ export function inspectAuthoredWorld(
     }
   }
 
-  const homeRoot = rootSignature(uiFiles, "trip-home");
-  const experienceRoot = rootSignature(uiFiles, "trip-experience");
+  const homeRoot = componentRootSignature(
+    presentationComponents.get("Home"),
+    "trip-home",
+  );
+  const experienceRoot = componentRootSignature(
+    presentationComponents.get("Experience"),
+    "trip-experience",
+  );
   if (homeRoot === undefined) {
     addFinding(
       findings,
