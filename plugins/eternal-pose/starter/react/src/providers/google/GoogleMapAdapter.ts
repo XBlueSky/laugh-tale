@@ -1,6 +1,20 @@
 import type { Coordinates } from "@laugh-tale-island/core";
-import { USER_LOCATION_OWNER_ID, type MapFocusTarget, type MapPadding, type MapPlacePresentation, type MapPresentation } from "@laugh-tale-island/core";
+import {
+  USER_LOCATION_OWNER_ID,
+  type MapFocusTarget,
+  type MapPadding,
+  type MapPresentation,
+} from "@laugh-tale-island/core";
 import { type MapAdapter, type MapEvents } from "@laugh-tale-island/core/browser";
+import type {
+  MapMarkerVisual,
+  MapRouteVisual,
+  MapVisualProfile,
+} from "../../controllers/presentation-contract";
+import {
+  resolveMapFallbackPaint,
+  SAFE_MAP_FALLBACK_PAINT,
+} from "../../controllers/map-fallback-paint";
 import type { GoogleMapsRuntime } from "./google-config";
 import { normalizeProviderLocation } from "./provider-location";
 
@@ -25,28 +39,116 @@ function clonePresentation(presentation: MapPresentation): MapPresentation {
   };
 }
 
-function markerName(place: MapPlacePresentation): string {
-  switch (place.tone) {
-    case "candidate":
-      return `Candidate: ${place.label}`;
-    case "selected":
-      return `Selected: ${place.label}`;
-    case "completed":
-      return `Completed: ${place.label}`;
-    case "skipped":
-      return `Skipped: ${place.label}`;
-    default:
-      return place.label;
+function markerContent(visual: MapMarkerVisual): HTMLElement {
+  const content = document.createElement("span");
+  content.className = visual.className;
+  content.setAttribute("aria-hidden", "true");
+  for (const part of visual.parts) {
+    const element = document.createElement("span");
+    element.className = part.className;
+    element.textContent = part.text;
+    content.append(element);
   }
+  return content;
 }
 
-function markerContent(place: MapPlacePresentation): HTMLElement {
-  const content = document.createElement("span");
-  content.className = "map-marker";
-  content.dataset.tone = place.tone;
-  content.setAttribute("aria-hidden", "true");
-  content.textContent = place.label;
-  return content;
+function escapeXmlAttribute(value: string): string {
+  const escapes: Readonly<Record<string, string>> = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&apos;",
+  };
+  return value.replace(/[&<>"']/g, (character) => escapes[character] ?? character);
+}
+
+function classicMarkerIcon(visual: MapMarkerVisual): string {
+  const fill = escapeXmlAttribute(
+    resolveMapFallbackPaint(visual.fallback.fill) ?? SAFE_MAP_FALLBACK_PAINT,
+  );
+  const stroke = escapeXmlAttribute(
+    resolveMapFallbackPaint(visual.fallback.stroke) ?? SAFE_MAP_FALLBACK_PAINT,
+  );
+  const requestedSize = visual.fallback.size;
+  const size =
+    Number.isFinite(requestedSize) && requestedSize >= 44 && requestedSize <= 96
+      ? requestedSize
+      : 44;
+  const requestedStrokeWidth = visual.fallback.strokeWidth;
+  const strokeWidth =
+    Number.isFinite(requestedStrokeWidth) &&
+    requestedStrokeWidth > 0 &&
+    requestedStrokeWidth <= size / 2
+      ? requestedStrokeWidth
+      : 3;
+  const shape = (["circle", "square", "diamond"] as const).includes(
+    visual.fallback.shape,
+  )
+    ? visual.fallback.shape
+    : "circle";
+  const center = size / 2;
+  const inset = strokeWidth / 2 + 1;
+  const extent = size - inset;
+  const geometry =
+    shape === "square"
+      ? `<rect x="${inset}" y="${inset}" width="${size - inset * 2}" height="${size - inset * 2}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/>`
+      : shape === "diamond"
+        ? `<path d="M ${center} ${inset} L ${extent} ${center} L ${center} ${extent} L ${inset} ${center} Z" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/>`
+        : `<circle cx="${center}" cy="${center}" r="${center - inset}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${geometry}</svg>`;
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
+function classicMarkerLabel(
+  visual: MapMarkerVisual,
+): google.maps.MarkerLabel | undefined {
+  if (visual.fallback.text.length === 0) return undefined;
+  return {
+    text: visual.fallback.text,
+    color:
+      resolveMapFallbackPaint(visual.fallback.labelColor) ??
+      SAFE_MAP_FALLBACK_PAINT,
+    fontSize: "14px",
+    fontWeight: "700",
+  };
+}
+
+function supportedDashIcons(
+  visual: MapRouteVisual,
+): google.maps.IconSequence[] | undefined {
+  if (visual.dash?.length !== 2) {
+    return undefined;
+  }
+  const [dashLength, gapLength] = visual.dash;
+  if (
+    dashLength === undefined ||
+    gapLength === undefined ||
+    !Number.isFinite(dashLength) ||
+    !Number.isFinite(gapLength) ||
+    dashLength <= 0 ||
+    gapLength <= 0
+  ) {
+    return undefined;
+  }
+  return [
+    {
+      icon: {
+        path: `M 0,0 0,${dashLength}`,
+        strokeColor: visual.stroke,
+        strokeOpacity: visual.opacity,
+        strokeWeight: visual.width,
+      },
+      offset: "0",
+      repeat: `${dashLength + gapLength}px`,
+    },
+  ];
+}
+
+export interface GoogleMapAdapterOptions {
+  development: boolean;
+  mapId?: string;
+  profile: MapVisualProfile;
 }
 
 function boundsFor(
@@ -72,7 +174,8 @@ export class GoogleMapAdapter implements MapAdapter {
   private map: google.maps.Map | null = null;
   private events: MapEvents | null = null;
   private pendingPresentation: MapPresentation | null = null;
-  private readonly markers: google.maps.marker.AdvancedMarkerElement[] = [];
+  private readonly advancedMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
+  private readonly classicMarkers: google.maps.Marker[] = [];
   private readonly polylines: google.maps.Polyline[] = [];
   private readonly markerListeners: Array<{
     marker: google.maps.marker.AdvancedMarkerElement;
@@ -81,13 +184,27 @@ export class GoogleMapAdapter implements MapAdapter {
   private readonly mapListeners: google.maps.MapsEventListener[] = [];
   private readonly placeCoordinatesByOwnerId = new Map<string, Coordinates[]>();
   private readonly routeCoordinatesById = new Map<string, Coordinates[]>();
-  private userMarker: google.maps.marker.AdvancedMarkerElement | null = null;
+  private userAdvancedMarker: google.maps.marker.AdvancedMarkerElement | null = null;
+  private userClassicMarker: google.maps.Marker | null = null;
   private userLocation: Coordinates | null = null;
   private padding: MapPadding = { ...DEFAULT_PADDING };
   private lifecycleGeneration = 0;
   private renderGeneration = 0;
 
-  constructor(private readonly runtime: GoogleMapsRuntime) {}
+  private readonly mapId: string | undefined;
+
+  constructor(
+    private readonly runtime: GoogleMapsRuntime,
+    private readonly options: GoogleMapAdapterOptions,
+  ) {
+    const configuredMapId = options.mapId?.trim() ?? "";
+    this.mapId =
+      configuredMapId.length > 0
+        ? configuredMapId
+        : options.development
+          ? runtime.Map.DEMO_MAP_ID
+          : undefined;
+  }
 
   async mount(element: HTMLElement, events: MapEvents): Promise<void> {
     const generation = ++this.lifecycleGeneration;
@@ -102,7 +219,7 @@ export class GoogleMapAdapter implements MapAdapter {
     this.map = new this.runtime.Map(element, {
       center: { lat: 0, lng: 0 },
       zoom: 2,
-      mapId: this.runtime.Map.DEMO_MAP_ID,
+      ...(this.mapId === undefined ? {} : { mapId: this.mapId }),
     });
     if (this.userLocation !== null) {
       this.createUserMarker();
@@ -192,30 +309,52 @@ export class GoogleMapAdapter implements MapAdapter {
     }
     this.clearPresentation();
 
-    for (const place of presentation.places) {
+    for (const [index, place] of presentation.places.entries()) {
       const coordinates = normalizeProviderLocation(place.coordinates);
       if (coordinates === undefined) {
         continue;
       }
-      const name = markerName(place);
-      const marker = new this.runtime.AdvancedMarkerElement({
-        map,
-        position: coordinates,
-        title: name,
-        content: markerContent(place),
-        gmpClickable: true,
-      });
-      const listener: EventListener = () => {
-        if (
-          lifecycleGeneration === this.lifecycleGeneration &&
-          renderGeneration === this.renderGeneration
-        ) {
-          this.events?.onPlaceSelect(place.ownerId);
-        }
-      };
-      marker.addEventListener("gmp-click", listener);
-      this.markers.push(marker);
-      this.markerListeners.push({ marker, listener });
+      const visual = this.options.profile.marker(place, index);
+      if (this.mapId === undefined) {
+        const label = classicMarkerLabel(visual);
+        const marker = new this.runtime.Marker({
+          map,
+          position: coordinates,
+          title: visual.title,
+          icon: classicMarkerIcon(visual),
+          ...(label === undefined ? {} : { label }),
+        });
+        const listener = marker.addListener("click", () => {
+          if (
+            lifecycleGeneration === this.lifecycleGeneration &&
+            renderGeneration === this.renderGeneration
+          ) {
+            this.events?.onPlaceSelect(place.ownerId);
+          }
+        });
+        this.classicMarkers.push(marker);
+        this.mapListeners.push(listener);
+      } else {
+        const marker = new this.runtime.AdvancedMarkerElement({
+          map,
+          position: coordinates,
+          title: visual.title,
+          content: markerContent(visual),
+          gmpClickable: true,
+        });
+        marker.setAttribute("aria-label", visual.label);
+        const listener: EventListener = () => {
+          if (
+            lifecycleGeneration === this.lifecycleGeneration &&
+            renderGeneration === this.renderGeneration
+          ) {
+            this.events?.onPlaceSelect(place.ownerId);
+          }
+        };
+        marker.addEventListener("gmp-click", listener);
+        this.advancedMarkers.push(marker);
+        this.markerListeners.push({ marker, listener });
+      }
       this.placeCoordinatesByOwnerId.set(place.ownerId, [{ ...coordinates }]);
     }
 
@@ -236,13 +375,30 @@ export class GoogleMapAdapter implements MapAdapter {
       if (invalidPath || path.length < 2) {
         continue;
       }
+      const visual = this.options.profile.route(route);
+      if (
+        visual.casing !== undefined &&
+        visual.casing.width > visual.width
+      ) {
+        const casing = new this.runtime.Polyline({
+          map,
+          path,
+          clickable: false,
+          strokeColor: visual.casing.stroke,
+          strokeOpacity: visual.casing.opacity,
+          strokeWeight: visual.casing.width,
+        });
+        this.polylines.push(casing);
+      }
+      const icons = supportedDashIcons(visual);
       const polyline = new this.runtime.Polyline({
         map,
         path,
         clickable: true,
-        strokeColor: route.tone === "selected" ? "#155eef" : "#4b5563",
-        strokeOpacity: 0.9,
-        strokeWeight: route.tone === "selected" ? 6 : 4,
+        strokeColor: visual.stroke,
+        strokeOpacity: icons === undefined ? visual.opacity : 0,
+        strokeWeight: visual.width,
+        ...(icons === undefined ? {} : { icons }),
       });
       const listener = polyline.addListener("click", () => {
         if (
@@ -272,15 +428,25 @@ export class GoogleMapAdapter implements MapAdapter {
     if (this.map === null || this.userLocation === null) {
       return;
     }
-    const content = document.createElement("span");
-    content.className = "map-marker map-marker--user";
-    content.setAttribute("aria-hidden", "true");
-    this.userMarker = new this.runtime.AdvancedMarkerElement({
-      map: this.map,
-      position: this.userLocation,
-      title: "Your location",
-      content,
-    });
+    const visual = this.options.profile.userLocation();
+    if (this.mapId === undefined) {
+      const label = classicMarkerLabel(visual);
+      this.userClassicMarker = new this.runtime.Marker({
+        map: this.map,
+        position: this.userLocation,
+        title: visual.title,
+        icon: classicMarkerIcon(visual),
+        ...(label === undefined ? {} : { label }),
+      });
+    } else {
+      this.userAdvancedMarker = new this.runtime.AdvancedMarkerElement({
+        map: this.map,
+        position: this.userLocation,
+        title: visual.title,
+        content: markerContent(visual),
+      });
+      this.userAdvancedMarker.setAttribute("aria-label", visual.label);
+    }
     this.placeCoordinatesByOwnerId.set(USER_LOCATION_OWNER_ID, [
       { ...this.userLocation },
     ]);
@@ -293,8 +459,11 @@ export class GoogleMapAdapter implements MapAdapter {
     for (const listener of this.mapListeners.splice(0)) {
       listener.remove();
     }
-    for (const marker of this.markers.splice(0)) {
+    for (const marker of this.advancedMarkers.splice(0)) {
       marker.map = null;
+    }
+    for (const marker of this.classicMarkers.splice(0)) {
+      marker.setMap(null);
     }
     for (const polyline of this.polylines.splice(0)) {
       polyline.setMap(null);
@@ -310,9 +479,13 @@ export class GoogleMapAdapter implements MapAdapter {
 
   private clearUserMarker(): void {
     this.placeCoordinatesByOwnerId.delete(USER_LOCATION_OWNER_ID);
-    if (this.userMarker !== null) {
-      this.userMarker.map = null;
-      this.userMarker = null;
+    if (this.userAdvancedMarker !== null) {
+      this.userAdvancedMarker.map = null;
+      this.userAdvancedMarker = null;
+    }
+    if (this.userClassicMarker !== null) {
+      this.userClassicMarker.setMap(null);
+      this.userClassicMarker = null;
     }
   }
 

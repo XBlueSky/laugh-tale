@@ -20,6 +20,7 @@ Before editing the experience, read [docs/trip-experience-contract.md](docs/trip
 
 - Restrict the browser key by HTTPS referrer to only the hosts that serve this site. Use a separate localhost-only key for local development.
 - Enable and restrict the Maps JavaScript API for the base map. Places API (New) is optional and should be enabled only if your custom experience uses it.
+- Set the optional `VITE_GOOGLE_MAP_ID` to a map ID owned by the deployed site's Google Cloud project. Local development falls back to Google's `DEMO_MAP_ID`; production without a map ID keeps the neutral map and classic marker fallback.
 - Routes API is optional and disabled by default. Set `VITE_GOOGLE_ROUTES_ENABLED=true` only when you intentionally want paid route requests. Transit remains separately disabled unless `VITE_GOOGLE_TRANSIT_ENABLED=true` is also set.
 - External “open directions” links use Google Maps URLs. Those consumer links need no API key and should remain ordinary unvisited links in automated tests.
 - Keep `.env.local` private. Never commit keys, booking references, tickets, QR codes, personal contact details, or raw travel documents.

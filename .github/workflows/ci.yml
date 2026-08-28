@@ -18,6 +18,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # Node 22's bundled npm 10 crashes in arborist ("Cannot read properties
+      # of null (reading 'edgesOut')") while installing the staged starter's
+      # file: tarballs; npm 11 resolves the same tree fine.
+      - run: npm install -g npm@11
       - run: npm ci
       - run: npm run stage:starter
       - run: npm run check

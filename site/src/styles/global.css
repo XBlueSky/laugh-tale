@@ -1,0 +1,1368 @@
+/* Laugh Tale — weekly-serial manga aesthetic, in tribute to ONE PIECE's medium:
+   white paper, black ink, true koma page grids with hard offset shadows,
+   screentone dots, concentration-line burst, speech bubbles, katakana SFX,
+   one Jump-red accent. Single committed look. Body-text pairs measure ≥ 4.5:1
+   (AA); red is links, labels, and shout lettering. */
+
+/* Bangers (OFL) self-hosted from Google Fonts — see /fonts/bangers-latin.woff2. */
+@font-face {
+  font-family: 'Bangers';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/bangers-latin.woff2') format('woff2');
+}
+
+:root {
+  --paper: oklch(97.5% 0.004 95);
+  --paper-shade: oklch(94% 0.006 95);
+  --ink: oklch(21% 0.012 270);
+  --ink-soft: oklch(38% 0.012 270);
+  --red: oklch(50% 0.19 27);
+  --straw: oklch(86% 0.14 95);
+  --gutter: oklch(90% 0.008 95);
+
+  --shout: 'Bangers', 'Arial Black', 'Avenir Next Condensed', impact, sans-serif;
+  --kana: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Arial Black', sans-serif;
+  --sans: 'Avenir Next', Avenir, Seravek, 'Gill Sans', 'Helvetica Neue', system-ui, sans-serif;
+  --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+
+  --border: 3px solid var(--ink);
+  --shadow: 6px 6px 0 var(--ink);
+  --measure: 40rem;
+  --page: 66rem;
+
+  /* screentone dot grid */
+  --tone: radial-gradient(circle, oklch(21% 0.012 270 / 0.28) 1px, transparent 1.4px);
+}
+
+* { box-sizing: border-box; margin: 0; }
+
+html { scroll-behavior: smooth; background: var(--paper); }
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--red); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+a:hover { color: var(--ink); }
+:focus-visible { outline: 3px solid var(--red); outline-offset: 3px; }
+
+::selection { background: var(--straw); }
+
+code, pre { font-family: var(--mono); }
+
+.wrap {
+  max-width: var(--page);
+  margin-inline: auto;
+  padding-inline: clamp(1rem, 4vw, 2.5rem);
+}
+
+/* ---------- masthead: magazine header strip ---------- */
+
+.masthead-bar {
+  background: var(--ink);
+  color: var(--paper);
+  border-bottom: var(--border);
+}
+
+.masthead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block: 0.6rem;
+}
+
+.masthead .wordmark {
+  font-family: var(--shout);
+  font-size: 1.25rem;
+  letter-spacing: 0.06em;
+  color: var(--paper);
+  text-decoration: none;
+}
+
+.masthead nav {
+  display: flex;
+  gap: 1.25rem;
+  font-family: var(--sans);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.masthead nav a { color: var(--paper); }
+.masthead nav a:hover { color: var(--straw); }
+
+/* ---------- title page (扉絵): burst, logo, shout lettering ---------- */
+
+.titlepage {
+  position: relative;
+  border: var(--border);
+  border-width: 4px;
+  box-shadow: var(--shadow);
+  background: var(--paper);
+  margin-block: clamp(1.5rem, 4vw, 3rem) clamp(2.5rem, 5vw, 4rem);
+  padding: clamp(1.5rem, 4vw, 3.5rem);
+  overflow: hidden;
+  text-align: center;
+}
+
+/* screentone shading in two corners */
+.titlepage::before,
+.titlepage::after {
+  content: '';
+  position: absolute;
+  width: clamp(9rem, 22vw, 16rem);
+  height: clamp(9rem, 22vw, 16rem);
+  background-image: var(--tone);
+  background-size: 7px 7px;
+  pointer-events: none;
+}
+
+.titlepage::before {
+  top: 0; left: 0;
+  clip-path: polygon(0 0, 100% 0, 0 100%);
+}
+
+.titlepage::after {
+  bottom: 0; right: 0;
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+}
+
+.caption-box {
+  position: relative;
+  z-index: 1;
+  display: inline-block;
+  border: 2.5px solid var(--ink);
+  background: var(--paper);
+  padding: 0.35em 0.9em;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 0.9375rem;
+  letter-spacing: 0.02em;
+}
+
+.burst-wrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+  margin-block: clamp(0.75rem, 2vw, 1.5rem);
+  min-height: clamp(12rem, 32vw, 19rem);
+  overflow: hidden;
+}
+
+.burst {
+  position: absolute;
+  width: min(150vw, 58rem);
+  height: auto;
+  color: var(--ink);
+  pointer-events: none;
+}
+
+.hero-logo {
+  position: relative;
+  z-index: 2;
+  width: clamp(11rem, 30vw, 17rem);
+  height: auto;
+  transform: rotate(-2deg);
+}
+
+.hero-relic {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+  transform-origin: 50% 70%;
+  filter: drop-shadow(2px 3px 0 var(--paper));
+}
+
+.hero-relic img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.hero-relic--straw {
+  top: 5%;
+  left: clamp(1%, 7vw, 9%);
+  width: clamp(5.25rem, 13vw, 8rem);
+  rotate: -9deg;
+}
+
+.hero-relic--cutlass {
+  right: clamp(0%, 5vw, 7%);
+  bottom: 1%;
+  width: clamp(6.5rem, 17vw, 10.5rem);
+  rotate: -13deg;
+}
+
+.don {
+  position: absolute;
+  z-index: 3;
+  right: clamp(0.25rem, 6vw, 5rem);
+  top: 12%;
+  font-family: var(--kana);
+  font-weight: 800;
+  font-size: clamp(1.75rem, 5vw, 3rem);
+  color: var(--red);
+  transform: rotate(9deg);
+  letter-spacing: 0.04em;
+  text-shadow: 2.5px 2.5px 0 var(--paper), 4px 4px 0 var(--ink);
+}
+
+.titlepage h1 {
+  position: relative;
+  z-index: 1;
+  font-family: var(--shout);
+  font-size: clamp(3.25rem, 10vw, 6.5rem);
+  font-weight: 400;
+  line-height: 0.95;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  text-shadow: 4px 4px 0 var(--straw);
+}
+
+.titlepage .lede {
+  position: relative;
+  z-index: 1;
+  max-width: var(--measure);
+  margin: 1.25rem auto 0;
+  font-size: clamp(1.0625rem, 1.9vw, 1.25rem);
+  color: var(--ink-soft);
+  text-wrap: pretty;
+}
+
+.titlepage .lede strong { color: var(--ink); }
+
+.eternal {
+  position: relative;
+  z-index: 1;
+  margin-top: 1rem;
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--red);
+}
+
+.eternal::before, .eternal::after { content: ' — '; color: var(--ink-soft); }
+
+.hero-links {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem 1.5rem;
+  margin-top: 1.5rem;
+  font-family: var(--sans);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.serial-note {
+  position: relative;
+  z-index: 1;
+  margin-top: 0.4rem;
+  font-family: var(--kana);
+  font-weight: 800;
+  font-size: 0.95rem;
+  letter-spacing: 0.09em;
+  color: var(--red);
+}
+
+/* ---------- acts and chapter title cards (話) ---------- */
+
+.act { position: relative; }
+
+.chapter-card {
+  position: relative;
+  display: grid;
+  gap: 0.9rem;
+  justify-items: start;
+  margin-block: clamp(2rem, 5vw, 3.5rem) clamp(1.75rem, 4vw, 2.75rem);
+}
+
+.chapter-card__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.9rem;
+  background: var(--ink);
+  color: var(--paper);
+  border: var(--border);
+  box-shadow: var(--shadow);
+  padding: 0.55em 1em 0.6em;
+}
+
+.chapter-card__no {
+  font-family: var(--kana);
+  font-weight: 800;
+  font-size: clamp(0.9rem, 1.9vw, 1.1rem);
+  letter-spacing: 0.1em;
+  background: var(--red);
+  color: var(--paper);
+  border: 2px solid var(--paper);
+  padding: 0.1em 0.55em;
+  rotate: -2deg;
+  align-self: center;
+}
+
+.chapter-card__kanji {
+  font-family: var(--kana);
+  font-weight: 800;
+  font-size: clamp(2.1rem, 5.5vw, 3.4rem);
+  line-height: 1;
+  letter-spacing: 0.12em;
+}
+
+.chapter-card__en {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: clamp(0.95rem, 2vw, 1.15rem);
+  color: var(--straw);
+  letter-spacing: 0.03em;
+}
+
+.chapter-card .narration { max-width: 30rem; }
+
+/* ---------- manga pages: paper sheets holding koma grids ---------- */
+
+.manga-page {
+  position: relative;
+  border: var(--border);
+  border-width: 4px;
+  background: var(--paper);
+  box-shadow: var(--shadow);
+  padding: clamp(0.8rem, 2.4vw, 1.3rem);
+  margin-bottom: clamp(2.25rem, 5vw, 3.5rem);
+}
+
+.page-title {
+  display: inline-block;
+  color: var(--ink);
+  font-family: var(--shout);
+  font-size: clamp(1.05rem, 2.3vw, 1.45rem);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  background: var(--paper);
+  border: 2.5px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  padding: 0.2em 0.7em;
+  margin: 0.15rem 0 clamp(0.8rem, 2.2vw, 1.2rem) 0.15rem;
+  transform: rotate(-1deg);
+}
+
+.manga-page--with-relic .page-title { max-width: calc(100% - 7.5rem); }
+
+.koma-grid {
+  display: grid;
+  gap: clamp(0.6rem, 1.6vw, 0.95rem);
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+/* ---------- koma: the panels ---------- */
+
+.koma {
+  position: relative;
+  border: var(--border);
+  background: var(--paper);
+  box-shadow: 4px 4px 0 var(--ink);
+  min-width: 0;
+}
+
+/* scene panels: ink art fills the frame, text rides on top */
+.koma--scene {
+  overflow: hidden;
+  padding: 0;
+}
+
+.koma--scene .koma-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* parallax scenes get oversized art so scroll drift never shows edges */
+.koma--depart .koma-art,
+.koma--tempest .koma-art,
+.koma--landfall .koma-art {
+  height: 116%;
+  top: -8%;
+}
+
+/* still-life panels: art floats on paper */
+.koma--still {
+  display: grid;
+  place-items: center;
+  padding: clamp(0.9rem, 2.5vw, 1.4rem);
+  overflow: visible;
+}
+
+.koma--still img { display: block; max-width: 100%; height: auto; }
+
+.koma-caption {
+  position: absolute;
+  z-index: 2;
+  right: 0.75rem;
+  bottom: -0.95rem;
+  font-family: var(--shout);
+  font-size: 0.72rem;
+  letter-spacing: 0.07em;
+  white-space: nowrap;
+  background: var(--straw);
+  border: 2px solid var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+  padding: 0.15em 0.6em;
+  rotate: -2deg;
+}
+
+/* talk panels: dialogue over faint screentone */
+.koma--talk {
+  padding: clamp(0.9rem, 2.5vw, 1.4rem);
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+
+.koma--talk::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--tone);
+  background-size: 9px 9px;
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.koma--talk > * { position: relative; }
+
+.talk-title {
+  justify-self: start;
+  border: 2.5px solid var(--ink);
+  background: var(--paper);
+  padding: 0.15em 0.7em;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 0.875rem;
+}
+
+/* ---------- chapter page grids ---------- */
+
+.koma-grid--chart {
+  grid-template-areas:
+    'depart depart depart depart depart depart depart depart log log log log'
+    'chart chart chart chart chart orders orders orders orders orders orders orders'
+    'quote quote quote quote quote quote quote quote quote quote quote quote';
+}
+
+.koma--depart { grid-area: depart; aspect-ratio: 16 / 10; }
+.koma--logbook { grid-area: log; }
+.koma--chart { grid-area: chart; min-height: 16rem; }
+.koma--orders { grid-area: orders; }
+.koma--quote { grid-area: quote; }
+
+.koma-grid--crew {
+  grid-template-areas:
+    'muster muster muster muster muster muster muster muster muster muster muster muster'
+    'dossier dossier dossier dossier dossier dossier dossier calls calls calls calls calls';
+}
+
+.koma--muster { grid-area: muster; aspect-ratio: 16 / 9; }
+.koma--dossier { grid-area: dossier; padding: clamp(1rem, 2.8vw, 1.6rem); }
+.koma--calls { grid-area: calls; }
+
+.koma-grid--cargo {
+  grid-template-areas:
+    'hold hold hold hold hold hold hold install install install install install';
+}
+
+.koma--hold { grid-area: hold; padding: clamp(1rem, 2.8vw, 1.6rem); }
+.koma--install { grid-area: install; }
+
+.koma-grid--storm {
+  grid-template-areas:
+    'tempest tempest tempest tempest tempest tempest tempest tempest tempest tempest tempest tempest'
+    'helm helm helm helm rigs rigs rigs rigs rigs rigs rigs rigs';
+}
+
+.koma--tempest { grid-area: tempest; aspect-ratio: 21 / 10; }
+.koma--helm { grid-area: helm; min-height: 20rem; }
+.koma--rigs { grid-area: rigs; padding: clamp(1rem, 2.8vw, 1.6rem); }
+
+.koma-grid--pledge { grid-template-areas: 'pledge pledge pledge pledge pledge pledge pledge pledge pledge pledge pledge pledge'; }
+
+.koma--ink { grid-area: pledge; }
+
+.koma-grid--arrival {
+  grid-template-areas:
+    'landfall landfall landfall landfall landfall landfall landfall landfall toast toast toast toast';
+}
+
+.koma--landfall { grid-area: landfall; aspect-ratio: 16 / 9; }
+.koma--toast { grid-area: toast; min-height: 14rem; }
+
+/* diagonal cuts (斜めコマ): paired panels share a slanted gutter */
+@media (min-width: 44.0625rem) {
+  .koma--slant-r {
+    clip-path: polygon(0 0, 100% 0, calc(100% - 2.4rem) 100%, 0 100%);
+    margin-right: -1.2rem;
+  }
+
+  .koma--slant-l {
+    clip-path: polygon(2.4rem 0, 100% 0, 100% 100%, 0 100%);
+    margin-left: -1.2rem;
+  }
+
+  .koma--slant-l.koma--orders > .console--bubble { margin-left: 1.6rem; }
+  .koma--slant-l.koma--rigs > * { margin-left: 1.4rem; }
+}
+
+/* ---------- narration boxes (角ネーム) ---------- */
+
+.narration {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 0.9875rem;
+  line-height: 1.55;
+  background: var(--paper);
+  color: var(--ink);
+  border: 2.5px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--straw);
+  padding: 0.55em 0.95em;
+  text-wrap: pretty;
+  width: fit-content;
+}
+
+.narration--in {
+  position: absolute;
+  z-index: 2;
+  margin: 0;
+  max-width: min(72%, 21rem);
+  font-size: 0.9rem;
+  box-shadow: none;
+}
+
+.narration--tl { top: 0; left: 0; border-top: none; border-left: none; }
+.narration--br { bottom: 0; right: 0; border-bottom: none; border-right: none; }
+.narration--bl { bottom: 0; left: 0; border-bottom: none; border-left: none; }
+
+.narration--lead {
+  box-shadow: 3px 3px 0 var(--red);
+  margin-bottom: 1.25rem;
+}
+
+/* ---------- SFX shout lettering ---------- */
+
+.sfx {
+  position: absolute;
+  z-index: 3;
+  font-family: var(--kana);
+  font-weight: 800;
+  color: var(--red);
+  letter-spacing: 0.04em;
+  text-shadow: 2px 2px 0 var(--paper), 4px 4px 0 var(--ink);
+  pointer-events: none;
+}
+
+.sfx--depart {
+  top: 7%;
+  right: 4%;
+  font-size: clamp(1.7rem, 4vw, 2.9rem);
+  rotate: -8deg;
+}
+
+.sfx--tempest {
+  top: 5%;
+  right: 4%;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  letter-spacing: 0.08em;
+  font-size: clamp(1.9rem, 4.5vw, 3.4rem);
+}
+
+.sfx--pledge {
+  top: -1.4rem;
+  right: clamp(1rem, 6vw, 3rem);
+  font-size: clamp(1.6rem, 4vw, 2.6rem);
+  rotate: -6deg;
+}
+
+.sfx--toast {
+  top: 6%;
+  left: 6%;
+  font-size: clamp(1.5rem, 3.5vw, 2.4rem);
+  rotate: -10deg;
+}
+
+.storm-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: var(--paper);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---------- storm act: rumble + ink pledge page ---------- */
+
+.rumble {
+  position: absolute;
+  z-index: 0;
+  top: clamp(4rem, 10vw, 7rem);
+  left: -3.6rem;
+  writing-mode: vertical-rl;
+  font-family: var(--kana);
+  font-weight: 800;
+  font-size: clamp(1.6rem, 4vw, 2.6rem);
+  letter-spacing: 0.35em;
+  color: var(--ink);
+  opacity: 0.14;
+  pointer-events: none;
+  user-select: none;
+}
+
+.manga-page--ink {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.manga-page--ink::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.16;
+  background: repeating-linear-gradient(
+    115deg,
+    transparent 0 14px,
+    oklch(97.5% 0.004 95 / 0.55) 14px 15px
+  );
+}
+
+.manga-page--ink > :not(.sfx) { position: relative; z-index: 1; }
+
+.page-title--ink { transform: rotate(-1deg); }
+
+.koma--ink {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--paper);
+  box-shadow: none;
+  padding: clamp(1.1rem, 3vw, 1.75rem);
+}
+
+@media (max-width: 74rem) {
+  .rumble { display: none; }
+}
+
+/* ---------- crew relics: inked marginalia on the pages ---------- */
+
+.chapter-relic {
+  position: absolute;
+  z-index: 5;
+  top: -3.25rem;
+  right: clamp(-1.35rem, -1vw, -0.5rem);
+  width: clamp(7.25rem, 15vw, 9.5rem);
+  aspect-ratio: 1;
+  transform-origin: 52% 72%;
+  cursor: default;
+  contain: layout paint;
+}
+
+.chapter-relic::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 16% 12%;
+  border-radius: 50%;
+  background-image: var(--tone);
+  background-size: 6px 6px;
+  opacity: 0.75;
+}
+
+.relic-part {
+  position: absolute;
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(2px 3px 0 var(--paper));
+  user-select: none;
+}
+
+.relic-label {
+  position: absolute;
+  z-index: 4;
+  right: -0.15rem;
+  bottom: 0.15rem;
+  border: 2px solid var(--ink);
+  background: var(--red);
+  color: var(--paper);
+  padding: 0.05em 0.45em;
+  font-family: var(--shout);
+  font-size: 0.8rem;
+  line-height: 1.1;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  box-shadow: 2px 2px 0 var(--ink);
+  rotate: -3deg;
+}
+
+.relic--first-mate { rotate: 5deg; }
+.relic--first-mate .relic-part--sword { top: -8%; left: 16%; width: 88%; rotate: 7deg; }
+.relic--first-mate .relic-part--glasses { top: 29%; left: -6%; width: 76%; rotate: -8deg; }
+
+.relic--navigator { rotate: -4deg; }
+.relic--navigator .relic-part--axes { z-index: 2; inset: 0; }
+
+.relic-compass {
+  position: absolute;
+  inset: 12%;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  opacity: 0.55;
+}
+
+.relic-compass::before,
+.relic-compass::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 8%;
+  width: 84%;
+  height: 2px;
+  background: var(--ink);
+  transform-origin: center;
+}
+
+.relic-compass::before { rotate: 45deg; }
+.relic-compass::after { rotate: -45deg; }
+
+.relic--doctor { rotate: 4deg; }
+.relic--doctor .relic-part--doctor-kit { z-index: 2; top: 8%; left: 6%; width: 88%; }
+
+.relic-harpoon {
+  position: absolute;
+  z-index: 3;
+  top: 51%;
+  left: -10%;
+  width: 118%;
+  height: 3px;
+  border: 1px solid var(--paper);
+  background: var(--ink);
+  rotate: -57deg;
+}
+
+.relic-harpoon::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -0.45rem;
+  width: 1.05rem;
+  height: 1.05rem;
+  background: var(--ink);
+  clip-path: polygon(0 43%, 100% 0, 68% 50%, 100% 100%, 0 57%);
+  translate: 0 -50%;
+}
+
+.relic--reader { rotate: -5deg; }
+.relic--reader .relic-part--reader-swords { z-index: 1; top: -3%; left: -2%; width: 96%; }
+.relic--reader .relic-part--reader-journal {
+  z-index: 2;
+  right: -1%;
+  bottom: 2%;
+  width: 56%;
+  rotate: 8deg;
+}
+
+@media (max-width: 44rem) {
+  .manga-page--with-relic .page-title { max-width: calc(100% - 5rem); }
+
+  .chapter-relic {
+    top: -2.15rem;
+    right: 0.1rem;
+    width: 6rem;
+  }
+
+  .relic-label { font-size: 0.62rem; }
+}
+
+@media (max-width: 25rem) {
+  .relic-label { display: none; }
+}
+
+/* ---------- consoles as speech: the crew speaks in terminals ---------- */
+
+.console {
+  width: 100%;
+  min-width: 0;
+  max-width: 44rem;
+}
+
+.console figcaption {
+  display: inline-block;
+  font-family: var(--shout);
+  font-size: 1rem;
+  letter-spacing: 0.06em;
+  background: var(--straw);
+  border: 2.5px solid var(--ink);
+  border-bottom: 0;
+  padding: 0.1em 0.75em;
+}
+
+.console pre {
+  background: var(--ink);
+  color: var(--paper);
+  border: 2.5px solid var(--ink);
+  padding: 1rem 1.25rem;
+  font-size: 0.875rem;
+  line-height: 1.8;
+  overflow-x: auto;
+}
+
+.console .prompt { color: oklch(65% 0.02 270); user-select: none; }
+
+.console--bubble { position: relative; }
+
+.console--bubble figcaption {
+  border-bottom: 2.5px solid var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+  position: relative;
+  z-index: 1;
+  rotate: -1.5deg;
+  margin-bottom: -0.4rem;
+}
+
+.console--bubble pre {
+  border-radius: 0.9rem;
+  box-shadow: 3px 3px 0 var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.console--bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -0.7rem;
+  left: 2rem;
+  width: 1rem;
+  height: 1rem;
+  background: var(--ink);
+  clip-path: polygon(0 0, 100% 0, 30% 100%);
+}
+
+.console--bubble-alt::after { left: auto; right: 2.5rem; clip-path: polygon(0 0, 100% 0, 70% 100%); }
+
+/* the big spoken line */
+.koma--quote {
+  display: grid;
+  justify-items: center;
+  gap: 0.9rem;
+  padding: clamp(1.25rem, 3.5vw, 2rem);
+  text-align: center;
+}
+
+.koma--quote::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--tone);
+  background-size: 9px 9px;
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.koma--quote > * { position: relative; }
+
+.bubble--shout {
+  position: relative;
+  font-size: clamp(1.05rem, 2.4vw, 1.4rem);
+  line-height: 1.45;
+  border: 3px solid var(--ink);
+  border-radius: 1.4em;
+  background: var(--paper);
+  box-shadow: 4px 4px 0 var(--ink);
+  padding: 0.8em 1.3em;
+  max-width: 34rem;
+}
+
+.bubble--shout::after {
+  content: '';
+  position: absolute;
+  bottom: -0.72em;
+  left: 18%;
+  width: 1em;
+  height: 1em;
+  background: var(--paper);
+  border-right: 3px solid var(--ink);
+  border-bottom: 3px solid var(--ink);
+  transform: skewX(35deg) rotate(45deg);
+}
+
+.quote-hint {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 0.9375rem;
+  color: var(--ink-soft);
+}
+
+/* ---------- marketplace dossier + calls ---------- */
+
+.group-note {
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+  margin-bottom: 1.25rem;
+}
+
+.plugin-id {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.plugin-id h3 {
+  font-family: var(--mono);
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.stamp {
+  font-family: var(--shout);
+  font-size: 0.875rem;
+  letter-spacing: 0.05em;
+  color: var(--red);
+  border: 2px solid currentcolor;
+  padding: 0.05em 0.5em;
+  transform: rotate(-2deg);
+}
+
+.koma--dossier .tagline {
+  font-size: clamp(1.25rem, 2.5vw, 1.5rem);
+  font-weight: 600;
+  line-height: 1.3;
+  text-wrap: balance;
+  margin-bottom: 0.75rem;
+}
+
+.koma--dossier .intro { color: var(--ink-soft); text-wrap: pretty; }
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+  padding: 0;
+  list-style: none;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.tags li {
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  padding: 0.1em 0.75em;
+  background: var(--paper-shade);
+}
+
+.trigger {
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--ink-soft);
+}
+
+/* speech bubbles — the examples are things people say to their agent */
+.examples { list-style: none; padding: 0; display: grid; gap: 1rem; }
+
+.examples li {
+  position: relative;
+  border: 2.5px solid var(--ink);
+  border-radius: 1.1em;
+  background: var(--paper);
+  padding: 0.7em 1em;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  width: fit-content;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.examples li::after {
+  content: '';
+  position: absolute;
+  bottom: -0.62em;
+  left: 1.6em;
+  width: 0.9em;
+  height: 0.9em;
+  background: var(--paper);
+  border-right: 2.5px solid var(--ink);
+  border-bottom: 2.5px solid var(--ink);
+  transform: skewX(35deg) rotate(45deg);
+}
+
+.examples li:nth-child(even) { margin-left: clamp(0.5rem, 3vw, 1.75rem); }
+
+/* ---------- cargo hold: packages ---------- */
+
+.hold-note { max-width: var(--measure); text-wrap: pretty; margin-bottom: 1rem; }
+
+.packages { display: grid; gap: 0; }
+
+.package {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 0.5rem 2rem;
+  align-items: baseline;
+  border-top: 2px solid var(--ink);
+  padding-block: 1.1rem;
+}
+
+.package a { font-family: var(--mono); font-size: 0.9375rem; font-weight: 700; }
+
+.package p { font-size: 0.9375rem; color: var(--ink-soft); }
+
+@media (max-width: 44rem) {
+  .package { grid-template-columns: 1fr; }
+}
+
+/* ---------- recipes: a three-koma strip, each in its own aesthetic ---------- */
+
+.recipes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1.25rem;
+}
+
+.swatch { padding: 1.5rem 1.25rem; min-height: 10rem; display: flex; flex-direction: column; gap: 0.5rem; }
+
+.swatch p { font-size: 0.9375rem; margin-top: auto; }
+
+.swatch-quiet-wood {
+  background: oklch(89% 0.035 75);
+  color: oklch(30% 0.04 60);
+  border-radius: 14px;
+  box-shadow: 0 2px 10px oklch(50% 0.05 70 / 0.25);
+  font-family: var(--serif);
+}
+.swatch-quiet-wood strong { font-size: 1.375rem; font-weight: 500; }
+
+.swatch-sticker-brutalist {
+  background: oklch(98% 0.005 90);
+  color: oklch(15% 0 0);
+  border: 3px solid oklch(15% 0 0);
+  border-radius: 0;
+  box-shadow: 6px 6px 0 oklch(15% 0 0);
+  font-family: var(--sans);
+}
+.swatch-sticker-brutalist strong {
+  font-size: 1.125rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: oklch(85% 0.17 95);
+  padding: 0.1em 0.4em;
+  align-self: flex-start;
+  transform: rotate(-1.5deg);
+}
+
+.swatch-native-minimal {
+  background: oklch(97% 0 0);
+  color: oklch(32% 0 0);
+  border: 1px solid oklch(85% 0 0);
+  border-radius: 10px;
+  font-family: var(--sans);
+}
+.swatch-native-minimal strong { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.01em; }
+
+.recipes-note {
+  max-width: var(--measure);
+  margin-top: 1.25rem;
+  font-size: 0.9375rem;
+  color: var(--ink-soft);
+}
+
+/* ---------- privacy pledge ---------- */
+
+.pledge { list-style: none; padding: 0; max-width: var(--measure); display: grid; gap: 1rem; }
+
+.pledge li { position: relative; padding-left: 1.75rem; }
+
+.pledge li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.5em;
+  width: 0.85rem;
+  height: 3px;
+  background: var(--red);
+}
+
+/* ---------- final spread: the whole crew at the horizon ---------- */
+
+.crew-epilogue {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: 4px solid var(--ink);
+  box-shadow: var(--shadow);
+  background: var(--paper);
+  margin-block: clamp(4rem, 9vw, 7rem) clamp(2rem, 5vw, 4rem);
+  min-height: clamp(17rem, 46vw, 29rem);
+}
+
+.crew-epilogue::before,
+.crew-epilogue::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.crew-epilogue::before {
+  inset: 0;
+  background:
+    linear-gradient(106deg, transparent 0 48%, oklch(21% 0.012 270 / 0.06) 48.2% 48.5%, transparent 48.7%),
+    linear-gradient(74deg, transparent 0 50%, oklch(21% 0.012 270 / 0.05) 50.2% 50.45%, transparent 50.65%);
+}
+
+.crew-epilogue::after {
+  inset: auto 0 0;
+  height: 18%;
+  background-image: var(--tone);
+  background-size: 7px 7px;
+  opacity: 0.45;
+}
+
+.crew-epilogue__sun {
+  position: absolute;
+  z-index: 0;
+  top: 8%;
+  left: 50%;
+  width: clamp(8rem, 25vw, 15rem);
+  aspect-ratio: 1;
+  border: 3px solid var(--ink);
+  border-radius: 50%;
+  background: var(--straw);
+  translate: -50% 0;
+  box-shadow: 5px 5px 0 var(--ink);
+}
+
+.crew-epilogue__art {
+  position: absolute;
+  z-index: 1;
+  inset: auto 0 0;
+  transform-origin: center bottom;
+}
+
+.crew-epilogue__image {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.crew-epilogue figcaption {
+  position: absolute;
+  z-index: 3;
+  top: clamp(1rem, 4vw, 2.5rem);
+  left: clamp(1rem, 4vw, 2.5rem);
+  display: grid;
+  gap: 0.35rem;
+  max-width: min(27rem, 68%);
+  border: 3px solid var(--ink);
+  background: var(--paper);
+  padding: clamp(0.65rem, 2vw, 1rem) clamp(0.8rem, 2.5vw, 1.25rem);
+  box-shadow: 4px 4px 0 var(--ink);
+  rotate: -1deg;
+}
+
+.crew-epilogue__kicker {
+  justify-self: start;
+  background: var(--red);
+  color: var(--paper);
+  padding: 0.05em 0.5em;
+  font-family: var(--shout);
+  font-size: clamp(0.8rem, 1.7vw, 1rem);
+  letter-spacing: 0.06em;
+}
+
+.crew-epilogue figcaption strong {
+  font-family: var(--shout);
+  font-size: clamp(1.35rem, 3.5vw, 2.35rem);
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.025em;
+  text-wrap: balance;
+}
+
+.crew-epilogue__sfx {
+  position: absolute;
+  z-index: 4;
+  top: 15%;
+  right: clamp(0.75rem, 4vw, 2.5rem);
+  color: var(--red);
+  font-family: var(--kana);
+  font-weight: 800;
+  font-size: clamp(1.4rem, 5vw, 3.25rem);
+  letter-spacing: 0.04em;
+  rotate: 7deg;
+  text-shadow: 2px 2px 0 var(--paper), 4px 4px 0 var(--ink);
+}
+
+@media (max-width: 44rem) {
+  .crew-epilogue {
+    min-height: clamp(17rem, 73vw, 23rem);
+  }
+
+  .crew-epilogue__art {
+    left: 50%;
+    width: 145%;
+    translate: -50% 0;
+  }
+
+  .crew-epilogue figcaption { max-width: 72%; }
+  .crew-epilogue__sfx { top: 38%; }
+}
+
+/* ---------- responsive: pages collapse to a vertical strip ---------- */
+
+@media (max-width: 44rem) {
+  .koma-grid--chart,
+  .koma-grid--crew,
+  .koma-grid--cargo,
+  .koma-grid--storm,
+  .koma-grid--pledge,
+  .koma-grid--arrival {
+    grid-template-columns: 1fr;
+    grid-template-areas: none;
+  }
+
+  .koma-grid--chart > .koma,
+  .koma-grid--crew > .koma,
+  .koma-grid--cargo > .koma,
+  .koma-grid--storm > .koma,
+  .koma-grid--pledge > .koma,
+  .koma-grid--arrival > .koma { grid-area: auto; }
+
+  .koma--depart { aspect-ratio: 16 / 10; }
+  .koma--chart { aspect-ratio: 16 / 10; min-height: 0; }
+  .koma--muster { aspect-ratio: 16 / 9; }
+  .koma--tempest { aspect-ratio: 16 / 10; }
+  .koma--helm { aspect-ratio: 3 / 4; min-height: 0; }
+  .koma--landfall { aspect-ratio: 16 / 9; }
+  .koma--toast { aspect-ratio: 1; min-height: 0; }
+
+  .koma--logbook img { max-width: 12rem; }
+
+  .console pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+}
+
+/* ---------- footer: end page ---------- */
+
+.colophon-bar {
+  background: var(--ink);
+  color: var(--paper);
+  border-top: var(--border);
+  margin-top: clamp(3rem, 7vw, 5rem);
+}
+
+.colophon {
+  padding-block: 2.5rem 3rem;
+  font-size: 0.8125rem;
+  display: grid;
+  gap: 1.25rem;
+}
+
+.tbc {
+  font-family: var(--shout);
+  font-size: clamp(1.5rem, 4vw, 2.25rem);
+  letter-spacing: 0.05em;
+  color: var(--straw);
+}
+
+.colophon .legal { max-width: 46rem; text-wrap: pretty; color: oklch(78% 0.008 95); }
+
+.colophon nav { display: flex; flex-wrap: wrap; gap: 1.25rem; font-weight: 600; }
+.colophon nav a { color: var(--paper); }
+.colophon nav a:hover { color: var(--straw); }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------- motion: Motion handles entrances; CSS supplies ink boil and feedback ---------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes burst-boil {
+    0% { transform: rotate(0deg) scale(1); animation-timing-function: step-end; }
+    33% { transform: rotate(0.6deg) scale(1.012); animation-timing-function: step-end; }
+    66% { transform: rotate(-0.5deg) scale(0.996); animation-timing-function: step-end; }
+    100% { transform: rotate(0deg) scale(1); }
+  }
+
+  .burst { animation: burst-boil 0.8s 4; }
+
+  .manga-page {
+    transition:
+      transform 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .manga-page:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 8px 8px 0 var(--ink);
+  }
+
+  .chapter-relic.is-animating { will-change: transform, opacity; }
+
+  .examples li {
+    transition:
+      translate 0.14s cubic-bezier(0.25, 1, 0.5, 1),
+      box-shadow 0.14s cubic-bezier(0.25, 1, 0.5, 1);
+  }
+
+  .examples li:hover {
+    translate: -2px -2px;
+    box-shadow: 5px 5px 0 var(--ink);
+  }
+
+  .stamp { transition: rotate 0.18s cubic-bezier(0.25, 1, 0.5, 1); }
+  .stamp:hover { rotate: 2deg; }
+
+  .console,
+  .swatch {
+    transition:
+      translate 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+      rotate 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .console:hover { translate: -2px -3px; rotate: -0.25deg; }
+  .swatch:hover { translate: 0 -4px; rotate: 0.35deg; }
+
+  .hero-links a,
+  .masthead a,
+  .colophon a {
+    transition:
+      color 0.16s cubic-bezier(0.25, 1, 0.5, 1),
+      translate 0.16s cubic-bezier(0.25, 1, 0.5, 1);
+  }
+
+  .hero-links a:hover,
+  .masthead a:hover,
+  .colophon a:hover { translate: 0 -2px; }
+
+  a:active { translate: 0 1px; }
+}

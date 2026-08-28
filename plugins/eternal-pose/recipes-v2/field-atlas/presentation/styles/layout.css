@@ -1,0 +1,373 @@
+.field-atlas-experience {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  min-width: 0;
+  height: 100dvh;
+  max-width: 100vw;
+  overflow: hidden;
+  color: var(--atlas-ink);
+  background: var(--atlas-canvas);
+  isolation: isolate;
+  container-name: field-atlas;
+  container-type: inline-size;
+}
+
+.atlas-responsive-layout {
+  display: contents;
+}
+
+.safe-area-probe {
+  position: absolute;
+  width: 0;
+  height: 0;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.atlas-map-surface {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.atlas-map-surface {
+  z-index: var(--atlas-layer-map);
+  min-width: 0;
+  overflow: hidden;
+  background: var(--atlas-surface-deep);
+}
+
+.itinerary-map {
+  position: absolute;
+  z-index: 1;
+  top: calc(var(--header-clearance) + 56px);
+  right: 0;
+  bottom: var(--map-provider-bottom);
+  left: 0;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.atlas-map-grid {
+  position: absolute;
+  z-index: var(--atlas-layer-grid);
+  inset: 0;
+  overflow: hidden;
+  opacity: 0.28;
+  pointer-events: none;
+}
+
+.atlas-map-grid::before,
+.atlas-map-grid::after {
+  position: absolute;
+  top: 0;
+  left: 64px;
+  width: 1px;
+  height: 100%;
+  background: var(--atlas-rule);
+  box-shadow:
+    64px 0 var(--atlas-rule),
+    128px 0 var(--atlas-rule),
+    192px 0 var(--atlas-rule),
+    256px 0 var(--atlas-rule),
+    320px 0 var(--atlas-rule),
+    384px 0 var(--atlas-rule),
+    448px 0 var(--atlas-rule),
+    512px 0 var(--atlas-rule),
+    576px 0 var(--atlas-rule),
+    640px 0 var(--atlas-rule),
+    704px 0 var(--atlas-rule),
+    768px 0 var(--atlas-rule),
+    832px 0 var(--atlas-rule),
+    896px 0 var(--atlas-rule),
+    960px 0 var(--atlas-rule),
+    1024px 0 var(--atlas-rule),
+    1088px 0 var(--atlas-rule),
+    1152px 0 var(--atlas-rule),
+    1216px 0 var(--atlas-rule),
+    1280px 0 var(--atlas-rule);
+  content: "";
+}
+
+.atlas-map-grid::after {
+  top: 64px;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  box-shadow:
+    0 64px var(--atlas-rule),
+    0 128px var(--atlas-rule),
+    0 192px var(--atlas-rule),
+    0 256px var(--atlas-rule),
+    0 320px var(--atlas-rule),
+    0 384px var(--atlas-rule),
+    0 448px var(--atlas-rule),
+    0 512px var(--atlas-rule),
+    0 576px var(--atlas-rule),
+    0 640px var(--atlas-rule),
+    0 704px var(--atlas-rule),
+    0 768px var(--atlas-rule),
+    0 832px var(--atlas-rule);
+}
+
+.day-header {
+  position: absolute;
+  z-index: var(--atlas-layer-chrome);
+  top: calc(var(--safe-area-top) + var(--atlas-space-2));
+  right: var(--atlas-space-2);
+  left: var(--atlas-space-2);
+  max-height: var(--header-clearance);
+  overflow: hidden;
+}
+
+.atlas-map-controls {
+  position: absolute;
+  z-index: var(--atlas-layer-chrome);
+  top: calc(var(--header-clearance) + var(--atlas-space-3));
+  right: var(--atlas-space-2);
+  display: flex;
+  min-width: 0;
+  align-items: stretch;
+}
+
+.itinerary-sheet {
+  position: absolute;
+  z-index: var(--atlas-layer-sheet);
+  right: 0;
+  bottom: var(--safe-area-bottom);
+  left: 0;
+  display: grid;
+  min-width: 0;
+  grid-template-rows: 44px auto auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.atlas-detail-surface__scroll {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.atlas-home {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 100dvh;
+  max-height: 100dvh;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  padding: max(var(--atlas-space-4), env(safe-area-inset-top))
+    max(var(--atlas-space-4), env(safe-area-inset-right))
+    max(var(--atlas-space-5), env(safe-area-inset-bottom))
+    max(var(--atlas-space-4), env(safe-area-inset-left));
+  overflow-x: hidden;
+  overflow-y: auto;
+  color: var(--atlas-ink);
+  background: var(--atlas-canvas);
+}
+
+.atlas-home > * {
+  width: min(100%, 74rem);
+  min-width: 0;
+  margin-inline: auto;
+}
+
+.atlas-home__mast {
+  display: grid;
+  min-height: 15rem;
+  grid-template-columns: minmax(0, 1.35fr) minmax(12rem, 0.65fr);
+}
+
+.atlas-readiness {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr;
+}
+
+.atlas-home__pretrip,
+.atlas-reservation-ledger,
+.atlas-home__days {
+  min-width: 0;
+}
+
+.atlas-home__days {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.atlas-state {
+  display: grid;
+  width: 100%;
+  min-height: 100dvh;
+  place-items: center;
+  padding: max(var(--atlas-space-4), env(safe-area-inset-top))
+    max(var(--atlas-space-4), env(safe-area-inset-right))
+    max(var(--atlas-space-4), env(safe-area-inset-bottom))
+    max(var(--atlas-space-4), env(safe-area-inset-left));
+  color: var(--atlas-ink);
+  background: var(--atlas-canvas);
+}
+
+@media (max-width: 767px) {
+  .atlas-home__mast,
+  .atlas-readiness,
+  .atlas-home__days {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .atlas-home__mast {
+    min-height: 0;
+  }
+
+  .atlas-route-overview {
+    min-height: 10rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .itinerary-map {
+    top: 0;
+    right: min(24rem, 31vw);
+    bottom: 0;
+    left: min(15rem, 22vw);
+    width: auto;
+    height: auto;
+  }
+
+  .day-header {
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(15rem, 22vw);
+    max-height: none;
+  }
+
+  .atlas-day-index__primary {
+    align-items: start;
+  }
+
+  .atlas-day-index__rail {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    overflow-y: auto;
+  }
+
+  .atlas-map-controls {
+    top: auto;
+    right: auto;
+    bottom: var(--atlas-space-3);
+    left: var(--atlas-space-3);
+  }
+
+  .atlas-legend {
+    right: calc(min(24rem, 31vw) + var(--atlas-space-3));
+  }
+
+  .itinerary-sheet {
+    top: var(--atlas-space-3);
+    right: var(--atlas-space-3);
+    bottom: var(--atlas-space-3) !important;
+    left: auto;
+    width: calc(min(24rem, 31vw) - var(--atlas-space-3));
+    max-height: calc(100dvh - (var(--atlas-space-3) * 2)) !important;
+  }
+}
+
+@media (max-width: 430px) {
+  .atlas-day-index__primary .atlas-key {
+    display: none;
+  }
+}
+
+@media (max-width: 360px) {
+  .atlas-map-controls__status,
+  .atlas-day-index__primary small {
+    display: none;
+  }
+
+  .atlas-day-index__primary strong {
+    font-size: 0.875rem;
+    line-height: 1.1;
+  }
+}
+
+@container field-atlas (max-width: 15rem) {
+  .atlas-responsive-layout {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    min-width: 0;
+    height: 100%;
+    grid-template-rows: auto minmax(12rem, 42dvh) auto auto;
+    align-content: start;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .atlas-responsive-layout > .day-header {
+    position: relative;
+    top: auto;
+    right: auto;
+    left: auto;
+    width: auto;
+    max-height: none;
+    grid-row: 1;
+    margin: var(--atlas-space-2);
+    overflow: visible;
+  }
+
+  .atlas-responsive-layout > .atlas-map-surface {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    height: auto;
+    min-height: 12rem;
+    grid-row: 2;
+  }
+
+  .atlas-responsive-layout .itinerary-map {
+    inset: 0;
+    width: auto;
+    height: auto;
+    min-height: 44px;
+  }
+
+  .atlas-responsive-layout > .atlas-map-controls {
+    position: relative;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    display: grid;
+    width: auto;
+    grid-row: 3;
+    grid-template-columns: repeat(2, minmax(44px, 1fr));
+    margin: var(--atlas-space-2);
+  }
+
+  .atlas-responsive-layout > .itinerary-sheet {
+    position: relative;
+    inset: auto !important;
+    width: 100%;
+    height: auto !important;
+    max-height: none !important;
+    grid-row: 4;
+    grid-template-rows: auto auto auto auto;
+    overflow: visible;
+    transform: none !important;
+    transition-duration: 0ms !important;
+  }
+
+  .atlas-responsive-layout .atlas-detail-surface__scroll {
+    min-height: 1px;
+    overflow: visible;
+    overscroll-behavior: auto;
+  }
+}

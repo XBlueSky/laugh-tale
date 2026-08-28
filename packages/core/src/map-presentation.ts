@@ -1,19 +1,29 @@
-import type { CandidateGroup, Coordinates } from "./model.js";
+import type { CandidateGroup, Coordinates, RouteEdge } from "./model.js";
 import type { EffectiveDay } from "./resolve-itinerary.js";
 import { candidateMapOwnerId, nodeMapOwnerId } from "./map-owners.js";
 import type {
   MapPlacePresentation,
   MapPresentation,
+  MapRoutePresentation,
   RouteResult,
 } from "./provider-data.js";
 
-export interface MapPresentationContext {
+interface MapPresentationSelectionContext {
   expandedCandidateGroup?: CandidateGroup;
   activeCandidateOptionId?: string;
   selectedNodeId?: string;
   selectedRouteId?: string;
-  routeResults?: Readonly<Record<string, RouteResult>>;
 }
+
+type MapPresentationRouteContext =
+  | { routes?: never; routeResults?: never }
+  | {
+      routes: readonly RouteEdge[];
+      routeResults: Readonly<Record<string, RouteResult>>;
+    };
+
+export type MapPresentationContext = MapPresentationSelectionContext &
+  MapPresentationRouteContext;
 
 function validCoordinates(value: Coordinates | undefined): value is Coordinates {
   return (
@@ -119,22 +129,55 @@ export function buildMapPresentation(
   effectiveDay: EffectiveDay,
   context: MapPresentationContext = {},
 ): MapPresentation {
+  let routeEdges: readonly RouteEdge[] = [];
+  let routeResults: Readonly<Record<string, RouteResult>> = {};
+  if (context.routes !== undefined || context.routeResults !== undefined) {
+    if (context.routes === undefined || context.routeResults === undefined) {
+      throw new Error("Map presentation routes and routeResults must be provided together");
+    }
+    routeEdges = context.routes;
+    routeResults = context.routeResults;
+  }
   const places = [
     ...effectivePlaces(effectiveDay, context),
     ...expandedCandidatePlaces(effectiveDay, context),
   ];
-  const routes = Object.entries(context.routeResults ?? {}).map(([edgeId, result]) =>
-    result.status === "ready"
-      ? {
-          edgeId,
-          path: result.path.map(cloneCoordinates),
-          tone:
-            edgeId === context.selectedRouteId
-              ? ("selected" as const)
-              : ("default" as const),
-        }
-      : { edgeId, path: [], tone: "unavailable" as const },
-  );
+  const routeOwners = new Set<string>();
+  const routes = routeEdges.flatMap<MapRoutePresentation>((edge) => {
+    if (routeOwners.has(edge.id) || !Object.hasOwn(routeResults, edge.id)) {
+      return [];
+    }
+    routeOwners.add(edge.id);
+    const result = routeResults[edge.id];
+    if (result === undefined) {
+      return [];
+    }
+    const semantics = {
+      source: edge.source,
+      certainty: edge.certainty,
+      mode: edge.mode,
+    };
+    return result.status === "ready"
+      ? [
+          {
+            edgeId: edge.id,
+            path: result.path.map(cloneCoordinates),
+            tone:
+              edge.id === context.selectedRouteId
+                ? ("selected" as const)
+                : ("default" as const),
+            ...semantics,
+          },
+        ]
+      : [
+          {
+            edgeId: edge.id,
+            path: [],
+            tone: "unavailable" as const,
+            ...semantics,
+          },
+        ];
+  });
   const selectedPlace = selectedPlaceOwnerId(places, context);
 
   return {

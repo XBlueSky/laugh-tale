@@ -1,0 +1,34 @@
+:root {
+  color-scheme: light;
+  --atlas-font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --atlas-font-index: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+  --atlas-canvas: #e5ebef;
+  --atlas-surface: #f4f7f9;
+  --atlas-surface-strong: #d6dfe5;
+  --atlas-surface-deep: #c2ccd3;
+  --atlas-ink: #17212b;
+  --atlas-ink-soft: #3f4e59;
+  --atlas-rule: #71808b;
+  --atlas-rule-soft: #a7b3bb;
+  --atlas-accent: #2457c5;
+  --atlas-accent-strong: #173c8f;
+  --atlas-accent-soft: #d8e2fb;
+  --atlas-danger: #8d2430;
+  --atlas-focus: #123d98;
+  --atlas-scrim: rgb(23 33 43 / 48%);
+  --atlas-rule-width: 1px;
+  --atlas-rule-strong: 2px;
+  --atlas-space-1: 0.25rem;
+  --atlas-space-2: 0.5rem;
+  --atlas-space-3: 0.75rem;
+  --atlas-space-4: 1rem;
+  --atlas-space-5: 1.5rem;
+  --atlas-space-6: 2rem;
+  --atlas-state-duration: 180ms;
+  --atlas-easing: cubic-bezier(0.16, 1, 0.3, 1);
+  --atlas-layer-map: 0;
+  --atlas-layer-grid: 2;
+  --atlas-layer-chrome: 10;
+  --atlas-layer-sheet: 20;
+  --atlas-layer-dialog: 40;
+}

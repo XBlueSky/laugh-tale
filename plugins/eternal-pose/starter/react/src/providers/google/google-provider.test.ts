@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { candidateMapOwnerId, decodeMapPlaceOwnerId, nodeMapOwnerId, USER_LOCATION_OWNER_ID, type MapPresentation, type RouteRequest, type RouteResult } from "@laugh-tale-island/core";
+import { candidateMapOwnerId, decodeMapPlaceOwnerId, nodeMapOwnerId, USER_LOCATION_OWNER_ID, type MapPresentation, type MapRoutePresentation, type RouteRequest, type RouteResult } from "@laugh-tale-island/core";
 import type { RouteEdge } from "@laugh-tale-island/core";
+import type { MapVisualProfile } from "../../controllers/presentation-contract";
 import { FakeRouteAdapter } from "../fake/FakeRouteAdapter";
 import {
   configureGoogleMaps,
   createGoogleMapsConfigurator,
   createGoogleMapsLoader,
+  type GoogleMapsConfigInput,
   type GoogleMapsRuntime,
 } from "./google-config";
 import { GoogleMapAdapter } from "./GoogleMapAdapter";
@@ -42,6 +44,25 @@ function parseJsonBody(init: RequestInit | undefined): unknown {
   return parsed;
 }
 
+function fallbackContrastRatio(first: string, second: string): number {
+  const luminance = (color: string) => {
+    const match = /^#([0-9a-f]{6})$/i.exec(color);
+    if (match?.[1] === undefined) throw new Error(`Expected hex paint: ${color}`);
+    const value = match[1];
+    const channels = [0, 2, 4].map((offset) => {
+      const normalized = Number.parseInt(value.slice(offset, offset + 2), 16) / 255;
+      return normalized <= 0.04045
+        ? normalized / 12.92
+        : ((normalized + 0.055) / 1.055) ** 2.4;
+    });
+    return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+  };
+  const [lighter, darker] = [luminance(first), luminance(second)].sort(
+    (left, right) => right - left,
+  );
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 function routeEdge(overrides: Partial<RouteEdge> = {}): RouteEdge {
   return {
     id: "route-a-b",
@@ -56,13 +77,75 @@ function routeEdge(overrides: Partial<RouteEdge> = {}): RouteEdge {
   };
 }
 
+const googleMapProfile: MapVisualProfile = {
+  id: "google-provider-test",
+  basemap: {
+    mode: "neutral",
+    density: "medium",
+    contrast: "standard",
+    poi: "minimal",
+  },
+  candidateTitle: (sequenceNumber, index, option) =>
+    `${sequenceNumber}:${index}:${option.title}`,
+  marker: (place, index) => ({
+    title: `Profile title: ${place.label}`,
+    className: `profile-marker profile-marker--${place.tone}`,
+    label: `Profile label: ${place.label}`,
+    parts: [
+      { className: "profile-marker__index", text: String(index + 1) },
+      { className: "profile-marker__label", text: place.label },
+    ],
+    fallback: {
+      fill: place.tone === "selected" ? "#123456" : "#fefefe",
+      stroke: "#654321",
+      labelColor: place.tone === "selected" ? "#ffffff" : "#111827",
+      text: String(index + 1),
+      size: place.tone === "selected" ? 48 : 44,
+      shape:
+        place.tone === "selected"
+          ? "square"
+          : place.tone === "completed"
+            ? "diamond"
+            : "circle",
+      strokeWidth: place.tone === "completed" ? 5 : 3,
+    },
+  }),
+  userLocation: () => ({
+    title: "Profile current location",
+    className: "profile-marker profile-marker--location",
+    label: "Profile location label",
+    parts: [{ className: "profile-marker__location-dot", text: "" }],
+    fallback: {
+      fill: "#2563eb",
+      stroke: "#ffffff",
+      labelColor: "#ffffff",
+      text: "U",
+      size: 44,
+      shape: "circle",
+      strokeWidth: 3,
+    },
+  }),
+  route: () => ({ stroke: "#4b5563", opacity: 0.9, width: 4 }),
+};
+
+function googleConfigInput(
+  overrides: Partial<GoogleMapsConfigInput> = {},
+): GoogleMapsConfigInput {
+  return {
+    apiKey: "test-key",
+    development: true,
+    profile: googleMapProfile,
+    ...overrides,
+  };
+}
+
 describe("Google provider configuration", () => {
   it("does not instantiate a loader or adapter when the key is missing", async () => {
     const createLoader = vi.fn();
     const createAdapter = vi.fn();
 
     const state = await configureGoogleMaps(
-      { apiKey: "  " },
+      googleConfigInput({ apiKey: "  " }),
       { createLoader, createAdapter },
     );
 
@@ -79,19 +162,42 @@ describe("Google provider configuration", () => {
     const createAdapter = vi.fn(() => adapter);
 
     const state = await configureGoogleMaps(
-      { apiKey: "test-key" },
+      googleConfigInput(),
       { createLoader, createAdapter },
     );
 
     expect(load).toHaveBeenCalledWith("test-key");
-    expect(createAdapter).toHaveBeenCalledWith(runtime);
+    expect(createAdapter).toHaveBeenCalledWith(runtime, {
+      development: true,
+      profile: googleMapProfile,
+    });
     expect(state).toEqual({ status: "ready", adapter });
+  });
+
+  it("trims a configured map ID before passing it to google.maps.Map", async () => {
+    const state = await configureGoogleMaps(
+      googleConfigInput({ mapId: "  test-user-map-id  ", development: false }),
+      {
+        createLoader: () => ({ load: vi.fn().mockResolvedValue(fakeRuntime()) }),
+      },
+    );
+
+    expect(state.status).toBe("ready");
+    if (state.status !== "ready") {
+      return;
+    }
+    await state.adapter.mount(document.createElement("div"), {
+      onPlaceSelect: vi.fn(),
+      onRouteSelect: vi.fn(),
+    });
+
+    expect(FakeGoogleMap.instances[0]?.options.mapId).toBe("test-user-map-id");
   });
 
   it("reports load-error without constructing an adapter", async () => {
     const createAdapter = vi.fn();
     const state = await configureGoogleMaps(
-      { apiKey: "test-key" },
+      googleConfigInput(),
       {
         createLoader: () => ({ load: vi.fn().mockRejectedValue(new Error("loader failed")) }),
         createAdapter,
@@ -110,6 +216,7 @@ describe("Google provider configuration", () => {
     } as unknown as google.maps.MapsLibrary;
     const markerLibrary = {
       AdvancedMarkerElement: class FakeConfiguredMarker {},
+      Marker: class FakeConfiguredClassicMarker {},
     } as unknown as google.maps.MarkerLibrary;
     const importLoaderLibrary = vi.fn(
       (name: "maps" | "marker") =>
@@ -129,11 +236,17 @@ describe("Google provider configuration", () => {
     });
 
     const [first, concurrent] = await Promise.all([
-      configure({ apiKey: "  shared-key  " }),
-      configure({ apiKey: "shared-key" }),
+      configure(
+        googleConfigInput({ apiKey: "  shared-key  ", mapId: " test-map-id " }),
+      ),
+      configure(googleConfigInput({ apiKey: "shared-key", mapId: "test-map-id" })),
     ]);
-    const repeated = await configure({ apiKey: "shared-key" });
-    const conflicting = await configure({ apiKey: "different-key" });
+    const repeated = await configure(
+      googleConfigInput({ apiKey: "shared-key", mapId: "test-map-id" }),
+    );
+    const conflicting = await configure(
+      googleConfigInput({ apiKey: "different-key", mapId: "test-map-id" }),
+    );
 
     expect(first).toEqual({ status: "ready", adapter });
     expect(concurrent).toEqual({ status: "ready", adapter });
@@ -153,6 +266,43 @@ describe("Google provider configuration", () => {
       "marker",
     ]);
     expect(createAdapter).toHaveBeenCalledTimes(1);
+    expect(createAdapter).toHaveBeenCalledWith(
+      expect.objectContaining({ Marker: markerLibrary.Marker }),
+      {
+        development: true,
+        mapId: "test-map-id",
+        profile: googleMapProfile,
+      },
+    );
+  });
+
+  it("rejects different map IDs and profile IDs after initialization", async () => {
+    const adapter = {} as GoogleMapAdapter;
+    const configure = createGoogleMapsConfigurator({
+      createLoader: () => ({ load: vi.fn().mockResolvedValue({}) }),
+      createAdapter: vi.fn(() => adapter),
+    });
+
+    expect(
+      await configure(googleConfigInput({ mapId: " initial-map-id " })),
+    ).toEqual({ status: "ready", adapter });
+    expect(
+      await configure(googleConfigInput({ mapId: "different-map-id" })),
+    ).toEqual({
+      status: "load-error",
+      reason: "Google Maps is already configured for a different map ID",
+    });
+    expect(
+      await configure(
+        googleConfigInput({
+          mapId: "initial-map-id",
+          profile: { ...googleMapProfile, id: "different-profile" },
+        }),
+      ),
+    ).toEqual({
+      status: "load-error",
+      reason: "Google Maps is already configured for a different visual profile",
+    });
   });
 
   it("retries the same key after load error without resetting global loader options", async () => {
@@ -163,6 +313,7 @@ describe("Google provider configuration", () => {
     } as unknown as google.maps.MapsLibrary;
     const markerLibrary = {
       AdvancedMarkerElement: class FakeConfiguredMarker {},
+      Marker: class FakeConfiguredClassicMarker {},
     } as unknown as google.maps.MarkerLibrary;
     let mapsAttempts = 0;
     const importLoaderLibrary = vi.fn(
@@ -186,15 +337,15 @@ describe("Google provider configuration", () => {
       createAdapter,
     });
 
-    expect(await configure({ apiKey: "retry-key" })).toEqual({
+    expect(await configure(googleConfigInput({ apiKey: "retry-key" }))).toEqual({
       status: "load-error",
       reason: "temporary loader failure",
     });
-    expect(await configure({ apiKey: "other-key" })).toEqual({
+    expect(await configure(googleConfigInput({ apiKey: "other-key" }))).toEqual({
       status: "load-error",
       reason: "Google Maps is already configured for a different key",
     });
-    expect(await configure({ apiKey: " retry-key " })).toEqual({
+    expect(await configure(googleConfigInput({ apiKey: " retry-key " }))).toEqual({
       status: "ready",
       adapter,
     });
@@ -1125,6 +1276,7 @@ class FakeAdvancedMarker {
   readonly gmpClickable: google.maps.marker.AdvancedMarkerElementOptions["gmpClickable"];
   readonly addedEventNames: string[] = [];
   readonly removedEventNames: string[] = [];
+  private readonly attributes = new Map<string, string>();
   private readonly eventListeners = new Map<
     string,
     Set<EventListenerOrEventListenerObject>
@@ -1137,6 +1289,14 @@ class FakeAdvancedMarker {
     this.content = options.content;
     this.gmpClickable = options.gmpClickable;
     FakeAdvancedMarker.instances.push(this);
+  }
+
+  setAttribute(name: string, value: string): void {
+    this.attributes.set(name, value);
+  }
+
+  getAttribute(name: string): string | null {
+    return this.attributes.get(name) ?? null;
   }
 
   addEventListener(
@@ -1169,9 +1329,44 @@ class FakeAdvancedMarker {
   }
 }
 
+class FakeClassicMarker {
+  static instances: FakeClassicMarker[] = [];
+  map:
+    | google.maps.Map
+    | google.maps.StreetViewPanorama
+    | null
+    | undefined;
+  readonly position: google.maps.MarkerOptions["position"];
+  readonly title: google.maps.MarkerOptions["title"];
+  readonly label: google.maps.MarkerOptions["label"];
+  readonly icon: google.maps.MarkerOptions["icon"];
+  readonly listeners: FakeListener[] = [];
+  readonly setMap = vi.fn(
+    (map: google.maps.Map | google.maps.StreetViewPanorama | null) => {
+      this.map = map;
+    },
+  );
+
+  constructor(options: google.maps.MarkerOptions) {
+    this.map = options.map;
+    this.position = options.position;
+    this.title = options.title;
+    this.label = options.label;
+    this.icon = options.icon;
+    FakeClassicMarker.instances.push(this);
+  }
+
+  addListener(_eventName: string, callback: () => void): FakeListener {
+    const listener = new FakeListener(callback);
+    this.listeners.push(listener);
+    return listener;
+  }
+}
+
 class FakePolyline {
   static instances: FakePolyline[] = [];
   readonly path: google.maps.PolylineOptions["path"];
+  readonly options: google.maps.PolylineOptions;
   map: google.maps.Map | null | undefined;
   readonly listeners: FakeListener[] = [];
   readonly setMap = vi.fn((map: google.maps.Map | null) => {
@@ -1179,6 +1374,7 @@ class FakePolyline {
   });
 
   constructor(options: google.maps.PolylineOptions) {
+    this.options = options;
     this.path = options.path;
     this.map = options.map;
     FakePolyline.instances.push(this);
@@ -1194,13 +1390,29 @@ class FakePolyline {
 function fakeRuntime(): GoogleMapsRuntime {
   FakeGoogleMap.instances = [];
   FakeAdvancedMarker.instances = [];
+  FakeClassicMarker.instances = [];
   FakePolyline.instances = [];
   return {
     Map: FakeGoogleMap as unknown as typeof google.maps.Map,
+    Marker: FakeClassicMarker as unknown as typeof google.maps.Marker,
     AdvancedMarkerElement:
       FakeAdvancedMarker as unknown as typeof google.maps.marker.AdvancedMarkerElement,
     Polyline: FakePolyline as unknown as typeof google.maps.Polyline,
   };
+}
+
+function createGoogleMapAdapter(
+  options: {
+    development?: boolean;
+    mapId?: string;
+    profile?: MapVisualProfile;
+  } = {},
+): GoogleMapAdapter {
+  return new GoogleMapAdapter(fakeRuntime(), {
+    development: options.development ?? true,
+    profile: options.profile ?? googleMapProfile,
+    ...(options.mapId === undefined ? {} : { mapId: options.mapId }),
+  });
 }
 
 describe("GoogleMapAdapter lifecycle", () => {
@@ -1230,6 +1442,12 @@ describe("GoogleMapAdapter lifecycle", () => {
         coordinates: { lat: 25.03, lng: 121.03 },
         tone: "completed",
       },
+      {
+        ownerId: nodeMapOwnerId("skipped"),
+        label: "Lookout",
+        coordinates: { lat: 25.04, lng: 121.04 },
+        tone: "skipped",
+      },
     ],
     routes: [
       {
@@ -1239,46 +1457,94 @@ describe("GoogleMapAdapter lifecycle", () => {
           { lat: 25.01, lng: 121.01 },
         ],
         tone: "default",
+        source: "manual",
+        certainty: "confirmed",
+        mode: "walking",
       },
-      { edgeId: "failed-route", path: [], tone: "unavailable" },
+      {
+        edgeId: "failed-route",
+        path: [],
+        tone: "unavailable",
+        source: "provider",
+        certainty: "unverified",
+        mode: "transit",
+      },
     ],
   };
 
   it("creates accessible markers, draws no failed-route fallback, and emits active events", async () => {
-    const adapter = new GoogleMapAdapter(fakeRuntime());
+    const adapter = createGoogleMapAdapter();
     const onPlaceSelect = vi.fn();
     const onRouteSelect = vi.fn();
     await adapter.mount(document.createElement("div"), { onPlaceSelect, onRouteSelect });
 
     adapter.render(presentation);
 
+    expect(FakeGoogleMap.instances[0]?.options.mapId).toBe(
+      FakeGoogleMap.DEMO_MAP_ID,
+    );
+
     expect(FakeAdvancedMarker.instances.map(({ title }) => title)).toEqual([
-      "Museum",
-      "Candidate: Cafe",
-      "Selected: Park",
-      "Completed: Hotel",
+      "Profile title: Museum",
+      "Profile title: Cafe",
+      "Profile title: Park",
+      "Profile title: Hotel",
+      "Profile title: Lookout",
+    ]);
+    expect(
+      FakeAdvancedMarker.instances.map((marker) =>
+        marker.getAttribute("aria-label"),
+      ),
+    ).toEqual([
+      "Profile label: Museum",
+      "Profile label: Cafe",
+      "Profile label: Park",
+      "Profile label: Hotel",
+      "Profile label: Lookout",
     ]);
     expect(
       FakeAdvancedMarker.instances.map(({ content }) =>
         content instanceof HTMLElement ? content.getAttribute("aria-label") : null,
       ),
-    ).toEqual([null, null, null, null]);
+    ).toEqual([null, null, null, null, null]);
     expect(
       FakeAdvancedMarker.instances.map(({ content }) =>
         content instanceof HTMLElement ? content.getAttribute("aria-hidden") : null,
       ),
-    ).toEqual(["true", "true", "true", "true"]);
+    ).toEqual(["true", "true", "true", "true", "true"]);
     expect(
       FakeAdvancedMarker.instances.map(({ addedEventNames }) => addedEventNames),
-    ).toEqual([["gmp-click"], ["gmp-click"], ["gmp-click"], ["gmp-click"]]);
+    ).toEqual([["gmp-click"], ["gmp-click"], ["gmp-click"], ["gmp-click"], ["gmp-click"]]);
     expect(
       FakeAdvancedMarker.instances.map(({ gmpClickable }) => gmpClickable),
-    ).toEqual([true, true, true, true]);
+    ).toEqual([true, true, true, true, true]);
     expect(
       FakeAdvancedMarker.instances.map(({ content }) =>
         content instanceof HTMLElement ? content.tagName : null,
       ),
-    ).toEqual(["SPAN", "SPAN", "SPAN", "SPAN"]);
+    ).toEqual(["SPAN", "SPAN", "SPAN", "SPAN", "SPAN"]);
+    expect(
+      FakeAdvancedMarker.instances.map(({ content }) =>
+        content instanceof HTMLElement ? content.className : null,
+      ),
+    ).toEqual([
+      "profile-marker profile-marker--default",
+      "profile-marker profile-marker--candidate",
+      "profile-marker profile-marker--selected",
+      "profile-marker profile-marker--completed",
+      "profile-marker profile-marker--skipped",
+    ]);
+    expect(
+      FakeAdvancedMarker.instances[0]?.content instanceof HTMLElement
+        ? [...FakeAdvancedMarker.instances[0].content.children].map((part) => ({
+            className: part.className,
+            text: part.textContent,
+          }))
+        : [],
+    ).toEqual([
+      { className: "profile-marker__index", text: "1" },
+      { className: "profile-marker__label", text: "Museum" },
+    ]);
     expect(FakePolyline.instances).toHaveLength(1);
 
     FakeAdvancedMarker.instances[0]?.emitGmpClick("pointer");
@@ -1296,8 +1562,384 @@ describe("GoogleMapAdapter lifecycle", () => {
     expect(marker?.removedEventNames).toEqual(["gmp-click"]);
   });
 
+  it("uses a neutral production map and classic marker fallbacks without a map ID", async () => {
+    const adapter = createGoogleMapAdapter({ development: false });
+    const onPlaceSelect = vi.fn();
+    await adapter.mount(document.createElement("div"), {
+      onPlaceSelect,
+      onRouteSelect: vi.fn(),
+    });
+
+    adapter.render(presentation);
+
+    expect(FakeGoogleMap.instances[0]?.options.mapId).toBeUndefined();
+    expect(FakeAdvancedMarker.instances).toHaveLength(0);
+    expect(FakeClassicMarker.instances).toHaveLength(5);
+    expect(FakeClassicMarker.instances[0]).toMatchObject({
+      title: "Profile title: Museum",
+      label: {
+        text: "1",
+        color: "#111827",
+        fontSize: "14px",
+        fontWeight: "700",
+      },
+    });
+    const classicIcon = FakeClassicMarker.instances[0]?.icon;
+    expect(typeof classicIcon).toBe("string");
+    if (typeof classicIcon !== "string") {
+      throw new Error("Expected the profile fallback to create an SVG icon");
+    }
+    expect(decodeURIComponent(classicIcon)).toContain('fill="#fefefe"');
+    expect(decodeURIComponent(classicIcon)).toContain('stroke="#654321"');
+    const classicDocuments = FakeClassicMarker.instances.map(({ icon }) => {
+      if (typeof icon !== "string") throw new Error("Expected a classic SVG marker icon");
+      const svg = decodeURIComponent(icon.slice(icon.indexOf(",") + 1));
+      return new DOMParser().parseFromString(svg, "image/svg+xml");
+    });
+    for (const documentNode of classicDocuments) {
+      expect(Number(documentNode.documentElement.getAttribute("width"))).toBeGreaterThanOrEqual(44);
+      expect(Number(documentNode.documentElement.getAttribute("height"))).toBeGreaterThanOrEqual(44);
+    }
+    expect(classicDocuments[0]?.querySelector("circle")).not.toBeNull();
+    expect(classicDocuments[2]?.querySelector("rect")).not.toBeNull();
+    expect(classicDocuments[3]?.querySelector("path")).not.toBeNull();
+    expect(classicDocuments[3]?.querySelector("path")?.getAttribute("stroke-width")).toBe("5");
+
+    FakeClassicMarker.instances[0]?.listeners[0]?.emit();
+    expect(onPlaceSelect).toHaveBeenCalledWith(nodeMapOwnerId("museum"));
+
+    adapter.setUserLocation({ lat: 24.9, lng: 120.9 });
+    expect(FakeClassicMarker.instances.at(-1)).toMatchObject({
+      title: "Profile current location",
+      label: {
+        text: "U",
+        color: "#ffffff",
+        fontSize: "14px",
+        fontWeight: "700",
+      },
+    });
+  });
+
+  it("passes explicit classic label visuals for every marker tone", async () => {
+    const adapter = createGoogleMapAdapter({ development: false });
+    await adapter.mount(document.createElement("div"), {
+      onPlaceSelect: vi.fn(),
+      onRouteSelect: vi.fn(),
+    });
+
+    adapter.render(presentation);
+
+    expect(FakeClassicMarker.instances.map(({ label }) => label)).toEqual(
+      presentation.places.map((place, index) => {
+        const fallback = googleMapProfile.marker(place, index).fallback;
+        return {
+          text: fallback.text,
+          color: fallback.labelColor,
+          fontSize: "14px",
+          fontWeight: "700",
+        };
+      }),
+    );
+    for (const [index, place] of presentation.places.entries()) {
+      const fallback = googleMapProfile.marker(place, index).fallback;
+      const label = FakeClassicMarker.instances[index]?.label;
+      if (typeof label !== "object" || label === null || label.color === undefined) {
+        throw new Error("Expected a typed classic marker label");
+      }
+      expect(fallbackContrastRatio(fallback.fill, label.color)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("keeps adversarial classic-marker colors inside their SVG attributes", async () => {
+    const fill = 'red" onload="alert(1)&<';
+    const stroke =
+      'blue"/><image href="https://attacker.invalid/pixel"/><circle stroke="green';
+    const profile: MapVisualProfile = {
+      ...googleMapProfile,
+      id: "adversarial-classic-marker-profile",
+      marker: (place, index) => ({
+        ...googleMapProfile.marker(place, index),
+        fallback: {
+          ...googleMapProfile.marker(place, index).fallback,
+          fill,
+          stroke,
+          text: "",
+        },
+      }),
+    };
+    const adapter = createGoogleMapAdapter({ development: false, profile });
+    await adapter.mount(document.createElement("div"), {
+      onPlaceSelect: vi.fn(),
+      onRouteSelect: vi.fn(),
+    });
+
+    adapter.render({ places: presentation.places.slice(0, 1), routes: [] });
+
+    const icon = FakeClassicMarker.instances[0]?.icon;
+    expect(typeof icon).toBe("string");
+    if (typeof icon !== "string") {
+      throw new Error("Expected a classic SVG marker icon");
+    }
+    const separator = icon.indexOf(",");
+    const svg = decodeURIComponent(icon.slice(separator + 1));
+    const documentNode = new DOMParser().parseFromString(svg, "image/svg+xml");
+    const circle = documentNode.querySelector("circle");
+
+    expect(documentNode.querySelector("parsererror")).toBeNull();
+    expect(documentNode.querySelectorAll("circle")).toHaveLength(1);
+    expect(circle?.getAttribute("fill")).toBe(fill);
+    expect(circle?.getAttribute("stroke")).toBe(stroke);
+    expect(documentNode.querySelector("[onload], [href], [src]")).toBeNull();
+    expect(
+      documentNode.querySelector("image, script, use, foreignObject"),
+    ).toBeNull();
+  });
+
+  it("fails closed when unvalidated classic-marker paints contain URLs or controls", async () => {
+    const profile: MapVisualProfile = {
+      ...googleMapProfile,
+      id: "unsafe-classic-marker-paint-profile",
+      marker: (place, index) => ({
+        ...googleMapProfile.marker(place, index),
+        fallback: {
+          ...googleMapProfile.marker(place, index).fallback,
+          fill: "  UrL ( https://attacker.invalid/pattern.svg#p )  ",
+          stroke: `#654321\u0000`,
+          labelColor: "url(https://attacker.invalid/label.svg#paint)",
+          text: "1",
+        },
+      }),
+    };
+    const adapter = createGoogleMapAdapter({ development: false, profile });
+    await adapter.mount(document.createElement("div"), {
+      onPlaceSelect: vi.fn(),
+      onRouteSelect: vi.fn(),
+    });
+
+    adapter.render({ places: presentation.places.slice(0, 1), routes: [] });
+
+    const icon = FakeClassicMarker.instances[0]?.icon;
+    expect(typeof icon).toBe("string");
+    if (typeof icon !== "string") {
+      throw new Error("Expected a classic SVG marker icon");
+    }
+    const svg = decodeURIComponent(icon.slice(icon.indexOf(",") + 1));
+    const documentNode = new DOMParser().parseFromString(svg, "image/svg+xml");
+    const circle = documentNode.querySelector("circle");
+
+    expect(documentNode.querySelector("parsererror")).toBeNull();
+    expect(circle?.getAttribute("fill")).toBe("#000000");
+    expect(circle?.getAttribute("stroke")).toBe("#000000");
+    expect(svg).not.toMatch(/url\s*\(/i);
+    expect(svg).not.toContain("attacker.invalid");
+    expect(svg).not.toContain("\u0000");
+    expect(FakeClassicMarker.instances[0]?.label).toEqual({
+      text: "1",
+      color: "#000000",
+      fontSize: "14px",
+      fontWeight: "700",
+    });
+
+    const controlProfile: MapVisualProfile = {
+      ...googleMapProfile,
+      id: "control-classic-marker-label-profile",
+      marker: (place, index) => ({
+        ...googleMapProfile.marker(place, index),
+        fallback: {
+          ...googleMapProfile.marker(place, index).fallback,
+          labelColor: `#ffffff\u0000`,
+        },
+      }),
+    };
+    const controlAdapter = createGoogleMapAdapter({
+      development: false,
+      profile: controlProfile,
+    });
+    await controlAdapter.mount(document.createElement("div"), {
+      onPlaceSelect: vi.fn(),
+      onRouteSelect: vi.fn(),
+    });
+    controlAdapter.render({ places: presentation.places.slice(0, 1), routes: [] });
+    expect(FakeClassicMarker.instances.at(-1)?.label).toMatchObject({
+      color: "#000000",
+    });
+  });
+
+  it("fails closed when unvalidated classic-marker geometry bypasses the profile validator", async () => {
+    const profile: MapVisualProfile = {
+      ...googleMapProfile,
+      id: "unsafe-classic-marker-geometry-profile",
+      marker: (place, index) => ({
+        ...googleMapProfile.marker(place, index),
+        fallback: {
+          ...googleMapProfile.marker(place, index).fallback,
+          size: 1_000_000,
+          shape: "star" as "circle",
+          strokeWidth: -10,
+        },
+      }),
+    };
+    const adapter = createGoogleMapAdapter({ development: false, profile });
+    await adapter.mount(document.createElement("div"), {
+      onPlaceSelect: vi.fn(),
+      onRouteSelect: vi.fn(),
+    });
+
+    adapter.render({ places: presentation.places.slice(0, 1), routes: [] });
+
+    const icon = FakeClassicMarker.instances[0]?.icon;
+    expect(typeof icon).toBe("string");
+    if (typeof icon !== "string") throw new Error("Expected a classic SVG marker icon");
+    const documentNode = new DOMParser().parseFromString(
+      decodeURIComponent(icon.slice(icon.indexOf(",") + 1)),
+      "image/svg+xml",
+    );
+    expect(documentNode.documentElement.getAttribute("width")).toBe("44");
+    expect(documentNode.documentElement.getAttribute("height")).toBe("44");
+    expect(documentNode.querySelectorAll("circle")).toHaveLength(1);
+    expect(documentNode.querySelector("circle")?.getAttribute("stroke-width")).toBe("3");
+  });
+
+  it("resolves selected, default, recomposed, and uncertain route effects through the profile", async () => {
+    const receivedRoutes: MapRoutePresentation[] = [];
+    const profile: MapVisualProfile = {
+      ...googleMapProfile,
+      id: "semantic-route-profile",
+      route: (route) => {
+        receivedRoutes.push(route);
+        if (route.tone === "selected") {
+          return {
+            stroke: "#222222",
+            opacity: 0.95,
+            width: 6,
+            casing: { stroke: "#ffffff", opacity: 0.65, width: 9 },
+          };
+        }
+        if (route.source === "recomposed") {
+          return {
+            stroke: "#333333",
+            opacity: 0.75,
+            width: 4,
+            dash: [4, 3],
+          };
+        }
+        if (route.certainty !== "confirmed") {
+          return { stroke: "#444444", opacity: 0.35, width: 3 };
+        }
+        return { stroke: "#111111", opacity: 0.55, width: 2 };
+      },
+    };
+    const adapter = createGoogleMapAdapter({ profile });
+    await adapter.mount(document.createElement("div"), {
+      onPlaceSelect: vi.fn(),
+      onRouteSelect: vi.fn(),
+    });
+    const routes: MapRoutePresentation[] = [
+      {
+        edgeId: "default-route",
+        path: [
+          { lat: 25, lng: 121 },
+          { lat: 25.01, lng: 121.01 },
+        ],
+        tone: "default",
+        source: "manual",
+        certainty: "confirmed",
+        mode: "walking",
+      },
+      {
+        edgeId: "selected-route",
+        path: [
+          { lat: 25.02, lng: 121.02 },
+          { lat: 25.03, lng: 121.03 },
+        ],
+        tone: "selected",
+        source: "provider",
+        certainty: "confirmed",
+        mode: "driving",
+      },
+      {
+        edgeId: "recomposed-route",
+        path: [
+          { lat: 25.04, lng: 121.04 },
+          { lat: 25.05, lng: 121.05 },
+        ],
+        tone: "default",
+        source: "recomposed",
+        certainty: "suggested",
+        mode: "transit",
+      },
+      {
+        edgeId: "uncertain-route",
+        path: [
+          { lat: 25.06, lng: 121.06 },
+          { lat: 25.07, lng: 121.07 },
+        ],
+        tone: "default",
+        source: "provider",
+        certainty: "unverified",
+        mode: "flight",
+      },
+    ];
+
+    adapter.render({ places: [], routes });
+
+    expect(receivedRoutes).toEqual(routes);
+    expect(FakePolyline.instances).toHaveLength(5);
+    expect(FakePolyline.instances.map(({ options }) => ({
+      stroke: options.strokeColor,
+      opacity: options.strokeOpacity,
+      width: options.strokeWeight,
+      clickable: options.clickable,
+    }))).toEqual([
+      { stroke: "#111111", opacity: 0.55, width: 2, clickable: true },
+      { stroke: "#ffffff", opacity: 0.65, width: 9, clickable: false },
+      { stroke: "#222222", opacity: 0.95, width: 6, clickable: true },
+      { stroke: "#333333", opacity: 0, width: 4, clickable: true },
+      { stroke: "#444444", opacity: 0.35, width: 3, clickable: true },
+    ]);
+    const dashIcons = FakePolyline.instances[3]?.options.icons;
+    expect(dashIcons).toHaveLength(1);
+    expect(dashIcons?.[0]?.icon).toMatchObject({
+      path: "M 0,0 0,4",
+      strokeOpacity: 0.75,
+    });
+    expect(dashIcons?.[0]?.offset).toBe("0");
+    expect(dashIcons?.[0]?.repeat).toBe("7px");
+  });
+
+  it("drops unsupported dash and casing effects without hiding the route", async () => {
+    const adapter = createGoogleMapAdapter({
+      profile: {
+        ...googleMapProfile,
+        id: "unsupported-effect-profile",
+        route: () => ({
+          stroke: "#abcdef",
+          opacity: 0.6,
+          width: 5,
+          casing: { stroke: "#ffffff", opacity: 0.4, width: 5 },
+          dash: [0, 0],
+        }),
+      },
+    });
+    await adapter.mount(document.createElement("div"), {
+      onPlaceSelect: vi.fn(),
+      onRouteSelect: vi.fn(),
+    });
+
+    adapter.render({ places: [], routes: [presentation.routes[0]] });
+
+    expect(FakePolyline.instances).toHaveLength(1);
+    expect(FakePolyline.instances[0]?.options).toMatchObject({
+      strokeColor: "#abcdef",
+      strokeOpacity: 0.6,
+      strokeWeight: 5,
+      clickable: true,
+    });
+    expect(FakePolyline.instances[0]?.options.icons).toBeUndefined();
+  });
+
   it("queues the latest render before mount is ready and supports focus, fit, and padding", async () => {
-    const adapter = new GoogleMapAdapter(fakeRuntime());
+    const adapter = createGoogleMapAdapter();
     const pending = adapter.mount(document.createElement("div"), {
       onPlaceSelect: vi.fn(),
       onRouteSelect: vi.fn(),
@@ -1315,12 +1957,12 @@ describe("GoogleMapAdapter lifecycle", () => {
       { north: 25.01, south: 25, east: 121.01, west: 121 },
       { top: 10, right: 20, bottom: 30, left: 40 },
     );
-    expect(FakeAdvancedMarker.instances).toHaveLength(4);
+    expect(FakeAdvancedMarker.instances).toHaveLength(5);
     expect(FakePolyline.instances).toHaveLength(1);
   });
 
   it("updates user location without camera chasing and exposes an explicit recenter target", async () => {
-    const adapter = new GoogleMapAdapter(fakeRuntime());
+    const adapter = createGoogleMapAdapter();
     await adapter.mount(document.createElement("div"), {
       onPlaceSelect: vi.fn(),
       onRouteSelect: vi.fn(),
@@ -1341,7 +1983,7 @@ describe("GoogleMapAdapter lifecycle", () => {
   });
 
   it("cleans markers, polylines, listeners, user location, and ignores stale generations", async () => {
-    const adapter = new GoogleMapAdapter(fakeRuntime());
+    const adapter = createGoogleMapAdapter();
     const onPlaceSelect = vi.fn();
     await adapter.mount(document.createElement("div"), {
       onPlaceSelect,
@@ -1370,7 +2012,7 @@ describe("GoogleMapAdapter lifecycle", () => {
     adapter.setUserLocation({ lat: 24.8, lng: 120.8 });
     const replacementUserMarker = FakeAdvancedMarker.instances.at(-1);
     expect(firstUserMarker?.map).toBeNull();
-    expect(replacementUserMarker?.title).toBe("Your location");
+    expect(replacementUserMarker?.title).toBe("Profile current location");
     adapter.setUserLocation(null);
     expect(replacementUserMarker?.map).toBeNull();
 
@@ -1379,7 +2021,7 @@ describe("GoogleMapAdapter lifecycle", () => {
   });
 
   it("keeps place, route, and reserved user-location focus namespaces distinct", async () => {
-    const adapter = new GoogleMapAdapter(fakeRuntime());
+    const adapter = createGoogleMapAdapter();
     const onPlaceSelect = vi.fn();
     await adapter.mount(document.createElement("div"), {
       onPlaceSelect,
@@ -1405,6 +2047,9 @@ describe("GoogleMapAdapter lifecycle", () => {
             { lat: 25.3, lng: 121.3 },
           ],
           tone: "default",
+          source: "manual",
+          certainty: "confirmed",
+          mode: "walking",
         },
       ],
     });
@@ -1438,7 +2083,7 @@ describe("GoogleMapAdapter lifecycle", () => {
   });
 
   it("rejects a whole route path when any intermediate coordinate is invalid", async () => {
-    const adapter = new GoogleMapAdapter(fakeRuntime());
+    const adapter = createGoogleMapAdapter();
     const onRouteSelect = vi.fn();
     await adapter.mount(document.createElement("div"), {
       onPlaceSelect: vi.fn(),
@@ -1455,6 +2100,9 @@ describe("GoogleMapAdapter lifecycle", () => {
             { lat: 25.2, lng: 121.2 },
           ],
           tone: "default",
+          source: "provider",
+          certainty: "suggested",
+          mode: "walking",
         },
       ],
     });
@@ -1467,7 +2115,7 @@ describe("GoogleMapAdapter lifecycle", () => {
   });
 
   it("does not finish a mount after destroy invalidates its generation", async () => {
-    const adapter = new GoogleMapAdapter(fakeRuntime());
+    const adapter = createGoogleMapAdapter();
     const pending = adapter.mount(document.createElement("div"), {
       onPlaceSelect: vi.fn(),
       onRouteSelect: vi.fn(),
@@ -1480,7 +2128,7 @@ describe("GoogleMapAdapter lifecycle", () => {
   });
 
   it("permits an explicit remount after destroy without retaining the old lifecycle", async () => {
-    const adapter = new GoogleMapAdapter(fakeRuntime());
+    const adapter = createGoogleMapAdapter();
     const element = document.createElement("div");
     await adapter.mount(element, {
       onPlaceSelect: vi.fn(),
@@ -1495,6 +2143,6 @@ describe("GoogleMapAdapter lifecycle", () => {
     adapter.render(presentation);
 
     expect(FakeGoogleMap.instances).toHaveLength(2);
-    expect(FakeAdvancedMarker.instances).toHaveLength(4);
+    expect(FakeAdvancedMarker.instances).toHaveLength(5);
   });
 });

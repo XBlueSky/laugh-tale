@@ -26,6 +26,7 @@
     "stage:starter": "node scripts/stage-starter-consumer.mjs",
     "test:starter:staged": "npm --prefix tmp/staged-starter run check",
     "test:e2e:staged": "npm --prefix tmp/staged-starter run test:e2e",
+    "test:recipes:internal": "node scripts/test-internal-recipe.mjs",
     "test:starter": "npm --prefix plugins/eternal-pose/starter/react run check",
     "test:e2e": "npm --prefix plugins/eternal-pose/starter/react run test:e2e"
   },

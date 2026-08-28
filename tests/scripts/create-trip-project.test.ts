@@ -87,8 +87,8 @@ function stagingDirectories(parent: string): string[] {
 
 function createStarterWithPlaceholderRecipe(parent: string): string {
   const starterDir = join(parent, "placeholder-recipe-starter");
-  mkdirSync(join(starterDir, "src/ui/styles"), { recursive: true });
-  writeFileSync(join(starterDir, "src/ui/styles/recipe.css"), "placeholder must be replaced\n");
+  mkdirSync(join(starterDir, "src/presentation/styles"), { recursive: true });
+  writeFileSync(join(starterDir, "src/presentation/styles/recipe.css"), "placeholder must be replaced\n");
   return starterDir;
 }
 
@@ -175,7 +175,7 @@ describe("atomic trip project creation", () => {
     await createTripProject({ pluginRoot, targetDir, recipe: "quiet-wood", starterDir: fixtureStarter });
 
     expect(readFileSync(join(targetDir, "README.md"), "utf8")).toContain("minimal fixture");
-    expect(readFileSync(join(targetDir, "src/ui/styles/recipe.css"), "utf8")).toContain("--surface: linen");
+    expect(readFileSync(join(targetDir, "src/presentation/styles/recipe.css"), "utf8")).toContain("--surface: linen");
     expect(stagingDirectories(dirname(targetDir))).toEqual([]);
   });
 
@@ -187,7 +187,7 @@ describe("atomic trip project creation", () => {
 
     await createTripProject({ pluginRoot, targetDir, recipe: "quiet-wood", starterDir });
 
-    expect(readFileSync(join(targetDir, "src/ui/styles/recipe.css"), "utf8")).toBe(":root { --surface: linen; }\n");
+    expect(readFileSync(join(targetDir, "src/presentation/styles/recipe.css"), "utf8")).toBe(":root { --surface: linen; }\n");
   });
 
   test("omits generated artifacts and cache directories from the published starter", async () => {

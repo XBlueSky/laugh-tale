@@ -10,6 +10,7 @@ import {
   type EffectiveDay,
   type EffectiveNode,
   type MapPresentationContext,
+  type RouteEdge,
   type TripNode,
 } from "@laugh-tale-island/core";
 
@@ -77,6 +78,22 @@ const candidateGroup: CandidateGroup = {
   ],
 };
 
+const routeFreeContext: MapPresentationContext = {};
+const pairedRouteContext: MapPresentationContext = {
+  routes: [],
+  routeResults: {},
+};
+// @ts-expect-error routeResults must be paired with routes.
+const routeResultsOnlyContext: MapPresentationContext = { routeResults: {} };
+// @ts-expect-error routes must be paired with routeResults.
+const routesOnlyContext: MapPresentationContext = { routes: [] };
+void [
+  routeFreeContext,
+  pairedRouteContext,
+  routeResultsOnlyContext,
+  routesOnlyContext,
+];
+
 function fixtureDay(): EffectiveDay {
   const museum = placeNode("museum", {
     title: "Museum",
@@ -125,6 +142,34 @@ function fixtureDay(): EffectiveDay {
 }
 
 describe("buildMapPresentation", () => {
+  it("rejects malformed partial route contexts instead of dropping route data", () => {
+    const partialContexts = [
+      { routeResults: {} },
+      {
+        routes: [
+          {
+            id: "partial-route",
+            dayId: "day-one",
+            fromNodeId: "museum",
+            toNodeId: "garden",
+            mode: "walking",
+            source: "manual",
+            certainty: "confirmed",
+          },
+        ],
+      },
+    ];
+
+    for (const partialContext of partialContexts) {
+      expect(() =>
+        buildMapPresentation(
+          fixtureDay(),
+          partialContext as unknown as MapPresentationContext,
+        ),
+      ).toThrow(/routes and routeResults must be provided together/i);
+    }
+  });
+
   it("keeps every locatable effective node and only the resolved candidate when collapsed", () => {
     const presentation = buildMapPresentation(fixtureDay(), {});
 
@@ -214,9 +259,30 @@ describe("buildMapPresentation", () => {
   });
 
   it("projects normalized route results without inventing failed terrestrial geometry", () => {
+    const routes: RouteEdge[] = [
+      {
+        id: "walk-to-garden",
+        dayId: "day-one",
+        fromNodeId: "museum",
+        toNodeId: "garden",
+        mode: "walking",
+        source: "provider",
+        certainty: "suggested",
+      },
+      {
+        id: "drive-to-hotel",
+        dayId: "day-one",
+        fromNodeId: "garden",
+        toNodeId: "hotel",
+        mode: "driving",
+        source: "recomposed",
+        certainty: "unverified",
+      },
+    ];
     const presentation = buildMapPresentation(fixtureDay(), {
       selectedNodeId: "museum",
       selectedRouteId: "walk-to-garden",
+      routes,
       routeResults: {
         "walk-to-garden": {
           status: "ready",
@@ -246,8 +312,18 @@ describe("buildMapPresentation", () => {
           { lat: 25.02, lng: 121.5 },
         ],
         tone: "selected",
+        source: "provider",
+        certainty: "suggested",
+        mode: "walking",
       },
-      { edgeId: "drive-to-hotel", path: [], tone: "unavailable" },
+      {
+        edgeId: "drive-to-hotel",
+        path: [],
+        tone: "unavailable",
+        source: "recomposed",
+        certainty: "unverified",
+        mode: "driving",
+      },
     ]);
   });
 
@@ -286,6 +362,17 @@ describe("buildMapPresentation", () => {
     const presentation = buildMapPresentation(day, {
       expandedCandidateGroup: collidingGroup,
       activeCandidateOptionId: "shared",
+      routes: [
+        {
+          id: "shared",
+          dayId: "day-one",
+          fromNodeId: "shared",
+          toNodeId: "dinner",
+          mode: "walking",
+          source: "manual",
+          certainty: "confirmed",
+        },
+      ],
       routeResults: {
         shared: {
           status: "ready",
@@ -314,7 +401,12 @@ describe("buildMapPresentation", () => {
     );
     expect(presentation.selectedPlaceOwnerId).toBe(candidateOwner);
     expect(presentation.selectedRouteId).toBe("shared");
-    expect(presentation.routes[0]?.edgeId).toBe("shared");
+    expect(presentation.routes[0]).toMatchObject({
+      edgeId: "shared",
+      source: "manual",
+      certainty: "confirmed",
+      mode: "walking",
+    });
     expect(decodeMapPlaceOwnerId(nodeOwner)).toEqual({ kind: "node", id: "shared" });
     expect(decodeMapPlaceOwnerId(candidateOwner)).toEqual({
       kind: "candidate",

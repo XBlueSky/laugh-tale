@@ -17,6 +17,10 @@ export default tseslint.config(
       "packages/*/node_modules/**",
       ".cc-marketspec/dist/**",
       "plugins/eternal-pose/vendor/**",
+      // The site is an Astro project; its build and cache output are bundles.
+      "site/dist/**",
+      "site/.astro/**",
+      "site/node_modules/**",
       // The starter is an independent project with its own eslint setup;
       // its lint runs inside the staged starter check. ESLint 10 resolves the
       // nearest config per file, so linting it from here would load the

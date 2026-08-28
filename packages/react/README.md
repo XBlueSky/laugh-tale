@@ -16,7 +16,7 @@ Peer dependencies: `react >=19.2.0 <20` and `@laugh-tale-island/core 0.1.0` (the
 - `useTripProgress` — strict progress hydration, pending-write sequencing, cross-tab updates, and trip-scoped actions through an injected `ProgressStore` (see `@laugh-tale-island/core/browser`); a refused write downgrades to the semantic `"memory-only"` status without losing in-session progress.
 - `useRouteStates` — per-owner route loading, cancellation, stale-request protection, normalized results, and retry; adapter failures surface provider data, with site-injected fallback wording via `adapterErrorReason`.
 - `useUserLocation` — explicit watch lifecycle, one-time first focus, recenter, denial and unavailability statuses, stale-callback protection.
-- `useCandidateDecision` — committed choice stays with the caller's progress; draft preview, confirm, cancel, reopen, session-scoped map overrides, and trigger focus restoration live here.
+- `useCandidateDecision` / `useOptionalCandidateDecision` — committed choice stays with the caller's progress; draft preview, confirm, cancel, reopen, session-scoped map overrides, and trigger focus restoration live here. The optional form stays mounted while a selected candidate group appears, changes, or disappears.
 - `useItinerarySheet` — collapsed/half/expanded controlled snaps, interruptible pointer-captured dragging, velocity/distance snapping, keyboard stepping, and reduced-motion transition suppression via `getSheetProps()` / `getHandleProps()`.
 
 ## Prop-getter contract

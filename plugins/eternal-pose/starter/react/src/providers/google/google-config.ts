@@ -1,9 +1,14 @@
 import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 import type { MapAdapter } from "@laugh-tale-island/core/browser";
-import { GoogleMapAdapter } from "./GoogleMapAdapter";
+import type { MapVisualProfile } from "../../controllers/presentation-contract";
+import {
+  GoogleMapAdapter,
+  type GoogleMapAdapterOptions,
+} from "./GoogleMapAdapter";
 
 export interface GoogleMapsRuntime {
   Map: typeof google.maps.Map;
+  Marker: typeof google.maps.Marker;
   AdvancedMarkerElement: typeof google.maps.marker.AdvancedMarkerElement;
   Polyline: typeof google.maps.Polyline;
 }
@@ -26,11 +31,17 @@ export type GoogleMapsConfigState =
 
 export interface GoogleMapsConfigInput {
   apiKey?: string;
+  mapId?: string;
+  development: boolean;
+  profile: MapVisualProfile;
 }
 
 export interface GoogleMapsDependencies {
   createLoader(): GoogleMapsLoader;
-  createAdapter(runtime: GoogleMapsRuntime): MapAdapter;
+  createAdapter(
+    runtime: GoogleMapsRuntime,
+    options: GoogleMapAdapterOptions,
+  ): MapAdapter;
 }
 
 function errorReason(error: unknown): string {
@@ -44,6 +55,12 @@ function errorReason(error: unknown): string {
 
 const DIFFERENT_KEY_REASON =
   "Google Maps is already configured for a different key";
+const DIFFERENT_MAP_ID_REASON =
+  "Google Maps is already configured for a different map ID";
+const DIFFERENT_PROFILE_REASON =
+  "Google Maps is already configured for a different visual profile";
+const DIFFERENT_ENVIRONMENT_REASON =
+  "Google Maps is already configured for a different environment";
 
 const defaultLoaderBindings: GoogleMapsLoaderBindings = {
   setOptions,
@@ -96,6 +113,7 @@ export function createGoogleMapsLoader(
           const marker = markerLibrary as google.maps.MarkerLibrary;
           return {
             Map: maps.Map,
+            Marker: marker.Marker,
             Polyline: maps.Polyline,
             AdvancedMarkerElement: marker.AdvancedMarkerElement,
           };
@@ -121,7 +139,7 @@ export function createGoogleMapsLoader(
 
 const defaultDependencies: GoogleMapsDependencies = {
   createLoader: createGoogleMapsLoader,
-  createAdapter: (runtime) => new GoogleMapAdapter(runtime),
+  createAdapter: (runtime, options) => new GoogleMapAdapter(runtime, options),
 };
 
 export type GoogleMapsConfigurator = (
@@ -131,20 +149,50 @@ export type GoogleMapsConfigurator = (
 export function createGoogleMapsConfigurator(
   dependencies: GoogleMapsDependencies,
 ): GoogleMapsConfigurator {
-  let configuredKey: string | undefined;
+  let configured:
+    | {
+        apiKey: string;
+        mapId?: string;
+        development: boolean;
+        profile: MapVisualProfile;
+      }
+    | undefined;
   let loader: GoogleMapsLoader | undefined;
   let adapter: MapAdapter | undefined;
   let inFlight: Promise<GoogleMapsConfigState> | undefined;
 
   return (input) => {
     const apiKey = input.apiKey?.trim() ?? "";
+    const trimmedMapId = input.mapId?.trim() ?? "";
+    const mapId = trimmedMapId.length === 0 ? undefined : trimmedMapId;
     if (apiKey.length === 0) {
       return Promise.resolve({ status: "missing-key" });
     }
-    if (configuredKey !== undefined && configuredKey !== apiKey) {
+    if (configured !== undefined && configured.apiKey !== apiKey) {
       return Promise.resolve({
         status: "load-error",
         reason: DIFFERENT_KEY_REASON,
+      });
+    }
+    if (configured !== undefined && configured.mapId !== mapId) {
+      return Promise.resolve({
+        status: "load-error",
+        reason: DIFFERENT_MAP_ID_REASON,
+      });
+    }
+    if (configured !== undefined && configured.profile.id !== input.profile.id) {
+      return Promise.resolve({
+        status: "load-error",
+        reason: DIFFERENT_PROFILE_REASON,
+      });
+    }
+    if (
+      configured !== undefined &&
+      configured.development !== input.development
+    ) {
+      return Promise.resolve({
+        status: "load-error",
+        reason: DIFFERENT_ENVIRONMENT_REASON,
       });
     }
     if (adapter !== undefined) {
@@ -154,7 +202,12 @@ export function createGoogleMapsConfigurator(
       return inFlight;
     }
 
-    configuredKey = apiKey;
+    configured ??= {
+      apiKey,
+      ...(mapId === undefined ? {} : { mapId }),
+      development: input.development,
+      profile: input.profile,
+    };
     try {
       loader ??= dependencies.createLoader();
     } catch (error) {
@@ -167,7 +220,13 @@ export function createGoogleMapsConfigurator(
     const attempt: Promise<GoogleMapsConfigState> = Promise.resolve()
       .then(() => loader!.load(apiKey))
       .then((runtime) => {
-        const createdAdapter = dependencies.createAdapter(runtime);
+        const createdAdapter = dependencies.createAdapter(runtime, {
+          development: configured!.development,
+          ...(configured!.mapId === undefined
+            ? {}
+            : { mapId: configured!.mapId }),
+          profile: configured!.profile,
+        });
         adapter = createdAdapter;
         return { status: "ready", adapter: createdAdapter } as const;
       })
@@ -203,10 +262,10 @@ export async function configureGoogleMaps(
       dependencies.createLoader === undefined
         ? defaultDependencies.createLoader()
         : dependencies.createLoader(),
-    createAdapter: (runtime) =>
+    createAdapter: (runtime, options) =>
       dependencies.createAdapter === undefined
-        ? defaultDependencies.createAdapter(runtime)
-        : dependencies.createAdapter(runtime),
+        ? defaultDependencies.createAdapter(runtime, options)
+        : dependencies.createAdapter(runtime, options),
   });
   return configureIsolatedGoogleMaps(input);
 }

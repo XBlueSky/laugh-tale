@@ -1,0 +1,88 @@
+[data-touch-target="44"],
+button,
+a[href],
+select {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+:where(button, a[href], input, select, textarea):focus-visible,
+.atlas-decision__option:has(input:focus-visible) {
+  outline: 3px solid var(--atlas-focus);
+  outline-offset: 3px;
+}
+
+.atlas-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .atlas-day-index,
+  .atlas-detail-surface,
+  .atlas-stop,
+  .route-band,
+  .atlas-marker,
+  .atlas-dialog,
+  .atlas-state__panel {
+    border-color: CanvasText;
+    color: CanvasText;
+    background: Canvas;
+    forced-color-adjust: auto;
+  }
+
+  [aria-pressed="true"],
+  [aria-current="step"],
+  [data-selected="true"],
+  [data-current="true"] {
+    outline: 3px double Highlight;
+    outline-offset: -4px;
+  }
+
+  [data-completed="true"] {
+    border-bottom: 5px solid CanvasText;
+  }
+
+  [data-route-certainty="candidate"] .route-band,
+  [data-route-certainty="unverified"] .route-band,
+  [data-route-source="recomposed"] .route-band {
+    border-style: dashed;
+  }
+}
+
+@media (max-width: 420px) {
+  .atlas-decision__header {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .atlas-decision__header > .atlas-key {
+    grid-column: 1 / -1;
+  }
+
+  .atlas-stop__body > span,
+  .atlas-route-overview li,
+  .atlas-home__days button {
+    overflow-wrap: anywhere;
+  }
+}

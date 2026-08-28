@@ -1,7 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const recipeUnderTest = process.env.ETERNAL_POSE_RECIPE_UNDER_TEST?.trim() || undefined;
+
 export default defineConfig({
   testDir: "./tests/e2e",
+  testIgnore: recipeUnderTest ? [] : ["**/presentation-contract.spec.ts"],
+  metadata: recipeUnderTest ? { recipeUnderTest } : {},
   use: {
     baseURL: "http://127.0.0.1:4173",
   },

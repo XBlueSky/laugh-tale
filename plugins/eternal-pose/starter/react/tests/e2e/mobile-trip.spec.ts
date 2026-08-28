@@ -100,10 +100,203 @@ test.afterEach(({ externalRequests }) => {
 async function openTrip(page: Page): Promise<void> {
   await page.goto("/");
   await expect(page.getByTestId("trip-home")).toBeVisible();
-  await page.getByRole("button", { name: /進入 Day 1 · Harbor field day/ }).click();
+  await page.getByRole("button", { name: /(?:Enter|進入) Day 1 · Harbor field day/ }).click();
   await expect(page.getByTestId("trip-experience")).toBeVisible();
   await expect(page.getByTestId("itinerary-map")).toHaveAttribute("data-e2e-map-surface", "true");
   await expect(page.locator("[data-route-id]").first()).toBeVisible();
+}
+
+async function setVisibleFieldAtlasDayCount(
+  page: Page,
+  count: 2 | 3 | 4,
+): Promise<boolean> {
+  const experience = page.getByTestId("trip-experience");
+  if ((await experience.getAttribute("data-map-chrome-layout")) !== "bounded") return false;
+
+  await page.locator(".atlas-day-index__rail button").evaluateAll((buttons, visibleCount) => {
+    buttons.forEach((button, index) => {
+      (button as HTMLElement).style.display = index < visibleCount ? "" : "none";
+    });
+    document.querySelector<HTMLElement>(".atlas-day-index__rail")!.scrollLeft = 0;
+  }, count);
+  return true;
+}
+
+async function expectContainedFieldAtlasChrome(
+  page: Page,
+  expectedDayCount = 4,
+): Promise<void> {
+  const experience = page.getByTestId("trip-experience");
+  if ((await experience.getAttribute("data-map-chrome-layout")) !== "bounded") return;
+
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const header = document.querySelector<HTMLElement>(".day-header")!;
+        const primary = header.querySelector<HTMLElement>(".atlas-day-index__primary")!;
+        const title = primary.querySelector<HTMLElement>("strong")!;
+        const rail = header.querySelector<HTMLElement>(".atlas-day-index__rail")!;
+        const toolbar = document.querySelector<HTMLElement>(
+          ".atlas-detail-surface__toolbar",
+        )!;
+        const headerRect = header.getBoundingClientRect();
+        const titleRect = title.getBoundingClientRect();
+        const railRect = rail.getBoundingClientRect();
+        const buttons = Array.from(rail.querySelectorAll<HTMLElement>("button")).filter(
+          (button) => button.getClientRects().length > 0,
+        );
+        const desktop = window.innerWidth >= 768;
+        const contained = (owner: DOMRect, child: DOMRect) =>
+          child.left >= owner.left - 1 &&
+          child.right <= owner.right + 1 &&
+          child.top >= owner.top - 1 &&
+          child.bottom <= owner.bottom + 1;
+        return {
+          documentFits: document.documentElement.scrollWidth <= window.innerWidth,
+          bodyFits: document.body.scrollWidth <= window.innerWidth,
+          headerFits: header.scrollHeight <= header.clientHeight + 1,
+          titleHasWidth: title.clientWidth > 0 && titleRect.width > 0,
+          titleContained: contained(headerRect, titleRect),
+          railContained: contained(headerRect, railRect),
+          visibleDayCount: buttons.length,
+          railScrollsInternally: desktop
+            ? rail.scrollWidth <= rail.clientWidth + 1
+            : buttons.length < 3 || rail.scrollWidth > rail.clientWidth + 1,
+          railDirectionCorrect: desktop
+            ? getComputedStyle(rail).display === "grid" &&
+              buttons.every((button, index) =>
+                index === 0 ||
+                button.getBoundingClientRect().top >=
+                  buttons[index - 1].getBoundingClientRect().bottom - 1,
+              )
+            : getComputedStyle(rail).display === "flex" &&
+              getComputedStyle(rail).overflowX === "auto",
+          dayLabelsReadable: buttons.every((button) => {
+            const rect = button.getBoundingClientRect();
+            return (
+              (desktop || rect.width + 0.5 >= 140) &&
+              button.scrollWidth <= button.clientWidth + 1 &&
+              button.scrollHeight <= button.clientHeight + 1
+            );
+          }),
+          mobileToolbarCompact: desktop || toolbar.getBoundingClientRect().height <= 72,
+          controlsAre44: [
+            ...primary.querySelectorAll<HTMLElement>("button"),
+            ...toolbar.querySelectorAll<HTMLElement>("button"),
+            ...buttons,
+          ].every((button) => {
+            const rect = button.getBoundingClientRect();
+            return rect.width + 0.5 >= 44 && rect.height + 0.5 >= 44;
+          }),
+        };
+      }),
+    )
+    .toEqual({
+      documentFits: true,
+      bodyFits: true,
+      headerFits: true,
+      titleHasWidth: true,
+      titleContained: true,
+      railContained: true,
+      visibleDayCount: expectedDayCount,
+      railScrollsInternally: true,
+      railDirectionCorrect: true,
+      dayLabelsReadable: true,
+      mobileToolbarCompact: true,
+      controlsAre44: true,
+    });
+}
+
+async function expectLastFieldAtlasDayReachable(page: Page): Promise<void> {
+  const experience = page.getByTestId("trip-experience");
+  if ((await experience.getAttribute("data-map-chrome-layout")) !== "bounded") return;
+
+  const rail = page.locator(".atlas-day-index__rail");
+  const initialScrollLeft = await rail.evaluate((element) => element.scrollLeft);
+  const lastDay = page.locator(".atlas-day-index__rail button:visible").last();
+  await lastDay.scrollIntoViewIfNeeded();
+  await expect
+    .poll(() =>
+      page.evaluate((startingScrollLeft) => {
+        const rail = document.querySelector<HTMLElement>(".atlas-day-index__rail")!;
+        const buttons = Array.from(rail.querySelectorAll<HTMLElement>("button")).filter(
+          (button) => button.getClientRects().length > 0,
+        );
+        const last = buttons.at(-1);
+        if (last === undefined) return false;
+        const railRect = rail.getBoundingClientRect();
+        const lastRect = last.getBoundingClientRect();
+        return (
+          rail.scrollLeft > startingScrollLeft &&
+          lastRect.left >= railRect.left - 1 &&
+          lastRect.right <= railRect.right + 1 &&
+          lastRect.width + 0.5 >= 44 &&
+          lastRect.height + 0.5 >= 44 &&
+          document.documentElement.scrollWidth <= window.innerWidth
+        );
+      }, initialScrollLeft),
+    )
+    .toBe(true);
+}
+
+async function expectBoundedProviderChrome(page: Page): Promise<void> {
+  const bounded = await page
+    .getByTestId("trip-experience")
+    .getAttribute("data-map-chrome-layout");
+  if (bounded !== "bounded") return;
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const map = document.querySelector<HTMLElement>("[data-provider-canvas='bounded']")!;
+        const header = document.querySelector<HTMLElement>(".day-header")!;
+        const sheet = document.querySelector<HTMLElement>(".itinerary-sheet")!;
+        const control = map.querySelector<HTMLElement>("[data-e2e-provider-control]")!;
+        const attribution = map.querySelector<HTMLElement>("[data-e2e-provider-attribution]")!;
+        const mapRect = map.getBoundingClientRect();
+        const headerRect = header.getBoundingClientRect();
+        const sheetRect = sheet.getBoundingClientRect();
+        const controlRect = control.getBoundingClientRect();
+        const attributionRect = attribution.getBoundingClientRect();
+        const controlHit = document
+          .elementFromPoint(
+            controlRect.left + controlRect.width / 2,
+            controlRect.top + controlRect.height / 2,
+          )
+          ?.closest("[data-e2e-provider-control]");
+        const separated = (first: DOMRect, second: DOMRect) =>
+          first.right <= second.left + 1 ||
+          first.left >= second.right - 1 ||
+          first.bottom <= second.top + 1 ||
+          first.top >= second.bottom - 1;
+        const desktop = window.innerWidth >= 768;
+        return {
+          clearsHeader: desktop
+            ? separated(mapRect, headerRect)
+            : mapRect.top >= headerRect.bottom,
+          clearsSheet: desktop
+            ? separated(mapRect, sheetRect)
+            : mapRect.bottom <= sheetRect.top - 7,
+          controlContained:
+            controlRect.left >= mapRect.left &&
+            controlRect.right <= mapRect.right &&
+            controlRect.top >= mapRect.top &&
+            controlRect.bottom <= mapRect.bottom,
+          attributionContained:
+            attributionRect.left >= mapRect.left &&
+            attributionRect.right <= mapRect.right &&
+            attributionRect.top >= mapRect.top &&
+            attributionRect.bottom <= mapRect.bottom,
+          controlOperable: controlHit === control,
+        };
+      }),
+    )
+    .toEqual({
+      clearsHeader: true,
+      clearsSheet: true,
+      controlContained: true,
+      attributionContained: true,
+      controlOperable: true,
+    });
 }
 
 async function visibleInteractiveTargetFailures(page: Page): Promise<Array<{
@@ -167,6 +360,97 @@ async function visibleInteractiveTargetFailures(page: Page): Promise<Array<{
   });
 }
 
+async function expectCompleteFieldAtlasReflow(page: Page): Promise<void> {
+  const experience = page.getByTestId("trip-experience");
+  if ((await experience.getAttribute("data-map-chrome-layout")) !== "bounded") return;
+
+  const layout = experience.locator(".atlas-responsive-layout");
+  await expect(layout).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const header = document.querySelector<HTMLElement>(".day-header")!;
+        const sheet = document.querySelector<HTMLElement>(".itinerary-sheet")!;
+        const layoutNode = document.querySelector<HTMLElement>(".atlas-responsive-layout")!;
+        const map = document.querySelector<HTMLElement>("[data-provider-canvas='bounded']")!;
+        const itinerary = document.querySelector<HTMLElement>("[data-scroll-region='itinerary']")!;
+        const tripTitle = header.querySelector<HTMLElement>(".atlas-day-index__primary strong")!;
+        const dayTitle = sheet.querySelector<HTMLElement>(".atlas-detail-surface__heading strong")!;
+        const contains = (owner: HTMLElement, child: HTMLElement) => {
+          const ownerRect = owner.getBoundingClientRect();
+          const childRect = child.getBoundingClientRect();
+          return (
+            childRect.left >= ownerRect.left - 1 &&
+            childRect.right <= ownerRect.right + 1 &&
+            childRect.top >= ownerRect.top - 1 &&
+            childRect.bottom <= ownerRect.bottom + 1
+          );
+        };
+        const criticalControls = [
+          ...header.querySelectorAll<HTMLElement>("button"),
+          ...sheet.querySelectorAll<HTMLElement>("button"),
+          ...document.querySelectorAll<HTMLElement>(".atlas-map-controls button"),
+        ].filter((control) => control.getClientRects().length > 0);
+        return {
+          documentFits: document.documentElement.scrollWidth <= window.innerWidth,
+          bodyFits: document.body.scrollWidth <= window.innerWidth,
+          flowMode: getComputedStyle(layoutNode).display === "grid",
+          verticalFlow: layoutNode.scrollHeight > layoutNode.clientHeight,
+          headerFits: header.scrollHeight <= header.clientHeight + 1,
+          sheetFits: sheet.scrollHeight <= sheet.clientHeight + 1,
+          tripTitleFits:
+            contains(header, tripTitle) &&
+            tripTitle.scrollWidth <= tripTitle.clientWidth + 1 &&
+            tripTitle.scrollHeight <= tripTitle.clientHeight + 1,
+          dayTitleFits:
+            contains(sheet, dayTitle) &&
+            dayTitle.scrollWidth <= dayTitle.clientWidth + 1 &&
+            dayTitle.scrollHeight <= dayTitle.clientHeight + 1,
+          itineraryHasFlow:
+            itinerary.clientHeight > 0 &&
+            itinerary.scrollHeight > 0 &&
+            itinerary.getBoundingClientRect().width > 0,
+          mapHasCanvas:
+            map.getBoundingClientRect().width > 0 &&
+            map.getBoundingClientRect().height > 0,
+          targetsAre44:
+            criticalControls.length > 0 &&
+            criticalControls.every((control) => {
+              const rect = control.getBoundingClientRect();
+              return rect.width + 0.5 >= 44 && rect.height + 0.5 >= 44;
+            }),
+        };
+      }),
+    )
+    .toEqual({
+      documentFits: true,
+      bodyFits: true,
+      flowMode: true,
+      verticalFlow: true,
+      headerFits: true,
+      sheetFits: true,
+      tripTitleFits: true,
+      dayTitleFits: true,
+      itineraryHasFlow: true,
+      mapHasCanvas: true,
+      targetsAre44: true,
+    });
+
+  const criticalControls = page.locator(
+    ".day-header button, .itinerary-sheet button, .atlas-map-controls button",
+  );
+  for (let index = 0; index < (await criticalControls.count()); index += 1) {
+    const control = criticalControls.nth(index);
+    if (await control.isVisible()) {
+      await control.scrollIntoViewIfNeeded();
+      await expect(control).toBeInViewport();
+    }
+  }
+
+  await page.getByTestId("itinerary-map").scrollIntoViewIfNeeded();
+  await expectBoundedProviderChrome(page);
+}
+
 test("touch target audit catches offscreen and label-backed undersized controls", async ({ page }) => {
   await page.setContent(`
     <button aria-label="Offscreen small control" style="position:absolute;top:2000px;left:0;width:24px;height:24px;padding:0">O</button>
@@ -209,6 +493,16 @@ test("keeps the persistent map and interruptible three-snap sheet inside every m
   await expect(map).toBeVisible();
   await expect(map.getByText("Deterministic test map · E2E only")).toBeVisible();
   await expect(sheet).toHaveAttribute("data-snap", "half");
+  if (await setVisibleFieldAtlasDayCount(page, 2)) {
+    for (const dayCount of [2, 3, 4] as const) {
+      await setVisibleFieldAtlasDayCount(page, dayCount);
+      await expectContainedFieldAtlasChrome(page, dayCount);
+      if (dayCount >= 3) await expectLastFieldAtlasDayReachable(page);
+    }
+  } else {
+    await expectContainedFieldAtlasChrome(page);
+  }
+  await expectBoundedProviderChrome(page);
   expect(await page.evaluate(() => ({
     document: document.documentElement.scrollWidth <= window.innerWidth,
     body: document.body.scrollWidth <= window.innerWidth,
@@ -219,8 +513,10 @@ test("keeps the persistent map and interruptible three-snap sheet inside every m
   expect(handleBox?.height).toBeGreaterThanOrEqual(44);
   await handle.press("Home");
   await expect(sheet).toHaveAttribute("data-snap", "collapsed");
+  await expectBoundedProviderChrome(page);
   await handle.press("End");
   await expect(sheet).toHaveAttribute("data-snap", "expanded");
+  await expectBoundedProviderChrome(page);
 
   await handle.hover();
   const dragBox = await handle.boundingBox();
@@ -232,6 +528,35 @@ test("keeps the persistent map and interruptible three-snap sheet inside every m
   expect(await sheet.evaluate((element) => (element as HTMLElement).style.transitionDuration)).toBe("0ms");
   await page.mouse.up();
   await expect(sheet).not.toHaveAttribute("data-snap", "expanded");
+
+  const boundedFieldAtlas =
+    (await page.getByTestId("trip-experience").getAttribute("data-map-chrome-layout")) ===
+    "bounded";
+  if (page.viewportSize()?.width === 320 && boundedFieldAtlas) {
+    await page.getByRole("button", { name: "Set half itinerary" }).click();
+    await page.evaluate(() => {
+      document.documentElement.style.fontSize = "200%";
+      window.dispatchEvent(new Event("resize"));
+    });
+    await expectCompleteFieldAtlasReflow(page);
+    await page.evaluate(() => {
+      document.documentElement.style.removeProperty("font-size");
+      window.dispatchEvent(new Event("resize"));
+    });
+
+    await page.setViewportSize({ width: 160, height: 284 });
+    await expectCompleteFieldAtlasReflow(page);
+    await page.setViewportSize({ width: 320, height: 568 });
+    await expect(sheet).toHaveAttribute("data-snap", "half");
+    await expectBoundedProviderChrome(page);
+    await expectContainedFieldAtlasChrome(page);
+
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await expectContainedFieldAtlasChrome(page);
+    await expectBoundedProviderChrome(page);
+    await page.setViewportSize({ width: 320, height: 568 });
+    await expectContainedFieldAtlasChrome(page);
+  }
 
   const geometry = await page.evaluate(() => {
     const header = document.querySelector<HTMLElement>(".day-header")!.getBoundingClientRect();
@@ -260,7 +585,7 @@ test("proves asymmetric safe areas, clock advancement, route retry, and persiste
   const initialMountCount = Number(await map.getAttribute("data-e2e-mount-count"));
   expect(initialMountCount).toBeGreaterThan(0);
   await expect(page.getByLabel("Etc/UTC time")).toHaveText("08:50");
-  await expect(page.getByRole("button", { name: /約 09:00 Lookout terrace/ })).toHaveAttribute(
+  await expect(page.getByRole("button", { name: /(?:About|約) 09:00 Lookout terrace/ })).toHaveAttribute(
     "data-selection-source",
     "automatic",
   );
@@ -277,9 +602,14 @@ test("proves asymmetric safe areas, clock advancement, route retry, and persiste
     top: number;
     bottom: number;
   };
-  expect(padding.top).toBeGreaterThan(13);
-  expect(padding.bottom).toBeGreaterThan(29);
-  expect(padding.top).not.toBe(padding.bottom);
+  if ((await experience.getAttribute("data-map-chrome-layout")) === "bounded") {
+    expect(padding).toEqual({ top: 16, right: 16, bottom: 16, left: 16 });
+    await expectBoundedProviderChrome(page);
+  } else {
+    expect(padding.top).toBeGreaterThan(13);
+    expect(padding.bottom).toBeGreaterThan(29);
+    expect(padding.top).not.toBe(padding.bottom);
+  }
 
   const unavailable = page.locator(
     '[data-route-owner="route-shopping-hotel"][data-state="error"]',
@@ -294,7 +624,7 @@ test("proves asymmetric safe areas, clock advancement, route retry, and persiste
   });
   await page.getByRole("button", { name: "Collapse date choices" }).click();
   await expect(page.getByLabel("Etc/UTC time")).toHaveText("10:15");
-  await expect(page.getByRole("button", { name: /約 10:00 Garden kitchen/ })).toHaveAttribute(
+  await expect(page.getByRole("button", { name: /(?:About|約) 10:00 Garden kitchen/ })).toHaveAttribute(
     "aria-current",
     "step",
   );
@@ -314,24 +644,24 @@ test("synchronizes dates, live current state, list places, map places, and indep
   const dayOne = page.getByRole("button", { name: /Day 1: Harbor field day, Fri, Apr 18/ });
   const dayTwo = page.getByRole("button", { name: /Day 2: Cove closing day, Sat, Apr 19/ });
   await expect(dayOne).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("button", { name: /約 10:00 Garden kitchen/ })).toHaveAttribute("aria-current", "step");
+  await expect(page.getByRole("button", { name: /(?:About|約) 10:00 Garden kitchen/ })).toHaveAttribute("aria-current", "step");
 
   const supplyMapMarker = map.getByRole("button", { name: "Map place Supply hall" });
   const supplyOwner = await supplyMapMarker.getAttribute("data-map-owner");
-  await page.getByRole("button", { name: /時間未定 Supply hall/ }).click();
+  await page.getByRole("button", { name: /(?:Time not set|時間未定) Supply hall/ }).click();
   await expect(map).toHaveAttribute("data-e2e-focus-kind", "place");
   await expect(map).toHaveAttribute("data-e2e-focus-id", supplyOwner!);
   await expect(supplyMapMarker).toHaveAttribute("data-map-tone", "selected");
 
   await map.getByRole("button", { name: "Map place Lookout terrace" }).dispatchEvent("click");
-  await expect(page.getByRole("button", { name: /約 09:00 Lookout terrace/ })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: /(?:About|約) 09:00 Lookout terrace/ })).toHaveAttribute("aria-pressed", "true");
 
   await dayTwo.click();
   await expect(dayTwo).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("button", { name: /09:00 Cove walk/ })).toBeVisible();
   await page.getByRole("button", { name: "Return to the current itinerary item" }).first().click();
   await expect(dayOne).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("button", { name: /約 10:00 Garden kitchen/ })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: /(?:About|約) 10:00 Garden kitchen/ })).toHaveAttribute("aria-pressed", "true");
 
   const routeOwners = await page.locator("[data-route-owner]").evaluateAll((elements) =>
     elements.map((element) => element.getAttribute("data-route-owner")),
@@ -384,7 +714,9 @@ test("synchronizes dates, live current state, list places, map places, and indep
 test("compares dining and snack candidates together on the persistent map with draft and commit semantics", async ({ page }) => {
   await openTrip(page);
   const map = page.getByTestId("itinerary-map");
-  const compare = page.getByRole("button", { name: "比較 Lunch choice" });
+  const compare = page.getByRole("button", {
+    name: /^(?:Compare Lunch choice(?: again)?|(?:重新)?比較 Lunch choice)$/,
+  });
   await compare.click();
   await expect(map.getByRole("button", { name: /Map place 5A · Garden kitchen/ })).toBeVisible();
   const canalMarker = map.getByRole("button", { name: /Map place 5B · Canal counter/ });
@@ -401,21 +733,22 @@ test("compares dining and snack candidates together on the persistent map with d
     return label === null ? "none" : getComputedStyle(label).outlineStyle;
   })).not.toBe("none");
   expect(await visibleInteractiveTargetFailures(page)).toEqual([]);
-  await page.getByRole("button", { name: "確認選擇 Canal counter" }).click();
-  await expect(page.getByText("已選 · Canal counter")).toBeVisible();
+  await page.getByRole("button", { name: /^(?:Confirm Canal counter|確認選擇 Canal counter)$/ }).click();
+  const candidateDecision = page.locator("[data-candidate-mode]");
+  await expect(candidateDecision.getByText(/^(?:Selected|已選) · Canal counter$/)).toBeVisible();
   await expect(map.getByRole("button", { name: /Map place 5A · Garden kitchen/ })).toHaveCount(0);
   await expect(map.getByRole("button", { name: /Map place 5B · Canal counter/ })).toHaveCount(0);
 
-  await page.getByRole("button", { name: "重新比較 Lunch choice" }).click();
+  await page.getByRole("button", { name: /^(?:Compare Lunch choice again|重新比較 Lunch choice)$/ }).click();
   await page.getByRole("radio", { name: /5A · Garden kitchen/ }).check();
-  await page.getByRole("button", { name: "取消候選比較" }).click();
-  await expect(page.getByText("已選 · Canal counter")).toBeVisible();
+  await page.getByRole("button", { name: /^(?:Cancel candidate comparison|取消候選比較)$/ }).click();
+  await expect(candidateDecision.getByText(/^(?:Selected|已選) · Canal counter$/)).toBeVisible();
 
-  await page.getByRole("button", { name: /約 09:00 Lookout terrace/ }).click();
-  await page.getByRole("button", { name: "查看 Lookout terrace 候選" }).click();
+  await page.getByRole("button", { name: /(?:About|約) 09:00 Lookout terrace/ }).click();
+  await page.getByRole("button", { name: /^(?:View Lookout terrace candidates|查看 Lookout terrace 候選)$/ }).click();
   await expect(map.getByRole("button", { name: /Map place 4A · Fruit window/ })).toBeVisible();
   await expect(map.getByRole("button", { name: /Map place 4B · Steam bun cart/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /確認選擇/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /(?:Confirm candidate selection|確認選擇)/ })).toHaveCount(0);
   expect(await visibleInteractiveTargetFailures(page)).toEqual([]);
 });
 
@@ -426,7 +759,7 @@ test("renders all semantics, lodging roles, tasks, dialogs, and trip-scoped prog
   await pretrip.check();
   await page.reload();
   await expect(page.getByRole("checkbox", { name: "Prepare offline documents" })).toBeChecked();
-  await page.getByRole("button", { name: /進入 Day 1 · Harbor field day/ }).click();
+  await page.getByRole("button", { name: /(?:Enter|進入) Day 1 · Harbor field day/ }).click();
   await expect(page.getByTestId("trip-experience")).toBeVisible();
 
   for (const semantic of ["transport", "transfer", "lodging", "dining", "shopping", "sightseeing", "experience", "logistics", "custom"]) {
@@ -437,39 +770,39 @@ test("renders all semantics, lodging roles, tasks, dialogs, and trip-scoped prog
   await expect(page.getByText("Day end · Stay base")).toBeAttached();
   await expect(page.getByText("Friday, 18 April 2042")).toBeAttached();
 
-  await page.getByRole("button", { name: /時間未定 Supply hall/ }).click();
-  const shopping = page.getByRole("combobox", { name: "Pocket notebook 採買狀態" });
+  await page.getByRole("button", { name: /(?:Time not set|時間未定) Supply hall/ }).click();
+  const shopping = page.getByRole("combobox", { name: /^(?:Pocket notebook shopping status|Pocket notebook 採買狀態)$/ });
   await shopping.selectOption("purchased");
   await expect(shopping).toHaveValue("purchased");
   await page.reload();
-  await page.getByRole("button", { name: /進入 Day 1 · Harbor field day/ }).click();
-  await page.getByRole("button", { name: /時間未定 Supply hall/ }).click();
-  await expect(page.getByRole("combobox", { name: "Pocket notebook 採買狀態" })).toHaveValue("purchased");
+  await page.getByRole("button", { name: /(?:Enter|進入) Day 1 · Harbor field day/ }).click();
+  await page.getByRole("button", { name: /(?:Time not set|時間未定) Supply hall/ }).click();
+  await expect(page.getByRole("combobox", { name: /^(?:Pocket notebook shopping status|Pocket notebook 採買狀態)$/ })).toHaveValue("purchased");
 
-  const taskTrigger = page.getByRole("button", { name: "開啟 Harbor field day 當日事項" });
+  const taskTrigger = page.getByRole("button", { name: /^(?:Open tasks for Harbor field day|開啟 Harbor field day 當日事項)$/ });
   await taskTrigger.click();
-  const taskDialog = page.getByRole("dialog", { name: "Harbor field day 當日事項" });
+  const taskDialog = page.getByRole("dialog", { name: /^(?:Tasks for Harbor field day|Harbor field day 當日事項)$/ });
   await expect(taskDialog).toBeVisible();
   expect(await taskDialog.evaluate((element) =>
     element instanceof HTMLDialogElement && element.open,
   )).toBe(true);
   await expect(page.getByText("Use the lobby fountain.")).toBeVisible();
   expect(await visibleInteractiveTargetFailures(page)).toEqual([]);
-  await page.getByRole("button", { name: "關閉當日事項" }).click();
+  await page.getByRole("button", { name: /^(?:Close day tasks|關閉當日事項)$/ }).click();
   await expect(taskTrigger).toBeFocused();
 
-  const reservationTrigger = page.getByRole("button", { name: "開啟訂位資訊" });
+  const reservationTrigger = page.getByRole("button", { name: /^(?:Open reservation information|開啟訂位資訊)$/ });
   await reservationTrigger.click();
-  const reservationDialog = page.getByRole("dialog", { name: "訂位資訊" });
+  const reservationDialog = page.getByRole("dialog", { name: /^(?:Reservation information|訂位資訊)$/ });
   await expect(reservationDialog).toBeVisible();
   expect(await reservationDialog.evaluate((element) =>
     element instanceof HTMLDialogElement && element.open,
   )).toBe(true);
   await expect(page.getByText("SYNTHETIC-SKY")).toHaveCount(0);
   expect(await visibleInteractiveTargetFailures(page)).toEqual([]);
-  await page.getByRole("button", { name: "顯示 Sky room admission 訂位代碼" }).click();
+  await page.getByRole("button", { name: /^(?:Show Sky room admission reservation code|顯示 Sky room admission 訂位代碼)$/ }).click();
   await expect(page.getByText("SYNTHETIC-SKY")).toBeVisible();
-  await page.getByRole("button", { name: "關閉訂位資訊" }).click();
+  await page.getByRole("button", { name: /^(?:Close reservation information|關閉訂位資訊)$/ }).click();
   await expect(reservationTrigger).toBeFocused();
 
   expect(await visibleInteractiveTargetFailures(page)).toEqual([]);
@@ -479,9 +812,9 @@ test("renders all semantics, lodging roles, tasks, dialogs, and trip-scoped prog
   });
   await page.reload();
   await expect(page.getByRole("checkbox", { name: "Prepare offline documents" })).not.toBeChecked();
-  await page.getByRole("button", { name: /進入 Day 1 · Harbor field day/ }).click();
-  await page.getByRole("button", { name: /時間未定 Supply hall/ }).click();
-  await expect(page.getByRole("combobox", { name: "Pocket notebook 採買狀態" })).toHaveValue("pending");
+  await page.getByRole("button", { name: /(?:Enter|進入) Day 1 · Harbor field day/ }).click();
+  await page.getByRole("button", { name: /(?:Time not set|時間未定) Supply hall/ }).click();
+  await expect(page.getByRole("combobox", { name: /^(?:Pocket notebook shopping status|Pocket notebook 採買狀態)$/ })).toHaveValue("pending");
 });
 
 test("keeps every semantic renderer visible and exposes absolute cross-midnight owner names", async ({ page }) => {
@@ -511,7 +844,7 @@ test("keeps every semantic renderer visible and exposes absolute cross-midnight 
   await logisticsDisclosure.scrollIntoViewIfNeeded();
   await logisticsDisclosure.click();
   await expect(page.getByText("Show locker slip")).toBeVisible();
-  const customOwner = page.getByRole("button", { name: /時間未定 Exchange field notes/ });
+  const customOwner = page.getByRole("button", { name: /(?:Time not set|時間未定) Exchange field notes/ });
   await customOwner.scrollIntoViewIfNeeded();
   await customOwner.click();
   await expect(customOwner).toHaveAttribute("aria-pressed", "true");
@@ -520,7 +853,7 @@ test("keeps every semantic renderer visible and exposes absolute cross-midnight 
     name: /14:00 Sky room session · Friday, 18 April 2042 · fixed time/,
   })).toBeAttached();
   await expect(page.getByRole("button", {
-    name: /約 23:30 Harbor House night return · Friday, 18 April 2042 · suggested time · ends Saturday, 19 April 2042 at 00:15/,
+    name: /(?:About|約) 23:30 Harbor House night return · Friday, 18 April 2042 · suggested time · ends Saturday, 19 April 2042 at 00:15/,
   })).toBeAttached();
   expect(await visibleInteractiveTargetFailures(page)).toEqual([]);
 });
@@ -581,8 +914,8 @@ test("preserves keyboard names, forced-color selection, and reduced-motion behav
   expect(selectedStyle.borderStyle).not.toBe("none");
   expect(selectedStyle.color).not.toBe(selectedStyle.background);
 
-  await expect(page.getByRole("button", { name: /約 07:00 Morning harbor shuttle/ })).toBeAttached();
-  await expect(page.getByRole("button", { name: /時間未定 Supply hall/ })).toBeAttached();
+  await expect(page.getByRole("button", { name: /(?:About|約) 07:00 Morning harbor shuttle/ })).toBeAttached();
+  await expect(page.getByRole("button", { name: /(?:Time not set|時間未定) Supply hall/ })).toBeAttached();
   await expect(page.getByText("Friday, 18 April 2042")).toBeAttached();
   const transit = page.locator('[data-route-id="route-shuttle-ferry"]');
   await transit.focus();

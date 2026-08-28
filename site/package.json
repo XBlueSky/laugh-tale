@@ -1,0 +1,20 @@
+{
+  "name": "laugh-tale-site",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "sync": "node scripts/sync-manifest.mjs",
+    "dev": "npm run sync && astro dev",
+    "build": "npm run sync && astro build",
+    "preview": "astro preview",
+    "test": "node --test 'test/**/*.test.mjs'",
+    "test:ci": "node --test --test-reporter=tap 'test/**/*.test.mjs'"
+  },
+  "dependencies": {
+    "astro": "^7",
+    "motion": "^13.1.1"
+  }
+}
