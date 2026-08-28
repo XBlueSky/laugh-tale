@@ -2,6 +2,18 @@
 import { Image } from 'astro:assets'
 import Base from '../layouts/Base.astro'
 import logo from '../assets/logo.png'
+import captainCutlass from '../assets/tribute/captain-cutlass.webp'
+import crewArrival from '../assets/tribute/crew-arrival.webp'
+import crewAssembled from '../assets/tribute/crew-assembled.webp'
+import doctorKit from '../assets/tribute/doctor-kit.webp'
+import firstMateGlasses from '../assets/tribute/first-mate-glasses.webp'
+import firstMateSword from '../assets/tribute/first-mate-sword.webp'
+import journeySake from '../assets/tribute/journey-sake.webp'
+import navigatorAxes from '../assets/tribute/navigator-axes.webp'
+import readerJournal from '../assets/tribute/reader-journal.webp'
+import readerSwords from '../assets/tribute/reader-swords.webp'
+import strawHat from '../assets/tribute/straw-hat.webp'
+import voyageLogbook from '../assets/tribute/voyage-logbook.webp'
 import manifest from '../data/manifest.json'
 import { validateManifest } from '../lib/manifest.mjs'
 
@@ -42,11 +54,31 @@ const burstRays = Array.from({ length: RAY_COUNT }, (_, i) => {
 
   <main class="wrap">
     <section class="titlepage">
-      <p class="caption-box">An open-source marketplace for coding agents</p>
-      <div class="burst-wrap">
+      <p class="caption-box" data-hero-copy>An open-source marketplace for coding agents</p>
+      <div class="burst-wrap" data-relic="captain">
         <svg class="burst" viewBox="0 0 1000 1000" aria-hidden="true">
           {burstRays.map((points) => <polygon points={points} fill="currentcolor" opacity="0.14" />)}
         </svg>
+        <div class="hero-relic hero-relic--straw" data-motion-part aria-hidden="true">
+          <Image
+            src={strawHat}
+            alt=""
+            widths={[160, 320]}
+            sizes="(max-width: 44rem) 80px, 128px"
+            loading="eager"
+            decoding="async"
+          />
+        </div>
+        <div class="hero-relic hero-relic--cutlass" data-motion-part aria-hidden="true">
+          <Image
+            src={captainCutlass}
+            alt=""
+            widths={[192, 384]}
+            sizes="(max-width: 44rem) 96px, 160px"
+            loading="eager"
+            decoding="async"
+          />
+        </div>
         <Image
           class="hero-logo"
           src={logo}
@@ -56,149 +88,349 @@ const burstRays = Array.from({ length: RAY_COUNT }, (_, i) => {
         />
         <p class="don" aria-hidden="true">DON!!</p>
       </div>
-      <h1>Laugh Tale</h1>
-      <p class="lede">
+      <h1 data-hero-copy>Laugh Tale</h1>
+      <p class="lede" data-hero-copy>
         <strong>Chart the trip. Own the site.</strong>{' '}
         {marketplace.description} Describe a real itinerary — prose, CSV, Markdown, documents,
         links — and get an independent React travel site that never needs the plugin at runtime.
       </p>
-      <p class="eternal">Eternal Pose</p>
-      <div class="hero-links">
+      <p class="eternal" data-hero-copy>Eternal Pose</p>
+      <p class="serial-note" data-hero-copy>Final Voyage · a serial in four acts</p>
+      <div class="hero-links" data-hero-copy>
         <a href={repoUrl}>XBlueSky/laugh-tale</a>
         <a href="https://www.npmjs.com/package/@laugh-tale-island/core">@laugh-tale-island/core</a>
         <a href="https://www.npmjs.com/package/@laugh-tale-island/react">@laugh-tale-island/react</a>
       </div>
     </section>
 
-    <section class="chapter" aria-labelledby="quickstart">
-      <p class="chapter-no" aria-hidden="true">CH.01</p>
-      <h2 id="quickstart">Install Eternal Pose straight from GitHub</h2>
-      <p>
-        Add the marketplace directly from the repository — no clone needed — then install the
-        plugin.
-      </p>
-      <div class="helm">
-        <figure class="console">
-          <figcaption>Claude Code</figcaption>
-          <pre><code><span class="prompt">$ </span>claude plugin marketplace add XBlueSky/laugh-tale
-<span class="prompt">$ </span>claude plugin install eternal-pose@laugh-tale</code></pre>
-        </figure>
-        <figure class="console">
-          <figcaption>Codex</figcaption>
-          <pre><code><span class="prompt">$ </span>codex plugin marketplace add https://github.com/XBlueSky/laugh-tale
-<span class="prompt">$ </span>codex plugin add eternal-pose@laugh-tale</code></pre>
-        </figure>
-      </div>
-      <p class="then">
-        Then just describe the trip:
-        <em>“turn these itinerary notes into a map-first mobile trip site.”</em>
-      </p>
-    </section>
+    <div class="act" data-voyage-act="chart">
+      <header class="act-plate" data-panel>
+        <p class="act-heading">
+          <span class="act-kicker">Act I</span>
+          <span class="act-name">The Chart</span>
+        </p>
+        <p class="narration">
+          Somewhere past the last safe harbor, a chart changes hands. The final voyage begins
+          with one line in a terminal.
+        </p>
+      </header>
 
-    <section class="chapter" aria-labelledby="marketplace">
-      <p class="chapter-no" aria-hidden="true">CH.02</p>
-      <h2 id="marketplace">One shared skill, honestly described</h2>
-      {
-        plugins.map((plugin) => (
-          <article>
-            {groupNote(plugin.group) && (
-              <p class="group-note">
-                {groupLabel(plugin.group)} — {groupNote(plugin.group)}
-              </p>
-            )}
-            <div class="plugin">
-              <div>
-                <div class="plugin-id">
-                  <h3>{plugin.name}</h3>
-                  <span class="stamp">v{plugin.version}</span>
-                </div>
-                <p class="tagline">{plugin.tagline}</p>
-                <p class="intro">{plugin.intro}</p>
-                {plugin.keywords?.length > 0 && (
-                  <ul class="tags">
-                    {plugin.keywords.map((keyword) => (
-                      <li>{keyword}</li>
-                    ))}
-                    <li>{plugin.license}</li>
-                  </ul>
-                )}
-              </div>
-              {plugin.skills.map((skill) => (
-                <div class="skill">
-                  <h4>When the skill triggers</h4>
-                  <p class="trigger">{skill.trigger}</p>
-                  {skill.examples?.length > 0 && (
-                    <ul class="examples">
-                      {skill.examples.map((example) => (
-                        <li>{example}</li>
+      <section class="chapter chapter--with-relic" aria-labelledby="quickstart">
+        <p class="chapter-no" aria-hidden="true">CH.01</p>
+        <div
+          class="chapter-relic relic--first-mate"
+          data-relic="first-mate"
+          data-rest-rotation="5"
+          aria-hidden="true"
+        >
+          <Image
+            class="relic-part relic-part--sword"
+            src={firstMateSword}
+            alt=""
+            widths={[160, 320]}
+            sizes="(max-width: 44rem) 84px, 144px"
+            loading="lazy"
+            decoding="async"
+          />
+          <Image
+            class="relic-part relic-part--glasses"
+            src={firstMateGlasses}
+            alt=""
+            widths={[160, 320]}
+            sizes="(max-width: 44rem) 84px, 144px"
+            loading="lazy"
+            decoding="async"
+          />
+          <span class="relic-label">FIRST MATE</span>
+        </div>
+        <h2 id="quickstart">Install Eternal Pose straight from GitHub</h2>
+        <p>
+          Add the marketplace directly from the repository — no clone needed — then install the
+          plugin.
+        </p>
+        <div class="helm helm--charted">
+          <figure class="console" data-panel>
+            <figcaption>Claude Code</figcaption>
+            <pre><code><span class="prompt">$ </span>claude plugin marketplace add XBlueSky/laugh-tale
+<span class="prompt">$ </span>claude plugin install eternal-pose@laugh-tale</code></pre>
+          </figure>
+          <figure class="console" data-panel>
+            <figcaption>Codex</figcaption>
+            <pre><code><span class="prompt">$ </span>codex plugin marketplace add https://github.com/XBlueSky/laugh-tale
+<span class="prompt">$ </span>codex plugin add eternal-pose@laugh-tale</code></pre>
+          </figure>
+          <figure class="koma koma--art koma--logbook" data-panel aria-hidden="true">
+            <Image
+              src={voyageLogbook}
+              alt=""
+              widths={[320, 640]}
+              sizes="(max-width: 44rem) 200px, 280px"
+              loading="lazy"
+              decoding="async"
+            />
+            <figcaption class="koma-caption">THE CHART, BOUND AND KEPT</figcaption>
+          </figure>
+        </div>
+        <p class="then">
+          Then just describe the trip:
+          <em>“turn these itinerary notes into a map-first mobile trip site.”</em>
+        </p>
+      </section>
+    </div>
+
+    <div class="act" data-voyage-act="crew">
+      <header class="act-plate" data-panel>
+        <p class="act-heading">
+          <span class="act-kicker">Act II</span>
+          <span class="act-name">The Crew</span>
+        </p>
+        <p class="narration">
+          No one sails the last stretch alone. One by one, the crew answers the call — each with
+          a trade, each with a tool.
+        </p>
+      </header>
+
+      <section class="chapter chapter--with-relic" aria-labelledby="marketplace">
+        <p class="chapter-no" aria-hidden="true">CH.02</p>
+        <div
+          class="chapter-relic relic--navigator"
+          data-relic="navigator"
+          data-rest-rotation="-4"
+          aria-hidden="true"
+        >
+          <span class="relic-compass" aria-hidden="true"></span>
+          <Image
+            class="relic-part relic-part--axes"
+            src={navigatorAxes}
+            alt=""
+            widths={[160, 320]}
+            sizes="(max-width: 44rem) 82px, 136px"
+            loading="lazy"
+            decoding="async"
+          />
+          <span class="relic-label">NAVIGATOR</span>
+        </div>
+        <h2 id="marketplace">One shared skill, honestly described</h2>
+        <figure class="koma koma--art koma--crew" data-panel>
+          <Image
+            src={crewAssembled}
+            alt="An original ink silhouette of the assembled crew standing before their ship"
+            widths={[720, 1200, 1600]}
+            sizes="(max-width: 44rem) calc(100vw - 4rem), 880px"
+            loading="lazy"
+            decoding="async"
+          />
+          <figcaption class="koma-caption">ONE BY ONE, THEY ANSWER</figcaption>
+        </figure>
+        {
+          plugins.map((plugin) => (
+            <article class="plugin-spread" data-panel>
+              {groupNote(plugin.group) && (
+                <p class="group-note">
+                  {groupLabel(plugin.group)} — {groupNote(plugin.group)}
+                </p>
+              )}
+              <div class="plugin">
+                <div>
+                  <div class="plugin-id">
+                    <h3>{plugin.name}</h3>
+                    <span class="stamp">v{plugin.version}</span>
+                  </div>
+                  <p class="tagline">{plugin.tagline}</p>
+                  <p class="intro">{plugin.intro}</p>
+                  {plugin.keywords?.length > 0 && (
+                    <ul class="tags">
+                      {plugin.keywords.map((keyword) => (
+                        <li>{keyword}</li>
                       ))}
+                      <li>{plugin.license}</li>
                     </ul>
                   )}
                 </div>
-              ))}
+                {plugin.skills.map((skill) => (
+                  <div class="skill">
+                    <h4>When the skill triggers</h4>
+                    <p class="trigger">{skill.trigger}</p>
+                    {skill.examples?.length > 0 && (
+                      <ul class="examples">
+                        {skill.examples.map((example) => (
+                          <li>{example}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </article>
+          ))
+        }
+      </section>
+
+      <section class="chapter chapter--with-relic" aria-labelledby="packages">
+        <p class="chapter-no" aria-hidden="true">CH.03</p>
+        <div
+          class="chapter-relic relic--doctor"
+          data-relic="doctor"
+          data-rest-rotation="4"
+          aria-hidden="true"
+        >
+          <span class="relic-harpoon" aria-hidden="true"></span>
+          <Image
+            class="relic-part relic-part--doctor-kit"
+            src={doctorKit}
+            alt=""
+            widths={[160, 320]}
+            sizes="(max-width: 44rem) 82px, 136px"
+            loading="lazy"
+            decoding="async"
+          />
+          <span class="relic-label">SHIP'S DOCTOR</span>
+        </div>
+        <h2 id="packages">Build a custom site on the same behavior</h2>
+        <p>
+          The packages carry the tested trip behavior without a visual system — your site owns
+          every visible element.
+        </p>
+        <div class="koma koma--hold" data-panel>
+          <div class="packages">
+            <div class="package">
+              <a href="https://www.npmjs.com/package/@laugh-tale-island/core">@laugh-tale-island/core</a>
+              <p>Framework-neutral trip behavior: the semantic model, candidate decisions, route lifecycles.</p>
             </div>
-          </article>
-        ))
-      }
-    </section>
+            <div class="package">
+              <a href="https://www.npmjs.com/package/@laugh-tale-island/react">@laugh-tale-island/react</a>
+              <p>React behavior hooks and prop-getters over the same core.</p>
+            </div>
+          </div>
+          <figure class="console install-line">
+            <pre><code><span class="prompt">$ </span>npm install @laugh-tale-island/core @laugh-tale-island/react</code></pre>
+          </figure>
+        </div>
+      </section>
+    </div>
 
-    <section class="chapter" aria-labelledby="packages">
-      <p class="chapter-no" aria-hidden="true">CH.03</p>
-      <h2 id="packages">Build a custom site on the same behavior</h2>
-      <p>
-        The packages carry the tested trip behavior without a visual system — your site owns
-        every visible element.
-      </p>
-      <div class="packages">
-        <div class="package">
-          <a href="https://www.npmjs.com/package/@laugh-tale-island/core">@laugh-tale-island/core</a>
-          <p>Framework-neutral trip behavior: the semantic model, candidate decisions, route lifecycles.</p>
+    <div class="act act--storm" data-voyage-act="storm">
+      <span class="rumble" aria-hidden="true">ゴゴゴゴゴゴゴ</span>
+      <header class="act-plate" data-panel>
+        <p class="act-heading">
+          <span class="act-kicker">Act III</span>
+          <span class="act-name">The Storm</span>
+        </p>
+        <p class="narration">
+          The sea turns. Rig the sails your own way — and whatever the storm takes, it takes
+          nothing from the hold.
+        </p>
+      </header>
+
+      <section class="chapter chapter--with-relic" aria-labelledby="recipes">
+        <p class="chapter-no" aria-hidden="true">CH.04</p>
+        <div
+          class="chapter-relic relic--reader"
+          data-relic="reader"
+          data-rest-rotation="-5"
+          aria-hidden="true"
+        >
+          <Image
+            class="relic-part relic-part--reader-swords"
+            src={readerSwords}
+            alt=""
+            widths={[160, 320]}
+            sizes="(max-width: 44rem) 90px, 148px"
+            loading="lazy"
+            decoding="async"
+          />
+          <Image
+            class="relic-part relic-part--reader-journal"
+            src={readerJournal}
+            alt=""
+            widths={[128, 256]}
+            sizes="(max-width: 44rem) 64px, 104px"
+            loading="lazy"
+            decoding="async"
+          />
+          <span class="relic-label">STONE READER</span>
         </div>
-        <div class="package">
-          <a href="https://www.npmjs.com/package/@laugh-tale-island/react">@laugh-tale-island/react</a>
-          <p>React behavior hooks and prop-getters over the same core.</p>
+        <h2 id="recipes">Three compile-time starting points</h2>
+        <div class="koma koma--strip" data-panel>
+          <div class="recipes">
+            <div class="swatch swatch-quiet-wood">
+              <strong>Quiet Wood</strong>
+              <p>Warm, restrained, and softly tactile.</p>
+            </div>
+            <div class="swatch swatch-sticker-brutalist">
+              <strong>Sticker Brutalist</strong>
+              <p>High-contrast editorial labels and crisp borders.</p>
+            </div>
+            <div class="swatch swatch-native-minimal">
+              <strong>Native Minimal</strong>
+              <p>Neutral, platform-minded clarity.</p>
+            </div>
+          </div>
         </div>
-      </div>
-      <figure class="console install-line">
-        <pre><code><span class="prompt">$ </span>npm install @laugh-tale-island/core @laugh-tale-island/react</code></pre>
+        <p class="recipes-note">
+          Recipes are starting points, not lock-in: generated information architecture, home pages,
+          type renderers, and visual systems remain yours to change.
+        </p>
+      </section>
+
+      <section class="chapter chapter--storm" aria-labelledby="privacy">
+        <p class="chapter-no" aria-hidden="true">CH.05</p>
+        <span class="sfx sfx--storm" aria-hidden="true">ZAAAN!!</span>
+        <h2 id="privacy">Nothing leaves your machine without you</h2>
+        <ul class="pledge">
+          <li>Work stays local and private by default.</li>
+          <li>Eternal Pose does not invent coordinates, reservations, routes, or other facts.</li>
+          <li>
+            It does not create a remote, make a repository public, push, publish, or deploy without
+            explicit approval for that action.
+          </li>
+        </ul>
+      </section>
+    </div>
+
+    <div class="act" data-voyage-act="arrival">
+      <header class="act-plate" data-panel>
+        <p class="act-heading">
+          <span class="act-kicker">Final Act</span>
+          <span class="act-name">The Arrival</span>
+        </p>
+        <p class="narration">
+          Past the storm, the horizon breaks. At the end of every true chart, there is laughter.
+        </p>
+      </header>
+
+      <figure class="koma koma--art koma--sake" data-panel aria-hidden="true">
+        <Image
+          src={journeySake}
+          alt=""
+          widths={[320, 640]}
+          sizes="(max-width: 44rem) 180px, 240px"
+          loading="lazy"
+          decoding="async"
+        />
+        <figcaption class="koma-caption">POUR ONE FOR THE CREW</figcaption>
       </figure>
-    </section>
 
-    <section class="chapter" aria-labelledby="recipes">
-      <p class="chapter-no" aria-hidden="true">CH.04</p>
-      <h2 id="recipes">Three compile-time starting points</h2>
-      <div class="recipes">
-        <div class="swatch swatch-quiet-wood">
-          <strong>Quiet Wood</strong>
-          <p>Warm, restrained, and softly tactile.</p>
+      <figure class="crew-epilogue" aria-labelledby="crew-epilogue-caption">
+        <div class="crew-epilogue__sun" aria-hidden="true"></div>
+        <div class="crew-epilogue__art">
+          <Image
+            class="crew-epilogue__image"
+            src={crewArrival}
+            alt="An original ink silhouette of a legendary pirate crew facing the final island"
+            widths={[720, 1200, 1600]}
+            sizes="(max-width: 44rem) calc(100vw - 2rem), 1056px"
+            loading="lazy"
+            decoding="async"
+          />
         </div>
-        <div class="swatch swatch-sticker-brutalist">
-          <strong>Sticker Brutalist</strong>
-          <p>High-contrast editorial labels and crisp borders.</p>
-        </div>
-        <div class="swatch swatch-native-minimal">
-          <strong>Native Minimal</strong>
-          <p>Neutral, platform-minded clarity.</p>
-        </div>
-      </div>
-      <p class="recipes-note">
-        Recipes are starting points, not lock-in: generated information architecture, home pages,
-        type renderers, and visual systems remain yours to change.
-      </p>
-    </section>
-
-    <section class="chapter" aria-labelledby="privacy">
-      <p class="chapter-no" aria-hidden="true">CH.05</p>
-      <h2 id="privacy">Nothing leaves your machine without you</h2>
-      <ul class="pledge">
-        <li>Work stays local and private by default.</li>
-        <li>Eternal Pose does not invent coordinates, reservations, routes, or other facts.</li>
-        <li>
-          It does not create a remote, make a repository public, push, publish, or deploy without
-          explicit approval for that action.
-        </li>
-      </ul>
-    </section>
+        <figcaption id="crew-epilogue-caption">
+          <span class="crew-epilogue__kicker">THE ONES WHO REACHED THE END</span>
+          <strong>Every map needs a crew willing to sail past its edge.</strong>
+        </figcaption>
+        <span class="crew-epilogue__sfx" aria-hidden="true">DOOM!!</span>
+      </figure>
+    </div>
   </main>
 
   <footer class="colophon-bar">
@@ -218,3 +450,7 @@ const burstRays = Array.from({ length: RAY_COUNT }, (_, i) => {
     </div>
   </footer>
 </Base>
+
+<script>
+  import '../scripts/tribute-motion'
+</script>
