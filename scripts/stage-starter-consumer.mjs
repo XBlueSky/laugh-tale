@@ -594,6 +594,7 @@ async function withPackageLock(testOperations, operation) {
       throw new AggregateError(
         [operationError, releaseError],
         "staging operation and package-lock release both failed",
+        { cause: releaseError },
       );
     }
     throw releaseError;
@@ -646,6 +647,7 @@ async function rollbackRenamedArtifactLock(removalPath, cause) {
     throw new AggregateError(
       [cause, rollbackError],
       `staging artifact lock changed during retirement and could not be restored from ${removalPath}`,
+      { cause: rollbackError },
     );
   }
   throw cause;
@@ -1536,7 +1538,9 @@ export async function stageStarterConsumer(
       }
     }
     if (cleanupErrors.length > 0) {
-      throw new AggregateError([error, ...cleanupErrors], "staging failed and owned cleanup failed");
+      throw new AggregateError([error, ...cleanupErrors], "staging failed and owned cleanup failed", {
+        cause: error,
+      });
     }
     throw error;
   }
