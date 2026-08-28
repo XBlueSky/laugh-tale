@@ -953,8 +953,11 @@ function resolveExport(
       const binding = statement.exportClause.elements.find((element) => element.name.text === name);
       if (binding === undefined) continue;
       const originalName = binding.propertyName?.text ?? binding.name.text;
+      if (statement.moduleSpecifier === undefined) {
+        return resolveSymbol(graph, file, originalName, seen);
+      }
       return target === undefined
-        ? resolveSymbol(graph, file, originalName, seen)
+        ? undefined
         : resolveExport(graph, target, originalName, seen);
     }
     if (statement.exportClause === undefined && target !== undefined && name !== "default") {

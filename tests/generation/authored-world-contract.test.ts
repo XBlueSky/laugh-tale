@@ -331,6 +331,30 @@ export { importedWorld as presentation };
     expect(inspectAuthoredWorld(root, expectation())).toEqual([]);
   });
 
+  test.each([
+    ["bare package", "external-presentation"],
+    ["controller boundary", "../controllers/presentation-contract"],
+  ])("does not let a complete local decoy satisfy a %s presentation re-export", (_label, target) => {
+    const root = createSyntheticWorld();
+    replace(
+      root,
+      "presentation/index.ts",
+      "export const presentation =",
+      "const localPresentation =",
+    );
+    const entryPath = join(root, "presentation/index.ts");
+    writeFileSync(
+      entryPath,
+      `${readFileSync(entryPath, "utf8")}\nexport { localPresentation as presentation } from ${JSON.stringify(target)};\n`,
+    );
+
+    const findings = inspectAuthoredWorld(root, expectation());
+
+    expect(findingsWithCode(findings, "missing-presentation-view")).toHaveLength(5);
+    expect(findingsWithCode(findings, "missing-root-signature")).toHaveLength(2);
+    expect(findingsWithCode(findings, "unresolved-map-profile")).toHaveLength(1);
+  });
+
   test.each(["cyclic", "unresolved"])(
     "fails closed deterministically for a %s presentation export graph",
     (kind) => {
