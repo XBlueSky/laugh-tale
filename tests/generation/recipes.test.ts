@@ -32,11 +32,11 @@ const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 const recipesRoot = join(repoRoot, "plugins/eternal-pose/recipes");
 const starterRecipePath = join(
   repoRoot,
-  "plugins/eternal-pose/starter/react/src/ui/styles/recipe.css",
+  "plugins/eternal-pose/starter/react/src/presentation/styles/recipe.css",
 );
 const baseCssPath = join(
   repoRoot,
-  "plugins/eternal-pose/starter/react/src/ui/styles/base.css",
+  "plugins/eternal-pose/starter/react/src/presentation/styles/base.css",
 );
 const expectedRecipeIds = [
   "native-minimal",
