@@ -5,7 +5,10 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
-const starterRoot = join(repoRoot, "plugins/eternal-pose/starter/react");
+// CI stages the starter (with node_modules installed) and points
+// LAUGH_TALE_STARTER_ROOT at it; fall back to the source tree locally.
+const starterRoot =
+  process.env.LAUGH_TALE_STARTER_ROOT ?? join(repoRoot, "plugins/eternal-pose/starter/react");
 const contractDriverPath = join(starterRoot, "tests/e2e/contract-driver.ts");
 const contractSpecPath = join(starterRoot, "tests/e2e/presentation-contract.spec.ts");
 const presentationBoundaryTestPath = join(
