@@ -72,20 +72,20 @@ const burstRays = Array.from({ length: RAY_COUNT }, (_, i) => {
 
     <section class="chapter" aria-labelledby="quickstart">
       <p class="chapter-no" aria-hidden="true">CH.01</p>
-      <h2 id="quickstart">Install Eternal Pose from a local checkout</h2>
+      <h2 id="quickstart">Install Eternal Pose straight from GitHub</h2>
       <p>
-        There is no published marketplace release yet. Clone or open a trusted checkout of the
-        repository, change into its root, and add that checkout explicitly.
+        Add the marketplace directly from the repository — no clone needed — then install the
+        plugin.
       </p>
       <div class="helm">
         <figure class="console">
           <figcaption>Claude Code</figcaption>
-          <pre><code><span class="prompt">$ </span>claude plugin marketplace add "$PWD"
+          <pre><code><span class="prompt">$ </span>claude plugin marketplace add XBlueSky/laugh-tale
 <span class="prompt">$ </span>claude plugin install eternal-pose@laugh-tale</code></pre>
         </figure>
         <figure class="console">
           <figcaption>Codex</figcaption>
-          <pre><code><span class="prompt">$ </span>codex plugin marketplace add "$PWD"
+          <pre><code><span class="prompt">$ </span>codex plugin marketplace add https://github.com/XBlueSky/laugh-tale
 <span class="prompt">$ </span>codex plugin add eternal-pose@laugh-tale</code></pre>
         </figure>
       </div>
