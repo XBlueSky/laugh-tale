@@ -1,0 +1,36 @@
+:root {
+  color-scheme: light;
+  --instrument-font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --instrument-font-data: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+  --instrument-canvas: #dfe4e0;
+  --instrument-surface: #f8faf7;
+  --instrument-surface-raised: #e9eeea;
+  --instrument-surface-deep: #c6d0ca;
+  --instrument-ink: #17221e;
+  --instrument-ink-soft: #4a5a53;
+  --instrument-rule: #82938b;
+  --instrument-rule-soft: #b7c3bd;
+  --instrument-signal: #1b7f6a;
+  --instrument-signal-strong: #145b4d;
+  --instrument-signal-soft: #d3e8df;
+  --instrument-warning: #755b27;
+  --instrument-danger: #963f38;
+  --instrument-focus: #123f83;
+  --instrument-scrim: rgb(21 31 27 / 54%);
+  --instrument-shadow: #17221e;
+  --instrument-rule-width: 1px;
+  --instrument-rule-strong: 2px;
+  --instrument-space-1: 0.25rem;
+  --instrument-space-2: 0.5rem;
+  --instrument-space-3: 0.75rem;
+  --instrument-space-4: 1rem;
+  --instrument-space-5: 1.5rem;
+  --instrument-space-6: 2rem;
+  --instrument-state-duration: 170ms;
+  --instrument-easing: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --instrument-layer-map: 0;
+  --instrument-layer-grid: 2;
+  --instrument-layer-chrome: 10;
+  --instrument-layer-sheet: 20;
+  --instrument-layer-dialog: 40;
+}

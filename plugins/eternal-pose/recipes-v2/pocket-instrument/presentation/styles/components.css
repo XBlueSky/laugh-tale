@@ -1,0 +1,943 @@
+.instrument-kicker,
+.channel-number,
+.channel-entry__index,
+.channel-entry__time,
+.channel-route__owner,
+.instrument-map-controls,
+.instrument-sheet__index,
+.instrument-state__code,
+.instrument-readout strong {
+  font-family: var(--instrument-font-data);
+  font-variant-numeric: tabular-nums;
+}
+
+.instrument-kicker {
+  color: var(--instrument-ink-soft);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.instrument-rack__header,
+.instrument-readout,
+.instrument-module,
+.instrument-channel-selector {
+  border: var(--instrument-rule-width) solid var(--instrument-rule);
+  border-bottom: 0;
+  background: var(--instrument-surface);
+}
+
+.instrument-rack__header {
+  display: grid;
+  min-height: 15rem;
+  grid-template-columns: minmax(0, 1.25fr) minmax(11rem, 0.75fr);
+}
+
+.instrument-rack__brand {
+  display: grid;
+  min-width: 0;
+  align-content: end;
+  gap: var(--instrument-space-3);
+  padding: var(--instrument-space-5);
+  border-right: var(--instrument-rule-width) solid var(--instrument-rule);
+}
+
+.instrument-rack__brand h1 {
+  max-width: 16ch;
+  margin: 0;
+  font-size: clamp(2rem, 6vw, 4.25rem);
+  font-weight: 790;
+  letter-spacing: -0.05em;
+  line-height: 0.98;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.instrument-rack__brand p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--instrument-space-2);
+  margin: 0;
+  color: var(--instrument-ink-soft);
+  font-family: var(--instrument-font-data);
+  font-size: 0.75rem;
+}
+
+.instrument-rack__lamp {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: var(--instrument-space-2);
+  padding: var(--instrument-space-5);
+  background: var(--instrument-signal-soft);
+}
+
+.instrument-rack__lamp strong {
+  font-family: var(--instrument-font-data);
+  font-size: 1.5rem;
+}
+
+.instrument-rack__lamp > span:last-child {
+  color: var(--instrument-ink-soft);
+  font-size: 0.875rem;
+}
+
+.status-lamp {
+  display: inline-block;
+  width: 0.8rem;
+  height: 0.8rem;
+  flex: 0 0 0.8rem;
+  border: var(--instrument-rule-strong) solid var(--instrument-ink);
+  background: var(--instrument-surface);
+}
+
+.instrument-rack__lamp .status-lamp,
+.instrument-status[data-status-lamp="active"] .status-lamp,
+.instrument-status[data-status-lamp="ready"] .status-lamp {
+  background: var(--instrument-signal);
+}
+
+.instrument-status[data-status-lamp="complete"] .status-lamp {
+  background: var(--instrument-surface-deep);
+}
+
+.instrument-status[data-status-lamp="pending"] .status-lamp {
+  border-style: dashed;
+}
+
+.instrument-status[data-status-lamp="error"] .status-lamp {
+  border-color: var(--instrument-danger);
+  background: var(--instrument-surface);
+}
+
+.instrument-status {
+  display: inline-grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, auto);
+  align-items: center;
+  gap: var(--instrument-space-1) var(--instrument-space-2);
+}
+
+.instrument-status__label {
+  font-family: var(--instrument-font-data);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.instrument-status__detail {
+  grid-column: 1 / -1;
+  color: var(--instrument-ink-soft);
+  font-family: var(--instrument-font-ui);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.instrument-readout {
+  display: grid;
+  grid-template-columns: 1.4fr repeat(3, 1fr);
+}
+
+.instrument-readout__label,
+.instrument-readout__value {
+  min-width: 0;
+  padding: var(--instrument-space-3) var(--instrument-space-4);
+  border-right: var(--instrument-rule-width) solid var(--instrument-rule);
+}
+
+.instrument-readout__label {
+  display: grid;
+  align-content: center;
+  gap: var(--instrument-space-1);
+}
+
+.instrument-readout__label h2,
+.instrument-readout__label p {
+  margin: 0;
+}
+
+.instrument-readout__label h2 {
+  font-size: 1.125rem;
+}
+
+.instrument-readout__label p {
+  color: var(--instrument-ink-soft);
+  font-size: 0.875rem;
+}
+
+.instrument-readout__value {
+  display: grid;
+  align-content: center;
+  gap: var(--instrument-space-1);
+}
+
+.instrument-readout__value:last-child {
+  border-right: 0;
+}
+
+.instrument-readout__value strong {
+  color: var(--instrument-signal-strong);
+  font-size: 1.75rem;
+}
+
+.instrument-readout__value span {
+  color: var(--instrument-ink-soft);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.instrument-module {
+  padding: var(--instrument-space-4);
+}
+
+.instrument-module--reservations {
+  border-bottom: 0;
+}
+
+.instrument-module__heading {
+  display: grid;
+  gap: var(--instrument-space-1);
+  margin-bottom: var(--instrument-space-3);
+}
+
+.instrument-module__heading h2 {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.instrument-module ul,
+.instrument-channel-selector,
+.instrument-panel ul,
+.instrument-dialog ul,
+.instrument-sheet__index {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.instrument-module li {
+  display: grid;
+  min-width: 0;
+  gap: var(--instrument-space-1);
+  padding-block: var(--instrument-space-2);
+  border-top: var(--instrument-rule-width) solid var(--instrument-rule-soft);
+}
+
+.instrument-module li > span {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--instrument-space-2);
+  overflow-wrap: anywhere;
+}
+
+.instrument-module li > span:last-child {
+  color: var(--instrument-ink-soft);
+  font-family: var(--instrument-font-data);
+  font-size: 0.75rem;
+}
+
+.instrument-module label {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: var(--instrument-space-2);
+}
+
+.instrument-module input,
+.instrument-dialog input,
+.instrument-panel input {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  accent-color: var(--instrument-signal);
+}
+
+.instrument-child {
+  margin-left: 2rem;
+}
+
+.instrument-channel-selector {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-bottom: var(--instrument-rule-width) solid var(--instrument-rule);
+}
+
+.instrument-channel-selector button {
+  display: grid;
+  min-width: 0;
+  min-height: 76px;
+  grid-template-columns: 2.75rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--instrument-space-3);
+  padding: var(--instrument-space-3);
+  border: 0;
+  border-right: var(--instrument-rule-width) solid var(--instrument-rule);
+  border-bottom: var(--instrument-rule-width) solid var(--instrument-rule);
+  background: var(--instrument-surface);
+  text-align: left;
+}
+
+.instrument-channel-selector button:nth-child(2n) {
+  border-right: 0;
+}
+
+.instrument-channel-selector button:nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+
+.instrument-channel-selector button > span:nth-child(2) {
+  display: grid;
+  min-width: 0;
+  gap: var(--instrument-space-1);
+}
+
+.instrument-channel-selector small {
+  color: var(--instrument-ink-soft);
+  font-family: var(--instrument-font-data);
+  font-size: 0.75rem;
+}
+
+.channel-number,
+.channel-entry__index {
+  display: inline-grid;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  place-items: center;
+  border: var(--instrument-rule-strong) solid var(--instrument-ink);
+  background: var(--instrument-surface-raised);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.instrument-panel-header__main {
+  display: flex;
+  min-width: 0;
+  min-height: 72px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--instrument-space-2);
+  padding: var(--instrument-space-2);
+  border-bottom: var(--instrument-rule-width) solid var(--instrument-rule);
+}
+
+.instrument-panel-header__main > div:first-child {
+  display: grid;
+  min-width: 0;
+  gap: var(--instrument-space-1);
+}
+
+.instrument-panel-header__main strong {
+  overflow-wrap: anywhere;
+}
+
+.instrument-panel-header__main > div:first-child > span:last-child {
+  color: var(--instrument-ink-soft);
+  font-size: 0.875rem;
+}
+
+.instrument-panel-header__controls,
+.instrument-map-controls,
+.instrument-sheet__toolbar,
+.instrument-sheet__index {
+  display: flex;
+  gap: var(--instrument-rule-width);
+}
+
+.instrument-panel-header__controls button,
+.instrument-map-controls > button,
+.instrument-sheet__toolbar button,
+.instrument-sheet__index button,
+.instrument-panel button,
+.instrument-dialog button,
+.instrument-state button,
+.instrument-map-error button,
+.instrument-channel-selector button {
+  border: var(--instrument-rule-strong) solid var(--instrument-ink);
+  background: var(--instrument-surface);
+}
+
+.instrument-panel-header__controls button,
+.instrument-map-controls > button,
+.instrument-sheet__toolbar button,
+.instrument-sheet__index button {
+  display: inline-grid;
+  min-width: 44px;
+  min-height: 44px;
+  place-items: center;
+  padding: var(--instrument-space-2);
+  font-family: var(--instrument-font-data);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.instrument-day-channels {
+  display: flex;
+  gap: var(--instrument-space-2);
+  max-width: 100%;
+  padding: var(--instrument-space-2);
+  overflow-x: auto;
+}
+
+.instrument-day-channels button {
+  display: grid;
+  min-width: 10rem;
+  min-height: 56px;
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: var(--instrument-space-2);
+  padding: var(--instrument-space-2);
+  border: var(--instrument-rule-width) solid var(--instrument-rule);
+  background: var(--instrument-surface-raised);
+  text-align: left;
+}
+
+.instrument-day-channels button[aria-pressed="true"] {
+  color: #ffffff;
+  background: var(--instrument-signal);
+}
+
+.instrument-day-channels time {
+  grid-column: 2;
+  font-family: var(--instrument-font-data);
+  font-size: 0.75rem;
+}
+
+.instrument-map-controls {
+  align-items: stretch;
+  flex-wrap: wrap;
+  max-width: calc(100% - 1rem);
+}
+
+.instrument-map-controls > * {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.instrument-map-controls > button {
+  padding: var(--instrument-space-2);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.instrument-map-controls__status {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding-inline: var(--instrument-space-2);
+  color: var(--instrument-ink-soft);
+  background: var(--instrument-surface);
+  font-size: 0.875rem;
+}
+
+.instrument-sheet__handle {
+  display: grid;
+  min-height: 44px;
+  place-items: center;
+  border: 0;
+  border-bottom: var(--instrument-rule-width) solid var(--instrument-rule);
+  background: var(--instrument-surface-raised);
+}
+
+.instrument-sheet__handle span {
+  display: block;
+  width: 3rem;
+  height: 4px;
+  background: var(--instrument-ink);
+}
+
+.instrument-sheet__toolbar {
+  min-width: 0;
+  align-items: center;
+  padding: var(--instrument-space-2);
+  border-bottom: var(--instrument-rule-width) solid var(--instrument-rule);
+}
+
+.instrument-sheet__toolbar > div:first-child {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: var(--instrument-space-1);
+}
+
+.instrument-sheet__toolbar strong {
+  overflow-wrap: anywhere;
+}
+
+.instrument-sheet__toolbar > div:first-child > span:last-child,
+.instrument-sheet__clock {
+  color: var(--instrument-ink-soft);
+  font-size: 0.875rem;
+}
+
+.instrument-sheet__clock {
+  flex: 0 0 auto;
+  font-family: var(--instrument-font-data);
+}
+
+.instrument-sheet__index {
+  padding: var(--instrument-space-2);
+  border-bottom: var(--instrument-rule-width) solid var(--instrument-rule);
+}
+
+.instrument-sheet__index button {
+  flex: 1 1 0;
+}
+
+.instrument-sheet__index button[aria-pressed="true"] {
+  color: #ffffff;
+  background: var(--instrument-ink);
+}
+
+.instrument-panel,
+.channel-entry,
+.channel-route {
+  margin: var(--instrument-space-2);
+  border: var(--instrument-rule-width) solid var(--instrument-rule);
+  background: var(--instrument-surface);
+}
+
+.instrument-panel__header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--instrument-space-2);
+  padding: var(--instrument-space-3);
+  border-bottom: var(--instrument-rule-width) solid var(--instrument-rule-soft);
+}
+
+.instrument-panel__header > div {
+  display: grid;
+  min-width: 0;
+  gap: var(--instrument-space-1);
+}
+
+.instrument-panel__header h2,
+.instrument-panel__header p {
+  margin: 0;
+}
+
+.instrument-panel__header h2 {
+  font-size: 1rem;
+}
+
+.instrument-panel__header p {
+  color: var(--instrument-ink-soft);
+  font-size: 0.875rem;
+}
+
+.instrument-panel__header button,
+.instrument-panel__actions button {
+  min-height: 44px;
+  padding: var(--instrument-space-2) var(--instrument-space-3);
+  font-size: 0.875rem;
+}
+
+.instrument-choice-list {
+  margin: 0;
+  padding: var(--instrument-space-3);
+}
+
+.instrument-choice {
+  display: grid;
+  min-height: 52px;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--instrument-space-2);
+  padding: var(--instrument-space-2);
+  border-top: var(--instrument-rule-width) solid var(--instrument-rule-soft);
+}
+
+.instrument-choice span {
+  display: grid;
+  min-width: 0;
+  gap: var(--instrument-space-1);
+}
+
+.instrument-choice small {
+  color: var(--instrument-ink-soft);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.instrument-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--instrument-space-2);
+  padding-top: var(--instrument-space-3);
+}
+
+.instrument-shopping li {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--instrument-space-2);
+  padding-block: var(--instrument-space-2);
+  border-top: var(--instrument-rule-width) solid var(--instrument-rule-soft);
+}
+
+.instrument-shopping select {
+  min-width: 8rem;
+  min-height: 44px;
+  padding-inline: var(--instrument-space-2);
+  border: var(--instrument-rule-width) solid var(--instrument-ink);
+  background: var(--instrument-surface);
+}
+
+.channel-entry {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.channel-entry[data-current="true"] {
+  border-left: 4px solid var(--instrument-signal);
+}
+
+.channel-entry[data-completed="true"] {
+  opacity: 0.72;
+}
+
+.channel-entry__owner {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 2.5rem 4.5rem minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--instrument-space-2);
+  padding: var(--instrument-space-3);
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.channel-entry__time {
+  color: var(--instrument-ink-soft);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.channel-entry__copy {
+  display: grid;
+  min-width: 0;
+  gap: var(--instrument-space-1);
+}
+
+.channel-entry__copy > span {
+  color: var(--instrument-ink-soft);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.channel-entry__details-button {
+  min-width: 44px;
+  min-height: 44px;
+  align-self: start;
+  border: 0;
+  border-left: var(--instrument-rule-width) solid var(--instrument-rule-soft);
+  background: var(--instrument-surface-raised);
+  font-family: var(--instrument-font-data);
+  font-size: 1.25rem;
+}
+
+.channel-entry__details {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 0 var(--instrument-space-3) var(--instrument-space-3) 5.5rem;
+  color: var(--instrument-ink-soft);
+  font-size: 0.875rem;
+}
+
+.channel-entry__details li {
+  padding-block: var(--instrument-space-1);
+}
+
+.channel-route {
+  border-style: dashed;
+}
+
+.channel-route__owner {
+  display: grid;
+  min-width: 0;
+  min-height: 44px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--instrument-space-2);
+  width: 100%;
+  padding: var(--instrument-space-2) var(--instrument-space-3);
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-size: 0.875rem;
+}
+
+.channel-route__owner[data-selected="true"] {
+  color: #ffffff;
+  background: var(--instrument-signal);
+}
+
+.channel-route__owner[data-state="error"] {
+  color: var(--instrument-danger);
+}
+
+.channel-route__owner > span:nth-child(2) {
+  overflow-wrap: anywhere;
+}
+
+.channel-route__details {
+  padding: 0 var(--instrument-space-3) var(--instrument-space-3);
+  font-size: 0.875rem;
+}
+
+.channel-route__details ol {
+  margin: var(--instrument-space-2) 0 0;
+  padding-left: 1.25rem;
+}
+
+.channel-route > a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding-inline: var(--instrument-space-3);
+  color: var(--instrument-signal-strong);
+  font-size: 0.875rem;
+}
+
+.instrument-map-legend {
+  position: absolute;
+  z-index: var(--instrument-layer-chrome);
+  right: var(--instrument-space-3);
+  bottom: var(--instrument-map-provider-bottom);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--instrument-space-2);
+  max-width: min(100% - 1rem, 24rem);
+  padding: var(--instrument-space-2);
+  border: var(--instrument-rule-width) solid var(--instrument-rule);
+  background: var(--instrument-surface);
+  font-size: 0.75rem;
+}
+
+.instrument-map-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--instrument-space-1);
+}
+
+.instrument-map-legend i {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  border: var(--instrument-rule-strong) solid var(--instrument-ink);
+  background: var(--instrument-surface-raised);
+}
+
+.instrument-map-legend i[data-legend="active"] {
+  background: var(--instrument-signal);
+}
+
+.instrument-map-legend i[data-legend="complete"] {
+  transform: rotate(45deg);
+}
+
+.instrument-map-error {
+  position: absolute;
+  z-index: var(--instrument-layer-chrome);
+  top: 50%;
+  left: 50%;
+  display: grid;
+  gap: var(--instrument-space-3);
+  width: min(24rem, calc(100% - 2rem));
+  padding: var(--instrument-space-4);
+  border: var(--instrument-rule-strong) solid var(--instrument-danger);
+  background: var(--instrument-surface);
+  box-shadow: 3px 3px 0 var(--instrument-shadow);
+  transform: translate(-50%, -50%);
+}
+
+.instrument-map-error button {
+  width: fit-content;
+  min-height: 44px;
+  padding: var(--instrument-space-2) var(--instrument-space-3);
+}
+
+.instrument-dialog {
+  z-index: var(--instrument-layer-dialog);
+  width: min(36rem, calc(100% - 2rem));
+  max-height: min(80dvh, 44rem);
+  padding: 0;
+  border: var(--instrument-rule-strong) solid var(--instrument-ink);
+  background: var(--instrument-surface);
+  box-shadow: 5px 5px 0 var(--instrument-shadow);
+}
+
+.instrument-dialog::backdrop {
+  background: var(--instrument-scrim);
+}
+
+.instrument-dialog__surface {
+  max-height: min(80dvh, 44rem);
+  overflow: auto;
+}
+
+.instrument-dialog__surface > header {
+  display: flex;
+  min-width: 0;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--instrument-space-2);
+  padding: var(--instrument-space-4);
+  border-bottom: var(--instrument-rule-width) solid var(--instrument-rule);
+}
+
+.instrument-dialog__surface > header > div {
+  display: grid;
+  min-width: 0;
+  gap: var(--instrument-space-1);
+}
+
+.instrument-dialog__surface > header h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.instrument-dialog__surface > header button {
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 1.5rem;
+}
+
+.instrument-dialog__surface > ul {
+  padding: var(--instrument-space-4);
+}
+
+.instrument-dialog__surface > ul > li {
+  display: grid;
+  gap: var(--instrument-space-1);
+  padding-block: var(--instrument-space-3);
+  border-bottom: var(--instrument-rule-width) solid var(--instrument-rule-soft);
+}
+
+.instrument-dialog__surface label {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: var(--instrument-space-2);
+}
+
+.instrument-dialog__surface a,
+.instrument-dialog__surface code {
+  overflow-wrap: anywhere;
+}
+
+.instrument-task-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--instrument-space-2);
+}
+
+.instrument-task-row > button {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.instrument-state__panel {
+  display: grid;
+  gap: var(--instrument-space-3);
+  width: min(34rem, 100%);
+  padding: var(--instrument-space-5);
+  border: var(--instrument-rule-strong) solid var(--instrument-ink);
+  background: var(--instrument-surface);
+  box-shadow: 4px 4px 0 var(--instrument-shadow);
+}
+
+.instrument-state__panel h1,
+.instrument-state__panel p {
+  margin: 0;
+}
+
+.instrument-state__code {
+  color: var(--instrument-signal-strong);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.instrument-skeleton span:not(.instrument-state__code) {
+  display: block;
+  height: 1.2rem;
+  margin-top: var(--instrument-space-2);
+  border: var(--instrument-rule-width) solid var(--instrument-rule-soft);
+  background: var(--instrument-surface-raised);
+}
+
+.instrument-persistence {
+  position: fixed;
+  z-index: var(--instrument-layer-dialog);
+  right: var(--instrument-space-3);
+  bottom: var(--instrument-space-3);
+  max-width: min(24rem, calc(100% - 1.5rem));
+  margin: 0;
+  padding: var(--instrument-space-2) var(--instrument-space-3);
+  border: var(--instrument-rule-width) solid var(--instrument-rule);
+  background: var(--instrument-surface);
+  font-size: 0.875rem;
+}
+
+@media (max-width: 767px) {
+  .instrument-rack__header,
+  .instrument-readout,
+  .instrument-channel-selector {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .instrument-rack__brand {
+    border-right: 0;
+    border-bottom: var(--instrument-rule-width) solid var(--instrument-rule);
+  }
+
+  .instrument-readout__label,
+  .instrument-readout__value {
+    border-right: 0;
+    border-bottom: var(--instrument-rule-width) solid var(--instrument-rule);
+  }
+
+  .instrument-readout__value:last-child {
+    border-bottom: 0;
+  }
+
+  .instrument-channel-selector button,
+  .instrument-channel-selector button:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .instrument-channel-selector button:nth-last-child(-n + 2) {
+    border-bottom: var(--instrument-rule-width) solid var(--instrument-rule);
+  }
+
+  .instrument-channel-selector button:last-child {
+    border-bottom: 0;
+  }
+
+  .channel-entry__owner {
+    grid-template-columns: 2.5rem 4rem minmax(0, 1fr);
+  }
+
+  .channel-entry__owner .instrument-status {
+    grid-column: 3;
+  }
+
+  .instrument-panel__header {
+    align-items: start;
+  }
+}
+
+@media (max-width: 420px) {
+  .instrument-panel__header,
+  .channel-entry__copy,
+  .channel-route__owner {
+    overflow-wrap: anywhere;
+  }
+}
