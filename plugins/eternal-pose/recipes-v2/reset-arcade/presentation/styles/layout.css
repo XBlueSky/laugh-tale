@@ -1,0 +1,258 @@
+.reset-arcade-experience {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  min-width: 0;
+  height: 100dvh;
+  max-width: 100vw;
+  overflow: hidden;
+  color: var(--arcade-ink);
+  background: var(--arcade-canvas);
+  isolation: isolate;
+  container-name: reset-arcade;
+  container-type: inline-size;
+}
+
+.arcade-responsive-layout {
+  display: contents;
+}
+
+.arcade-safe-area-probe {
+  position: absolute;
+  width: 0;
+  height: 0;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.arcade-map-surface {
+  position: absolute;
+  z-index: var(--arcade-layer-map);
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--arcade-surface-deep);
+}
+
+.itinerary-map {
+  position: absolute;
+  z-index: 1;
+  top: calc(var(--header-clearance) + 48px);
+  right: 0;
+  bottom: var(--map-provider-bottom);
+  left: 0;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.arcade-board-grid {
+  position: absolute;
+  z-index: var(--arcade-layer-grid);
+  inset: 0;
+  opacity: 0.36;
+  pointer-events: none;
+}
+
+.arcade-board-grid::before,
+.arcade-board-grid::after {
+  position: absolute;
+  top: 0;
+  left: 48px;
+  width: 1px;
+  height: 100%;
+  background: var(--arcade-rule);
+  box-shadow:
+    48px 0 var(--arcade-rule),
+    96px 0 var(--arcade-rule),
+    144px 0 var(--arcade-rule),
+    192px 0 var(--arcade-rule),
+    240px 0 var(--arcade-rule),
+    288px 0 var(--arcade-rule),
+    336px 0 var(--arcade-rule),
+    384px 0 var(--arcade-rule),
+    432px 0 var(--arcade-rule),
+    480px 0 var(--arcade-rule),
+    528px 0 var(--arcade-rule),
+    576px 0 var(--arcade-rule),
+    624px 0 var(--arcade-rule),
+    672px 0 var(--arcade-rule),
+    720px 0 var(--arcade-rule),
+    768px 0 var(--arcade-rule),
+    816px 0 var(--arcade-rule),
+    864px 0 var(--arcade-rule),
+    912px 0 var(--arcade-rule),
+    960px 0 var(--arcade-rule),
+    1008px 0 var(--arcade-rule),
+    1056px 0 var(--arcade-rule),
+    1104px 0 var(--arcade-rule),
+    1152px 0 var(--arcade-rule),
+    1200px 0 var(--arcade-rule);
+  content: "";
+}
+
+.arcade-board-grid::after {
+  top: 48px;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  box-shadow:
+    0 48px var(--arcade-rule),
+    0 96px var(--arcade-rule),
+    0 144px var(--arcade-rule),
+    0 192px var(--arcade-rule),
+    0 240px var(--arcade-rule),
+    0 288px var(--arcade-rule),
+    0 336px var(--arcade-rule),
+    0 384px var(--arcade-rule),
+    0 432px var(--arcade-rule),
+    0 480px var(--arcade-rule),
+    0 528px var(--arcade-rule),
+    0 576px var(--arcade-rule),
+    0 624px var(--arcade-rule),
+    0 672px var(--arcade-rule),
+    0 720px var(--arcade-rule),
+    0 768px var(--arcade-rule),
+    0 816px var(--arcade-rule);
+}
+
+.arcade-day-header {
+  position: absolute;
+  z-index: var(--arcade-layer-chrome);
+  top: calc(var(--safe-area-top) + var(--arcade-space-2));
+  right: var(--arcade-space-2);
+  left: var(--arcade-space-2);
+  max-height: var(--header-clearance);
+  overflow: hidden;
+}
+
+.arcade-map-controls {
+  position: absolute;
+  z-index: var(--arcade-layer-chrome);
+  top: calc(var(--header-clearance) + var(--arcade-space-3));
+  right: var(--arcade-space-2);
+  display: flex;
+  min-width: 0;
+  align-items: stretch;
+}
+
+.arcade-sheet {
+  position: absolute;
+  z-index: var(--arcade-layer-sheet);
+  right: 0;
+  bottom: var(--safe-area-bottom);
+  left: 0;
+  display: grid;
+  min-width: 0;
+  grid-template-rows: 44px auto auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.arcade-sheet__scroll {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.reset-arcade-home {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 100dvh;
+  max-height: 100dvh;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  padding: max(var(--arcade-space-4), env(safe-area-inset-top))
+    max(var(--arcade-space-4), env(safe-area-inset-right))
+    max(var(--arcade-space-5), env(safe-area-inset-bottom))
+    max(var(--arcade-space-4), env(safe-area-inset-left));
+  overflow-x: hidden;
+  overflow-y: auto;
+  color: var(--arcade-ink);
+  background: var(--arcade-canvas);
+}
+
+.reset-arcade-home > * {
+  width: min(100%, 78rem);
+  min-width: 0;
+  margin-inline: auto;
+}
+
+.arcade-state {
+  display: grid;
+  width: 100%;
+  min-height: 100dvh;
+  place-items: center;
+  padding: max(var(--arcade-space-4), env(safe-area-inset-top))
+    max(var(--arcade-space-4), env(safe-area-inset-right))
+    max(var(--arcade-space-4), env(safe-area-inset-bottom))
+    max(var(--arcade-space-4), env(safe-area-inset-left));
+  color: var(--arcade-ink);
+  background: var(--arcade-canvas);
+}
+
+@media (max-width: 767px) {
+  .arcade-mission-strip,
+  .arcade-readiness,
+  .arcade-mission-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .arcade-mission-strip {
+    min-height: 0;
+  }
+
+  .arcade-route-overview {
+    min-height: 9rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .itinerary-map {
+    top: 0;
+    right: min(28rem, 34vw);
+    bottom: 0;
+    left: min(16rem, 23vw);
+    width: auto;
+    height: auto;
+  }
+
+  .arcade-day-header {
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(16rem, 23vw);
+    max-height: none;
+  }
+
+  .arcade-sheet {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: auto;
+    width: min(28rem, 34vw);
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+
+  .arcade-sheet__handle {
+    display: none;
+  }
+
+  .arcade-sheet__scroll {
+    padding-bottom: var(--arcade-space-5);
+  }
+}
+
+@media (max-width: 420px) {
+  .arcade-panel__header,
+  .arcade-stop__body,
+  .arcade-route-band {
+    overflow-wrap: anywhere;
+  }
+}

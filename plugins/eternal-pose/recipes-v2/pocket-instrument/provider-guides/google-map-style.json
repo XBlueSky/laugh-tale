@@ -1,0 +1,25 @@
+{
+  "name": "Pocket Instrument technical map",
+  "description": "Optional user-owned Google Cloud map style: restrained technical land and road hierarchy with clear labels and provider chrome.",
+  "mapType": "roadmap",
+  "colors": {
+    "land": "#d8dddc",
+    "water": "#c2d2d3",
+    "road": "#f5f7f6",
+    "roadOutline": "#9ba8a5",
+    "boundary": "#7f918d",
+    "label": "#2d3c38",
+    "poi": "#adb9b5"
+  },
+  "visibility": {
+    "transit": "on",
+    "roadLabels": "on",
+    "poiLabels": "simplified",
+    "businesses": "off",
+    "landmarks": "on"
+  },
+  "notes": [
+    "This guide is optional and never embeds a map ID or remote asset.",
+    "Keep Google attribution and default controls visible."
+  ]
+}

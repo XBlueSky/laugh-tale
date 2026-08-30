@@ -1,0 +1,95 @@
+[data-touch-target="44"],
+button,
+a[href],
+select {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+:where(button, a[href], input, select, textarea):focus-visible,
+.live-choice:has(input:focus-visible) {
+  outline: 3px solid var(--live-focus);
+  outline-offset: 3px;
+}
+
+.live-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .live-header,
+  .live-sheet,
+  .live-stop,
+  .live-route,
+  .live-dialog,
+  .live-state__panel,
+  .live-panel,
+  .live-disruption,
+  .now-next__slot {
+    border-color: CanvasText;
+    color: CanvasText;
+    background: Canvas;
+    forced-color-adjust: auto;
+  }
+
+  [aria-pressed="true"],
+  [aria-current="step"],
+  [data-selected="true"],
+  [data-urgency="current"],
+  [data-urgency="next"] {
+    outline: 3px double Highlight;
+    outline-offset: -4px;
+  }
+
+  [data-completed="true"],
+  [data-completed-history="true"] {
+    border-bottom: 4px solid CanvasText;
+  }
+
+  [data-route-certainty="candidate"] .live-route__owner,
+  [data-route-certainty="unverified"] .live-route__owner,
+  [data-route-source="recomposed"] .live-route__owner {
+    border-style: dashed;
+  }
+
+  .live-header__rail button[aria-pressed="true"],
+  .live-sheet__index button[aria-pressed="true"],
+  .live-route__owner[data-selected="true"] {
+    color: ButtonText;
+    background: ButtonFace;
+    border: 3px solid Highlight;
+  }
+}
+
+button:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--live-shadow);
+}
+
+@media (max-width: 420px) {
+  .live-panel__header {
+    align-items: start;
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 2,
+  "id": "pocket-instrument",
+  "label": "Pocket Instrument",
+  "summary": "A compact trip instrument with readable channels, labeled status lamps, and a technical map display.",
+  "register": "product",
+  "presentation": {
+    "source": "presentation",
+    "entry": "index.ts",
+    "css": [
+      "styles/index.css",
+      "styles/tokens.css",
+      "styles/layout.css",
+      "styles/components.css",
+      "styles/accessibility.css"
+    ],
+    "assets": []
+  },
+  "map": {
+    "profile": "presentation/theme-map-profile.ts",
+    "googleStyleGuide": "provider-guides/google-map-style.json"
+  },
+  "motion": {
+    "durationMs": 170,
+    "easing": "cubic-bezier(0.2, 0.8, 0.2, 1)",
+    "interruptible": true,
+    "reducedMotion": "instant"
+  },
+  "features": ["dense-telemetry"],
+  "font": {
+    "policy": "system",
+    "assets": []
+  },
+  "validation": {
+    "viewports": [320, 390, 430, 768, 1024, 1440],
+    "screenshots": ["home", "experience", "experience-expanded"]
+  }
+}
