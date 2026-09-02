@@ -20,8 +20,8 @@
   "dependencies": {
     "@googlemaps/js-api-loader": "2.1.1",
     "@js-temporal/polyfill": "0.5.1",
-    "@laugh-tale-island/core": "1.0.0",
-    "@laugh-tale-island/react": "1.0.0",
+    "@laugh-tale-island/core": "file:vendor/laugh-tale-island-core-1.0.0.tgz",
+    "@laugh-tale-island/react": "file:vendor/laugh-tale-island-react-1.0.0.tgz",
     "lucide-react": "1.34.0",
     "motion": "13.1.1",
     "react": "19.2.8",
