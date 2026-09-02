@@ -39,6 +39,20 @@ async function start(): Promise<void> {
     import.meta.env.DEV &&
     import.meta.env.VITE_E2E_FAKE_PROVIDER === "true"
   ) {
+    const fixtureName = new URLSearchParams(window.location.search).get("fixture");
+    if (fixtureName === "tokyo") {
+      const fixture = await import("../tests/e2e/fixtures/tokyo-trip");
+      render(
+        <App
+          tripOverride={fixture.tokyoE2ETrip}
+          adapterFactory={fixture.createE2EMapAdapter}
+          routeAdapterFactory={fixture.createE2ERouteAdapter}
+          navigationAdapter={navigationAdapter}
+          clock={fixture.e2eClock}
+        />,
+      );
+      return;
+    }
     const fixture = await import("../tests/e2e/fixtures/e2e-trip");
     render(
       <App
