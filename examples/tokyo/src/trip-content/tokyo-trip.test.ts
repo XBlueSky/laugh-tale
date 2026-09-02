@@ -204,7 +204,30 @@ describe("tokyoTrip", () => {
   it("passes core validation with only unresolved-place warnings", () => {
     const validation = validateTrip(tokyoTrip);
     expect(validation.errors).toEqual([]);
-    expect(new Set(validation.warnings.map((warning) => warning.code))).toEqual(new Set(["UNRESOLVED_PLACE"]));
+    for (const warning of validation.warnings) {
+      expect(warning.code).toBe("UNRESOLVED_PLACE");
+    }
+    const unresolvedNodes = tokyoTrip.days
+      .flatMap((day) => day.nodes)
+      .filter((node) => node.place?.certainty === "unverified");
+    expect(validation.warnings).toHaveLength(unresolvedNodes.length);
+  });
+
+  it("keeps the recorded resolution outcome", () => {
+    const values = Object.values(records);
+    expect(values.filter((record) => record.status === "resolved")).toHaveLength(89);
+    expect(values.filter((record) => record.status === "unresolved").map((record) => record.queriedAs)).toEqual([
+      "Pelican Cafe",
+    ]);
+    for (const record of values) {
+      if (record.status === "resolved") {
+        expect(record.lat).toBeGreaterThan(35.4);
+        expect(record.lat).toBeLessThan(35.9);
+        expect(record.lng).toBeGreaterThan(139.5);
+        expect(record.lng).toBeLessThan(140.5);
+        expect(record.placeId).toMatch(/^[A-Za-z0-9_-]{20,}$/);
+      }
+    }
   });
 
   it("rejects a leg list of the wrong length", () => {
