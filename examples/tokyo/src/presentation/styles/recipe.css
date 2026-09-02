@@ -1,0 +1,577 @@
+:root {
+  --font-body: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-size-title: 0.95rem;
+  --font-size-meta: 0.75rem;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --border-thin: 1px;
+  --radius-control: 0.625rem;
+  --radius-row: 0.75rem;
+  --radius-shell: 0.875rem;
+  --radius-sheet: 1rem;
+  --color-canvas: #f4f2ee;
+  --color-text: #302824;
+  --color-text-muted: #685b54;
+  --color-surface: #fffdf9;
+  --color-surface-subtle: #ebe5de;
+  --color-border: #c9bbb0;
+  --color-border-subtle: #ddd4cc;
+  --color-accent: #a95238;
+  --color-accent-strong: #713522;
+  --color-accent-soft: #f0ddd5;
+  --color-selected: #8f452f;
+  --color-selected-text: #fffaf7;
+  --color-focus: #7d3a27;
+  --color-map-fallback: #d9ddd8;
+  --color-marker: #fffdf9;
+  --color-marker-selected: #8f452f;
+  --color-marker-border: #713522;
+  --color-marker-text: #302824;
+  --color-success: #375f47;
+  --color-warning: #7d4b16;
+  --color-danger: #8b2f2b;
+  --color-overlay: rgb(48 40 36 / 42%);
+  --color-transport-surface: #f0efeb;
+  --color-transfer-surface: #e8ecec;
+  --color-lodging-surface: #efe9e1;
+  --color-dining-surface: #f5e8e4;
+  --color-shopping-surface: #ecece5;
+  --color-sightseeing-surface: #edf0e9;
+  --color-experience-surface: #eee8ed;
+  --color-logistics-surface: #f1ece7;
+  --color-custom-surface: #ece9ef;
+  --color-route-surface: #f4f1ed;
+  --shadow-overlay: 0 4px 16px rgb(48 40 36 / 12%);
+  --shadow-sheet: 0 -8px 28px rgb(48 40 36 / 14%);
+  --shadow-marker: 0 2px 8px rgb(48 40 36 / 18%);
+  --sheet-motion-duration: 200ms;
+  --shell-motion-duration: var(--sheet-motion-duration);
+  --component-motion-duration: 180ms;
+  --motion-easing: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+body,
+.trip-home,
+.trip-progress-loading {
+  color: var(--color-text);
+  background: var(--color-canvas);
+}
+
+.trip-experience {
+  color: var(--color-text);
+  background: var(--color-map-fallback);
+}
+
+.day-header,
+.map-controls,
+.map-degraded-state,
+.itinerary-sheet {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+}
+
+.day-header,
+.map-controls,
+.map-degraded-state {
+  box-shadow: var(--shadow-overlay);
+}
+
+.day-header {
+  border-radius: var(--radius-shell);
+}
+
+.day-header__identity > strong,
+.itinerary-sheet__heading > strong,
+.trip-home h1,
+.trip-home h2,
+.shopping-decision-panel h3 {
+  color: var(--color-text);
+  font-weight: 680;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+.day-header__clock,
+.map-controls__status,
+.itinerary-sheet__heading > [data-secondary="true"],
+.itinerary-row__time,
+.semantic-entry__body,
+.candidate-decision__committed,
+.candidate-decision__location-state,
+.trip-home__dates,
+.trip-home__task-note,
+.task-widget__note {
+  color: var(--color-text-muted);
+}
+
+.day-header__date {
+  border-color: var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  color: var(--color-text-muted);
+  background: var(--color-surface-subtle);
+  transition:
+    color var(--component-motion-duration) var(--motion-easing),
+    border-color var(--component-motion-duration) var(--motion-easing),
+    background-color var(--component-motion-duration) var(--motion-easing);
+}
+
+.day-header__date[aria-pressed="true"] {
+  border-color: var(--color-accent);
+  color: var(--color-accent-strong);
+  background: var(--color-accent-soft);
+}
+
+.icon-control {
+  border-radius: var(--radius-control);
+  color: var(--color-accent-strong);
+  transition:
+    color var(--component-motion-duration) var(--motion-easing),
+    background-color var(--component-motion-duration) var(--motion-easing);
+}
+
+.icon-control:hover:not(:disabled),
+.icon-control:active:not(:disabled) {
+  color: var(--color-text);
+  background: var(--color-accent-soft);
+}
+
+[data-touch-target="44"] {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.map-degraded-state > button,
+.candidate-decision__trigger,
+.candidate-decision__actions > button,
+.candidate-decision__browse-list button,
+.reservation-panel__reveal,
+.reservation-panel__item > a {
+  border: var(--border-thin) solid var(--color-border);
+  border-radius: var(--radius-control);
+  color: var(--color-accent-strong);
+  background: var(--color-surface);
+  text-decoration: none;
+  transition:
+    color var(--component-motion-duration) var(--motion-easing),
+    border-color var(--component-motion-duration) var(--motion-easing),
+    background-color var(--component-motion-duration) var(--motion-easing);
+}
+
+.candidate-decision__actions > button:last-child {
+  border-color: var(--color-selected);
+  color: var(--color-selected-text);
+  background: var(--color-selected);
+}
+
+.candidate-decision__actions > button:disabled {
+  border-color: var(--color-border-subtle);
+  color: var(--color-text-muted);
+  background: var(--color-surface-subtle);
+}
+
+.map-controls {
+  border-radius: var(--radius-control);
+}
+
+.map-marker {
+  border-color: var(--color-marker-border);
+  color: var(--color-marker-text);
+  background: var(--color-marker);
+  box-shadow: var(--shadow-marker);
+}
+
+.map-marker[data-tone="selected"],
+.map-marker--user {
+  border-color: var(--color-marker-border);
+  color: var(--color-selected-text);
+  background: var(--color-marker-selected);
+}
+
+.map-marker[data-tone="completed"] {
+  border-color: var(--color-success);
+}
+
+.map-marker[data-tone="skipped"] {
+  border-style: dashed;
+}
+
+.itinerary-sheet {
+  border-color: var(--color-border);
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sheet);
+  transition-timing-function: var(--motion-easing);
+}
+
+.itinerary-sheet__drag-handle {
+  color: var(--color-text-muted);
+}
+
+.itinerary-sheet__toolbar {
+  border-color: var(--color-border-subtle);
+  background: var(--color-surface);
+}
+
+.itinerary-sheet__scroll {
+  background: var(--color-surface);
+}
+
+.itinerary-row {
+  border-color: var(--color-border-subtle);
+  border-radius: var(--radius-row);
+  color: var(--color-text);
+  background: var(--color-surface-subtle);
+  transition:
+    color var(--component-motion-duration) var(--motion-easing),
+    border-color var(--component-motion-duration) var(--motion-easing),
+    background-color var(--component-motion-duration) var(--motion-easing);
+}
+
+.timeline-entry[data-kind="transport"] .itinerary-row {
+  background: var(--color-transport-surface);
+}
+
+.timeline-entry[data-kind="transfer"] .itinerary-row {
+  background: var(--color-transfer-surface);
+}
+
+.timeline-entry[data-kind="lodging"] .itinerary-row {
+  background: var(--color-lodging-surface);
+}
+
+.timeline-entry[data-kind="dining"] .itinerary-row {
+  background: var(--color-dining-surface);
+}
+
+.timeline-entry[data-kind="shopping"] .itinerary-row {
+  background: var(--color-shopping-surface);
+}
+
+.timeline-entry[data-kind="sightseeing"] .itinerary-row {
+  background: var(--color-sightseeing-surface);
+}
+
+.timeline-entry[data-kind="experience"] .itinerary-row {
+  background: var(--color-experience-surface);
+}
+
+.timeline-entry[data-kind="logistics"] .itinerary-row {
+  background: var(--color-logistics-surface);
+}
+
+.timeline-entry[data-kind="custom"] .itinerary-row {
+  background: var(--color-custom-surface);
+}
+
+.timeline-entry[data-current="true"] .itinerary-row {
+  border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+.itinerary-row[aria-pressed="true"] {
+  border-color: var(--color-selected);
+  color: var(--color-selected-text);
+  background: var(--color-selected);
+}
+
+.itinerary-row[aria-pressed="true"] :where(.itinerary-row__time, .semantic-entry__body) {
+  color: var(--color-selected-text);
+}
+
+.timeline-entry[data-completed="true"] .itinerary-row__title,
+.timeline-entry__details [data-completed="true"] {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.timeline-entry__details {
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+}
+
+.semantic-entry__body {
+  font-size: var(--font-size-meta);
+  line-height: 1.45;
+}
+
+.semantic-entry__meta {
+  color: inherit;
+  font-weight: 650;
+}
+
+.route-connector {
+  color: var(--color-text-muted);
+  background: transparent;
+  transition:
+    color var(--component-motion-duration) var(--motion-easing),
+    background-color var(--component-motion-duration) var(--motion-easing);
+}
+
+button.route-connector:hover,
+button.route-connector:active {
+  color: var(--color-accent-strong);
+  background: var(--color-route-surface);
+}
+
+button.route-connector[aria-pressed="true"] {
+  color: var(--color-selected-text);
+  background: var(--color-selected);
+}
+
+.route-connector__details,
+.route-status {
+  color: var(--color-text-muted);
+  background: var(--color-route-surface);
+}
+
+.route-connector[data-state="error"],
+.route-status[data-state="error"] {
+  color: var(--color-danger);
+}
+
+.route-status {
+  border-block: var(--border-thin) solid var(--color-border-subtle);
+}
+
+.candidate-decision,
+.shopping-decision-panel {
+  padding: var(--space-3);
+  border-block-end: var(--border-thin) solid var(--color-border-subtle);
+  background: var(--color-surface);
+}
+
+.candidate-decision__option {
+  padding: var(--space-2);
+  border: var(--border-thin) solid var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  color: var(--color-text);
+  background: var(--color-surface-subtle);
+}
+
+.candidate-decision__option:has(input:checked) {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+.candidate-decision input,
+.trip-home input,
+.task-widget input {
+  accent-color: var(--color-accent-strong);
+}
+
+.candidate-decision__browse-list > li + li,
+.shopping-decision-panel__items > li + li {
+  border-block-start: var(--border-thin) solid var(--color-border-subtle);
+}
+
+.shopping-status-select__control {
+  border: var(--border-thin) solid var(--color-border);
+  border-radius: var(--radius-control);
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+
+.shopping-status-select__control:focus-visible {
+  border-color: var(--color-focus);
+}
+
+.task-widget__dialog,
+.reservation-panel__dialog {
+  border: var(--border-thin) solid var(--color-border);
+  border-radius: var(--radius-shell);
+  color: var(--color-text);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-overlay);
+}
+
+.task-widget__dialog::backdrop,
+.reservation-panel__dialog::backdrop {
+  background: var(--color-overlay);
+}
+
+.task-widget__dialog-header,
+.reservation-panel__dialog-header {
+  border-block-end: var(--border-thin) solid var(--color-border-subtle);
+}
+
+.task-widget__item,
+.reservation-panel__item,
+.trip-home__task {
+  padding-block: var(--space-2);
+  border-block-end: var(--border-thin) solid var(--color-border-subtle);
+}
+
+.task-widget__note,
+.trip-home__task-note {
+  max-width: 70ch;
+  line-height: 1.5;
+}
+
+.reservation-panel__reference {
+  overflow-wrap: anywhere;
+  color: var(--color-text);
+  background: var(--color-surface-subtle);
+}
+
+.trip-home {
+  color: var(--color-text);
+  background: var(--color-canvas);
+}
+
+.trip-home__identity {
+  padding-block-end: var(--space-3);
+  border-block-end: var(--border-thin) solid var(--color-border);
+}
+
+.trip-home__identity h1 {
+  margin: 0;
+  font-size: 1.75rem;
+  line-height: 1.12;
+}
+
+.trip-home__eyebrow {
+  color: var(--color-accent-strong);
+  font-size: var(--font-size-meta);
+  font-weight: 650;
+}
+
+.trip-home__pretrip,
+.trip-home__reservations {
+  padding-block-end: var(--space-3);
+  border-block-end: var(--border-thin) solid var(--color-border-subtle);
+}
+
+.trip-home__day-action {
+  border: var(--border-thin) solid var(--color-border);
+  border-radius: var(--radius-row);
+  color: var(--color-text);
+  background: var(--color-surface);
+  transition:
+    border-color var(--component-motion-duration) var(--motion-easing),
+    background-color var(--component-motion-duration) var(--motion-easing);
+}
+
+.trip-home__day-action:hover,
+.trip-home__day-action:active {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+.trip-progress-persistence {
+  border: var(--border-thin) solid var(--color-warning);
+  border-radius: var(--radius-control);
+  color: var(--color-text);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-overlay);
+}
+
+:where(button, a, input, select):focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+@media (max-width: 340px) {
+  :root {
+    --radius-row: 0.625rem;
+    --radius-shell: 0.75rem;
+    --radius-sheet: 0.875rem;
+  }
+
+  .trip-home {
+    padding-inline: var(--space-3);
+  }
+
+  .itinerary-row,
+  .candidate-decision,
+  .shopping-decision-panel {
+    padding-inline: var(--space-2);
+  }
+
+  .candidate-decision__actions {
+    justify-content: stretch;
+  }
+
+  .candidate-decision__actions > button {
+    flex: 1;
+  }
+}
+
+@media (min-width: 390px) {
+  .itinerary-sheet__scroll {
+    padding-inline: var(--space-3);
+  }
+}
+
+@media (min-width: 430px) {
+  .trip-home {
+    padding-inline: var(--space-5);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --sheet-motion-duration: 0ms;
+    --shell-motion-duration: 0ms;
+    --component-motion-duration: 0ms;
+  }
+
+  .day-header__date,
+  .icon-control,
+  .itinerary-sheet,
+  .itinerary-row,
+  .route-connector,
+  .trip-home__day-action {
+    transition-duration: 0ms;
+  }
+}
+
+@media (forced-colors: active) {
+  :root {
+    --color-canvas: Canvas;
+    --color-text: CanvasText;
+    --color-text-muted: CanvasText;
+    --color-surface: Canvas;
+    --color-surface-subtle: Canvas;
+    --color-border: CanvasText;
+    --color-border-subtle: CanvasText;
+    --color-accent: Highlight;
+    --color-accent-strong: CanvasText;
+    --color-accent-soft: Canvas;
+    --color-selected: Highlight;
+    --color-selected-text: HighlightText;
+    --color-focus: Highlight;
+  }
+
+  .map-marker,
+  .candidate-decision__option,
+  .shopping-status-select__control,
+  .trip-home__day-action,
+  .task-widget__dialog,
+  .reservation-panel__dialog {
+    border-color: CanvasText;
+    color: CanvasText;
+    background: Canvas;
+    box-shadow: none;
+  }
+
+  .map-marker[data-tone="selected"],
+  .itinerary-row[aria-pressed="true"],
+  .route-connector[aria-pressed="true"] {
+    color: HighlightText;
+    background: Highlight;
+  }
+
+  .day-header__date[aria-pressed="true"] {
+    border-color: Highlight;
+    color: HighlightText;
+    background: Highlight;
+  }
+
+  :where(button, a, input, select):focus-visible {
+    outline-color: Highlight;
+    box-shadow: none;
+  }
+}
