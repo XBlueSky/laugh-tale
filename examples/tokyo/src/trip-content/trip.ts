@@ -1,2 +1,5 @@
 import type { Trip } from "@laugh-tale-island/core";
-export const trip: Trip | null = null;
+
+import { tokyoTrip } from "./tokyo-trip";
+
+export const trip: Trip | null = tokyoTrip;
