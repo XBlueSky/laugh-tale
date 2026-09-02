@@ -6,6 +6,7 @@ coverage/
 test-results/
 playwright-report/
 tmp/
+.scratch/
 *.tmp
 plugins/eternal-pose/starter/react/node_modules/
 plugins/eternal-pose/starter/react/dist/
