@@ -31,8 +31,31 @@ jobs:
       - run: npm --prefix tmp/staged-starter exec playwright install --with-deps chromium
       - run: npm run test:e2e:staged
 
+  # The Tokyo flagship is an independent generated project (ADR-0003). It installs
+  # the two Laugh Tale packages from tarballs vendored under examples/tokyo/vendor
+  # (baseline option c) and everything else from the public registry, so it needs
+  # no staging step. It must never call Google: its e2e suite runs on fake adapters.
+  example-tokyo:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        # `npm --prefix <dir> ci` misreads the root package outside the repo; run in place.
+        working-directory: examples/tokyo
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: examples/tokyo/package-lock.json
+      - run: npm install -g npm@11
+      - run: npm ci
+      - run: npm run check
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+
   release:
-    needs: check
+    needs: [check, example-tokyo]
     # Only release from the default branch (not PRs or tags). semantic-release
     # creates the tags itself; its [skip ci] bump commit won't re-trigger CI.
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
