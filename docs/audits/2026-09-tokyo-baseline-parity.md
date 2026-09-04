@@ -9,9 +9,9 @@ Statuses are exactly: `verified`, `partially verified`, `not exercised by input`
 - Nodes: 100 across 6 days. Route edges: 92 (legs with a user-supplied mode). `unknown` legs: 2 (`D3-2`, `D3-3`), no edge.
 - Places: 89 resolved (`suggested`), 1 unresolved (`unverified`, Pelican Cafe). Oracle distance check: match 30, near 42, over 500 m 17, unresolved 1, against the 34 benchmark stops that carry inline coordinates.
 - Gates on the example: unit 259/259, Playwright 39/39 at 320, 390, 430 (3 of them expected-fail records), copy-out install and `check` pass, root provenance test 2/2, publication scan 0 findings, `git diff --check` clean.
-- Rows (run + A + B + C, 53 total): verified 23, partially verified 22, blocked by configuration 1, blocked by model 1, failed 6. "Not exercised by input" appears in notes rather than as a status, because every such capability was still checked with the starter's synthetic fixture.
+- Rows (run + A + B + C + D, 71 total): verified 28, partially verified 27, blocked by configuration 1, blocked by model 1, failed 14. "Not exercised by input" appears in notes rather than as a status, because every such capability was still checked with the starter's synthetic fixture.
 - Invariant: `/usr/bin/git diff --stat main -- packages plugins` printed nothing at every commit.
-- Manual feel sign-off (section D): **pending**, needs the user on a phone.
+- Manual feel sign-off (section D): completed in Safari on an iPhone 17 Pro Simulator fallback. True multi-touch pinch and physical-device rubber-banding remain partially verified limitations.
 
 ## Why not the published 1.0.0
 
@@ -35,14 +35,14 @@ The run started exactly as specified, against the registry artifacts (commit `81
 | # | Claim | Status | Category | Evidence / note |
 | --- | --- | --- | --- | --- |
 | A1 | Sheet drag: pointer capture, rAF-coalesced moves, live ceiling, transition off while dragging, drag interrupts a running snap | partially verified | package | `use-itinerary-sheet` (react dist): `setPointerCapture`/`releasePointerCapture`, velocity-directed snapping, `transitionDuration` and `data-dragging` while dragging; interruptible drag covered by the inherited e2e "interruptible three-snap sheet". No `requestAnimationFrame` coalescing; ceiling comes from `resolveSheetGeometry` on measured viewport metrics, not from live computed style. |
-| A2 | Map padding derived from sheet geometry; fit and focus respect it; focus lands centred in the uncovered map | partially verified | starter | Padding = header clearance + sheet snap + safe areas (`use-trip-experience-controller.ts:682-710`, `use-map-lifecycle.ts` `setPadding`); `fitBounds(bounds, padding)` (`GoogleMapAdapter.ts:423`). No post-focus `panBy` compensation exists (grep: 0). Centring pending sign-off M2. |
+| A2 | Map padding derived from sheet geometry; fit and focus respect it; focus lands centred in the uncovered map | partially verified | starter | Padding = header clearance + sheet snap + safe areas (`use-trip-experience-controller.ts:682-710`, `use-map-lifecycle.ts` `setPadding`); `fitBounds(bounds, padding)` (`GoogleMapAdapter.ts:423`). No post-focus `panBy` compensation exists (grep: 0). Simulator M2 failed: `panTo` kept the previous zoom and left the selected pin about 60 pt below the uncovered-area centre. |
 | A3 | Flight polylines drawn but excluded from bounds fitting | failed | starter | Bounds iterate every coordinate with no mode filter (`GoogleMapAdapter.ts:156-185`; grep `flight`: 0). Not observed at runtime: this input has no flight edge. |
 | A4 | Movement rendered as an edge; only primary nodes consume a map number | partially verified | package | Route edges are their own timeline entries (core `timeline`), never nodes: verified. Map labels are decorated by the controller; core labels every node with its title, and whether lodging/transfer nodes skip numbering was not verified. |
 | A5 | Candidates compared simultaneously on the main map as lettered provisional pins | verified | package | Inherited e2e "compares dining and snack candidates together on the persistent map with draft and commit semantics" (`Map place 5A · …`, `5B`). Synthetic; the Tokyo input has no candidate group. |
 | A6 | Pin: single-element teardrop, counter-rotated label, type badge, transform-only selection scale | failed | starter | `.map-marker` is a 28 px bordered inline-grid with a text label; selection changes background colour only (`base.css:804-821`); no teardrop, no type badge, no transform scale. |
 | A7 | Live clock on the minute boundary with truthful current/next and return-to-now | partially verified | starter | Minute-boundary timer exists (`MINUTE_IN_MILLISECONDS`, `setTimeout` at `use-trip-experience-controller.ts:465`). "Return to the current itinerary item" is rendered unconditionally in `DayHeader.tsx:79` and `ItinerarySheetView.tsx:87` even when no node has a time; recorded by the expected-fail e2e test. |
 | A8 | Designed degradation: map failure keeps the list readable with retry; route failure scoped to its edge | verified | starter | `ItineraryMapView.tsx:34-37` alert "Map unavailable. The itinerary remains available." with Retry; `RouteConnector.tsx` per-edge unavailable state with retry; inherited e2e "route retry". |
-| A9 | Typography: system stack, compressed scale, hierarchy by weight | partially verified | starter | No remote fonts (no `@font-face`, no font link). `--font-body` starts with `Inter` (renders in Inter only where installed, otherwise system). Two tokens: title 0.95 rem, meta 0.75 rem. Weight hierarchy pending sign-off V5. |
+| A9 | Typography: system stack, compressed scale, hierarchy by weight | partially verified | starter | No remote fonts (no `@font-face`, no font link). `--font-body` starts with `Inter` (renders in Inter only where installed, otherwise system). Two tokens: title 0.95 rem, meta 0.75 rem. Simulator V5 found the hierarchy legible, but mixed-language defaults, duplicated metadata, and raw provider copy still read as templated. |
 | A10 | Craft-level e2e coverage for motion, gesture ownership, and reflow exists | partially verified | starter | Nine inherited claims cover interruptible sheet, asymmetric safe areas, touch-target audit, forced colors, reduced motion, location. No coverage for header-plus-sheet single transition, pinch ownership, or 200 % text reflow. |
 | A11 | Provider neutrality enforced by a test | verified | package | `packages/core/tests/boundaries.test.ts` and `packages/react/tests/boundaries.test.ts` forbid `google.maps`, React, DOM, CSS, and display strings in the packages. |
 | A12 | Domain-accurate opening-hours handling | failed | starter | `GooglePlaceAdapter.ts` contains no opening-hours handling (grep `opening|regularOpeningHours|periods`: 0). Not exercised by input either. |
@@ -53,18 +53,18 @@ The run started exactly as specified, against the registry artifacts (commit `81
 | --- | --- | --- | --- | --- |
 | B1 | Itinerary stays usable at 320×568, 390×844, 430×932, and a short viewport | verified | starter | Inherited "keeps the persistent map and interruptible three-snap sheet inside every mobile viewport" plus the Tokyo spec, all three projects; 320×568 is the short case. |
 | B2 | Route loading feedback is centred on the row that owns the edge | partially verified | starter | Per-edge loading state in `RouteConnector.tsx`; centring not asserted. |
-| B3 | Collapsing the day rail keeps header tools reachable | partially verified | starter | `DayHeader` keeps return-to-lodging, return-to-now, expand controls outside the rail; rail is `inert` when collapsed. No e2e; sign-off F4. |
-| B4 | Header, map controls, and sheet move as one transition | partially verified | starter | Header clearance feeds sheet `topClearance` and map padding; one `--shell-motion-duration`. Unity of the transition untested; sign-off F4. |
-| B5 | Sheet geometry stays continuous when the header transition reverses mid-way | partially verified | starter | Same mechanism; no reversal test; sign-off F4. |
+| B3 | Collapsing the day rail keeps header tools reachable | partially verified | starter | `DayHeader` keeps return-to-lodging, return-to-now, expand controls outside the rail; rail is `inert` when collapsed. Simulator F4 verified that the controls remain reachable. No e2e. |
+| B4 | Header, map controls, and sheet move as one transition | partially verified | starter | Header clearance feeds sheet `topClearance` and map padding; one `--shell-motion-duration`. Simulator F4 showed a clean collapse/expand with no sheet jump; no automated transition assertion. |
+| B5 | Sheet geometry stays continuous when the header transition reverses mid-way | partially verified | starter | Same mechanism. Simulator F4 covered an ordinary collapse/expand, not a mid-transition reversal; no reversal test. |
 | B6 | Keyboard focus indicator stays explicit in forced-colors mode | verified | starter | Inherited "preserves keyboard names, forced-color selection, and reduced-motion behavior"; `forced-colors` blocks in `base.css` and `recipe.css`. |
-| B7 | Expanded sheet never collides with the reopening header | partially verified | starter | Ceiling accounts for header clearance; no collision test; sign-off F4. |
+| B7 | Expanded sheet never collides with the reopening header | partially verified | starter | Ceiling accounts for header clearance. Simulator F4 and the expanded Day 4 screen showed clearance, but reopening while expanded was not isolated in automation. |
 | B8 | Expanded content stays below a top safe area | verified | starter | `env(safe-area-inset-*)` probe (`use-viewport-metrics.ts`) and 21 CSS uses; inherited "asymmetric safe areas" test. |
 | B9 | Header clearance holds with a top safe area on a short screen | verified | starter | Same test at 320×568. |
 | B10 | Every snap point respects the top safe area on a short viewport | verified | starter | Same test. |
 | B11 | Collapsed sheet shows one compact row | partially verified | starter | Collapsed toolbar shows day title and stop count (`ItinerarySheetView.tsx:47-83`); the benchmark shows the current stop with a navigate action instead. |
 | B12 | Map and itinerary are visible together at every mobile width | verified | starter | Inherited test plus Tokyo spec (`data-e2e-map-surface` and itinerary region visible). |
-| B13 | Expanded sheet stays clear of day controls | partially verified | starter | Ceiling below header clearance; not asserted; sign-off F4. |
-| B14 | Pinch gestures stay inside the interactive map | partially verified | starter | `touch-action: none` and `pan-y` plus `overscroll-behavior: contain` in `base.css:511-732`; no gesture test; sign-off F7. |
+| B13 | Expanded sheet stays clear of day controls | partially verified | starter | Ceiling below header clearance; the Simulator expanded screens stayed clear of the day rail. Not asserted in e2e. |
+| B14 | Pinch gestures stay inside the interactive map | partially verified | starter | `touch-action: none` and `pan-y` plus `overscroll-behavior: contain` in `base.css:511-732`; no gesture test. Simulator F7 remained partial because its injector is single-touch. |
 | B15 | Focusing one node and restoring the full-day fit | partially verified | starter | Focus verified (Tokyo spec `data-e2e-focus-kind="place"`). The map toolbar offers only "Recenter my location"; there is no restore-full-day control. |
 | B16 | All candidates render on the map without a selection | verified | package | Inherited candidates test (synthetic). |
 | B17 | Device location shows only after permission and is never persisted | verified | package | Inherited "handles location success, denied retry, stale callbacks, and explicit recenter without camera chasing"; `useUserLocation` has no storage. |
@@ -75,7 +75,7 @@ The run started exactly as specified, against the registry artifacts (commit `81
 | B22 | Day overview, reservations, and full details sit behind compact actions | verified | starter | Inherited "renders all semantics, lodging roles, tasks, dialogs" (synthetic). |
 | B23 | Fixed confirmed tickets and suggested unbooked slots are distinguished | verified | starter | Same inherited test (synthetic); Tokyo input carries no bookings. |
 | B24 | Candidate selection persists and is exclusive | verified | package | Inherited candidates test with draft/commit and reload (synthetic). |
-| B25 | Long names stay readable at 320 px | partially verified | starter | Tokyo spec renders 44-character titles at 320 and counts pass; readability and ellipsis not asserted; sign-off V2. |
+| B25 | Long names stay readable at 320 px | partially verified | starter | Tokyo spec renders 44-character titles at 320 and counts pass. Simulator V2 found observed long Day 4 labels wrapping rather than clipping, but the longest fixture was not isolated visually. |
 | B26 | Transit uses a curated plan plus a consumer Google Maps deep link | partially verified | starter | Deep link verified (`google-maps-url.ts`, inherited link test). Curated plan exists only as `transport` node `payload.plan`; this input has no transport node. Live transit is an opt-in Routes flag. |
 | B27 | Progress persists through reload and resets per day | verified | package | Inherited "trip-scoped progress reload and reset". |
 
@@ -88,11 +88,38 @@ The run started exactly as specified, against the registry artifacts (commit `81
 | C3 | Collapsed, half, expanded, interrupted-drag, reduced-motion, and return-to-map behaviour | partially verified | starter | All but return-to-map verified by inherited tests; no restore-full-day control (see B15). |
 | C4 | Unique route ownership, provider failure, retry, and external navigation | verified | package | Inherited "independent route owners", "route retry", navigation link. |
 | C5 | Representative lodging, dining, shopping, sightseeing, experience, and transfer renderers | verified | starter | Tokyo input exercises all six kinds; inherited "keeps every semantic renderer visible". |
-| C6 | Keyboard operation, focus restoration, visible focus, touch targets, forced colors, truthful unresolved states | partially verified | starter | Keyboard, focus, forced colors, and the 44 px touch-target audit verified by inherited tests. No explicit unresolved-place indicator was found in `labels.ts` or `TimelineEntry.tsx`; how the unresolved Pelican Cafe node reads is pending sign-off M4. |
+| C6 | Keyboard operation, focus restoration, visible focus, touch targets, forced colors, truthful unresolved states | partially verified | starter | Keyboard, focus, forced colors, and the 44 px touch-target audit verified by inherited tests. Simulator M4 failed: unresolved Pelican Cafe is indistinguishable from an ordinary `Planned` row. |
 
-## D. Feel sign-off (manual, phone, side by side)
+## D. Feel sign-off (manual, phone-sized, side by side)
 
-**Pending.** ADR-0005 makes this the user's step. Procedure (plan Task 7): add `VITE_GOOGLE_ROUTES_ENABLED=true` and `VITE_GOOGLE_TRANSIT_ENABLED=true` to `examples/tokyo/.env.local` for the session; serve the benchmark and `npm --prefix examples/tokyo run dev -- --host 0.0.0.0 --port 4174` on the LAN; walk the F1–F8, V1–V5, M1–M5 checklist in `docs/superpowers/specs/2026-09-02-tokyo-signoff-notes.md` (skeleton in the plan), benchmark first; remove the two flags afterwards. Rows B3, B4, B5, B7, B13, B14, B25, A2, A9, C6 name the sign-off item that closes them.
+Completed 2026-09-04 in Safari on an iPhone 17 Pro Simulator running iOS 26.5, with both sites served on `localhost`. This is the fallback-grade manual pass allowed by Task 7, not physical-device certification. The generated server received `VITE_GOOGLE_ROUTES_ENABLED=true` and `VITE_GOOGLE_TRANSIT_ENABLED=true` in its process environment; `.env.local` was not modified. Grayscale was enabled for V4 and restored afterwards. Raw observations remain in the gitignored `docs/superpowers/specs/2026-09-02-tokyo-signoff-notes.md`.
+
+| # | Check | Status | Category | Evidence / note |
+| --- | --- | --- | --- | --- |
+| F1 | Slow drag settles without a jump | verified | package | Both sheets returned continuously to the nearest snap. |
+| F2 | Fling velocity chooses snap direction | verified | package | Fast up and down gestures reached the intended snaps on both sites. |
+| F3 | A new drag interrupts a running snap | partially verified | package | Benchmark timing injection changed the pending snap; the generated inherited test passes. Simulator injection cannot establish tactile immediacy. |
+| F4 | Header, controls, and half sheet move together | verified | starter | Both headers collapsed and expanded without a sheet jump or collision; map controls followed the header clearance. |
+| F5 | List and map selection synchronize | verified | starter | Both directions worked without a list jump. M2 separately records generated focus placement. |
+| F6 | Day switch refits the camera | failed | starter | Benchmark Days 1, 3, and 4 stayed around Tokyo. Generated Day 3 expanded to Japan-wide after a live route produced `walking · 172703 min`. |
+| F7 | Pinch stays owned by the map | partially verified | starter | The Simulator touch injector is single-touch, so a true pinch was not exercised. |
+| F8 | Long-list bottom/top scroll remains usable | partially verified | starter | Both lists reached bottom and returned without sticking; physical rubber-banding was not exercised. |
+| V1 | Row scan order is readable | failed | starter | Generated rows omit a visible kind and repeat the title after generic `時間未定` / `Planned` metadata. |
+| V2 | Day 4 density avoids truncation | verified | starter | Benchmark fits one complete rich grouped row at half; generated fits about two complete atomic rows plus a connector, with observed long labels wrapping. |
+| V3 | Pins and type badges remain legible | failed | starter | Benchmark uses numbered teardrops and badges. Generated pins have no type badge and overlap heavily on Day 4. |
+| V4 | Selection and unresolved state survive grayscale | failed | starter | Generated selection survives by fill/outline, but unresolved Pelican Cafe has no non-colour or textual state. |
+| V5 | Typography avoids a templated reading | partially verified | starter | Generated hierarchy is legible, but bilingual defaults, duplicated metadata, and provider error copy still read as starter output. |
+| M1 | Fit padding keeps pins out from under chrome | failed | starter | The generated Day 3 outlier fit reduces Tokyo to a marker at the header edge. |
+| M2 | Row focus centres the pin in uncovered map | failed | starter | Generated place focus keeps the prior zoom and centres the full map, not the area above the sheet; the pin remained about 60 pt low. |
+| M3 | Walking/transit lines differ; failures are clear | partially verified | starter | Generated walking duration rows and transit Retry rows differ, but no successful transit line was available for comparison. |
+| M4 | Unresolved places are truthful | failed | starter | Pelican Cafe renders exactly like an ordinary planned stop despite having no coordinates. |
+| M5 | Live transit duration or line names appear | failed | starter | Observed transit legs all returned the malformed-response Retry state; no duration or line name appeared. |
+
+D totals: verified 5, partially verified 5, failed 8.
+
+The Day 3 fit failure was not caused by authored place coordinates: its 13 resolved points all lie in Tokyo (roughly 35.656–35.688 N, 139.735–139.774 E), and day filtering selects only Day 3. The strongest code-supported inference is a live-route outlier: `GoogleRouteAdapter` accepts any decoded point inside world bounds, `buildMapPresentation` includes every ready route path, and `GoogleMapAdapter.fit` merges those paths with the places without an endpoint-proximity guard. The screenshot-level symptom and absurd walking duration are conclusive; identifying the exact response/leg still requires a captured Routes payload.
+
+One benchmark-side opportunity also surfaced: its dev console logged React's `Attempted to synchronously unmount a root while React was already rendering` 18 times during day and selection changes. The generated console did not emit that error (its only observed warning was the Google legacy-marker deprecation).
 
 ## Resolution and oracle
 
@@ -127,10 +154,13 @@ Run from `/Users/bluesky/arsenal/laugh-tale` on `feat/tokyo-golden-path-baseline
 21. `npm test -- tests/examples/tokyo-provenance.test.ts` → 0; CI YAML parses; commit `927809a`.
 22. Copy-out: `rsync` excluding `node_modules`, `dist`, `.env.local`, `scripts/.resolve-review.json`; `npm ci` in place → 0 (399 packages); `npm run check` → 0; validator → 1 (3 errors as in R2/R3); temp dir removed.
 23. `node plugins/eternal-pose/scripts/scan-publication.mjs $PWD/examples/tokyo` → 0 (0 findings); `/usr/bin/git diff --check` → clean; `/usr/bin/git diff --stat main -- packages plugins` → empty.
+24. Start benchmark on `localhost:3000`; start generated on `localhost:4174` with both route flags in the process environment. Boot iPhone 17 Pro Simulator (iOS 26.5), open both in Safari, and run F1–F8, V1–V5, M1–M5 benchmark-first. Toggle `com.apple.Accessibility` `GrayscaleDisplay` only for V4 and restore it to `0`; do not change `.env.local`.
 
 ## Known limitations
 
 - Route parity for `D3-2` and `D3-3` is `blocked by model` (`RouteMode` has no unknown value in 1.0).
+- The Xcode pass is a phone-sized Simulator fallback, not physical-device certification. True two-finger pinch ownership, haptics, and physical Safari rubber-banding remain unproven.
+- With live routes enabled, generated Day 3 can accept an implausible walking route (`172703 min`) and fit the map to Japan rather than Tokyo. The exact offending Routes payload was not captured, so the route-outlier cause remains a code-supported inference rather than payload-level proof.
 - Candidate, reservation, task, and shopping-checklist behaviours are verified with the starter's synthetic fixture only; the Tokyo input contains none of them.
 - The Google key is a browser key with an HTTP-referrer restriction; the resolver sends a localhost `Referer`. Sign-off on a LAN phone may hit the same restriction and fall back to desktop device emulation.
 - The tarballs under `vendor/` say `1.0.0` but are not the published 1.0.0; `vendor/PROVENANCE.md` explains, and they are removed when 2.0 is published.
