@@ -1,4 +1,5 @@
 node_modules/
+.worktrees/
 coverage/
 .cc-marketspec/dist/
 .DS_Store
