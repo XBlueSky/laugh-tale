@@ -1,0 +1,98 @@
+[data-touch-target="44"],
+button,
+a[href],
+select {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+:where(button, a[href], input, select, textarea):focus-visible,
+.arcade-panel__option:has(input:focus-visible) {
+  outline: 3px solid var(--arcade-focus);
+  outline-offset: 3px;
+}
+
+.arcade-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .arcade-day-header,
+  .arcade-sheet,
+  .arcade-stop,
+  .arcade-route-shell,
+  .arcade-marker,
+  .arcade-dialog,
+  .arcade-state__panel,
+  .arcade-panel {
+    border-color: CanvasText;
+    color: CanvasText;
+    background: Canvas;
+    forced-color-adjust: auto;
+  }
+
+  [aria-pressed="true"],
+  [aria-current="step"],
+  [data-selected="true"],
+  [data-current="true"] {
+    outline: 3px double Highlight;
+    outline-offset: -4px;
+  }
+
+  [data-completed="true"] {
+    border-bottom: 5px solid CanvasText;
+  }
+
+  [data-route-certainty="candidate"] .arcade-route-band,
+  [data-route-certainty="unverified"] .arcade-route-band,
+  [data-route-source="recomposed"] .arcade-route-band {
+    border-style: dashed;
+  }
+}
+
+@media (max-width: 420px) {
+  .arcade-panel__header {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .arcade-panel__header > .arcade-key {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (forced-colors: active) {
+  .arcade-day-header__rail button[aria-pressed="true"],
+  .arcade-sheet-index button[aria-pressed="true"],
+  .arcade-route-band[data-selected="true"] {
+    color: ButtonText;
+    background: ButtonFace;
+    border: 3px solid Highlight;
+  }
+}
+
+button:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--arcade-shadow);
+}

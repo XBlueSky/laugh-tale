@@ -1,0 +1,25 @@
+{
+  "name": "Live Journey neutral board",
+  "description": "Optional user-owned Google Cloud map style: calm neutral land and water, medium road density, restrained labels, and clear provider chrome.",
+  "mapType": "roadmap",
+  "colors": {
+    "land": "#dfe5e8",
+    "water": "#c7d9df",
+    "road": "#f7f8f8",
+    "roadOutline": "#aebbc0",
+    "boundary": "#95a5aa",
+    "label": "#34444a",
+    "poi": "#b7c3c7"
+  },
+  "visibility": {
+    "transit": "on",
+    "roadLabels": "on",
+    "poiLabels": "simplified",
+    "businesses": "off",
+    "landmarks": "on"
+  },
+  "notes": [
+    "This guide is optional and never embeds a map ID or remote asset.",
+    "Keep Google attribution and provider controls visible."
+  ]
+}

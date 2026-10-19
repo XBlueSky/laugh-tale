@@ -1,0 +1,202 @@
+---
+import ThemeDemoBase from '../layouts/ThemeDemoBase.astro'
+
+const repoUrl = 'https://github.com/XBlueSky/laugh-tale'
+
+const worlds = [
+  { id: 'field-atlas', label: 'Field Atlas', number: '01', descriptor: 'Editorial field index', accent: 'blue' },
+  { id: 'reset-arcade', label: 'Reset Arcade', number: '02', descriptor: 'Tactile mission board', accent: 'orange' },
+  { id: 'live-journey', label: 'Live Journey', number: '03', descriptor: 'Now / next operations', accent: 'teal' },
+  { id: 'pocket-instrument', label: 'Pocket Instrument', number: '04', descriptor: 'Compact trip unit', accent: 'green' },
+]
+---
+
+<ThemeDemoBase
+  title="Theme gallery — Eternal Pose"
+  description="Preview four authored product worlds for Eternal Pose. Same trip facts, four distinct interfaces."
+>
+  <div class="theme-gallery" data-theme-gallery data-active-theme="field-atlas" data-active-view="home">
+    <header class="demo-topbar">
+      <a class="demo-wordmark" href="/">Laugh Tale <span>/</span> Eternal Pose</a>
+      <nav aria-label="Demo navigation">
+        <a class="is-current" href="/themes/">Theme gallery</a>
+        <a href={repoUrl}>GitHub</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="demo-intro" aria-labelledby="demo-title">
+        <div class="demo-intro__copy">
+          <p class="demo-eyebrow">INTERNAL CATALOG <span>·</span> 04 WORLDS</p>
+          <h1 id="demo-title">Four ways to chart<br /><em>the same trip.</em></h1>
+          <p class="demo-lede">
+            Each presentation keeps the same semantic travel model underneath. The surface changes
+            its rhythm, density, and point of view — so a generated site can feel authored, not
+            recolored.
+          </p>
+        </div>
+        <div class="demo-intro__facts" aria-label="Theme capabilities">
+          <div><strong>01</strong><span>map-first<br />by default</span></div>
+          <div><strong>04</strong><span>product worlds<br />in this pass</span></div>
+          <div><strong>∞</strong><span>customization<br />at every layer</span></div>
+        </div>
+      </section>
+
+      <section class="theme-explorer" aria-labelledby="explorer-title">
+        <aside class="theme-rail">
+          <div class="theme-rail__heading">
+            <p class="demo-eyebrow">SELECT A WORLD</p>
+            <h2 id="explorer-title">Presentation register</h2>
+          </div>
+          <div class="theme-tabs" role="tablist" aria-label="Choose a theme">
+            {worlds.map((world, index) => (
+              <button
+                type="button"
+                class:list={["theme-tab", `theme-tab--${world.accent}`, { 'is-selected': index === 0 }]}
+                role="tab"
+                aria-selected={index === 0}
+                aria-controls={`theme-screen-${world.id}`}
+                tabindex={index === 0 ? 0 : -1}
+                data-theme-target={world.id}
+              >
+                <span class="theme-tab__number">{world.number}</span>
+                <span class="theme-tab__copy"><strong>{world.label}</strong><small>{world.descriptor}</small></span>
+                <span class="theme-tab__arrow" aria-hidden="true">↗</span>
+              </button>
+            ))}
+          </div>
+          <div class="theme-rail__note">
+            <span class="note-mark">↳</span>
+            <p>Semantic facts stay portable. Layout, hierarchy, map treatment, and voice are yours.</p>
+          </div>
+          <a class="rail-link" href={repoUrl + '/tree/main/plugins/eternal-pose/recipes-v2'}>Read the recipe source <span>↗</span></a>
+        </aside>
+
+        <div class="demo-stage">
+          <div class="stage-toolbar">
+            <div class="stage-toolbar__title">
+              <span class="status-dot" aria-hidden="true"></span>
+              <span>INTERACTIVE PREVIEW</span>
+              <span class="stage-toolbar__slash">/</span>
+              <strong data-stage-label aria-live="polite">Field Atlas · Home</strong>
+            </div>
+            <div class="view-toggle" role="group" aria-label="Preview state">
+              <button type="button" class="is-selected" aria-pressed="true" data-view-target="home">Home</button>
+              <button type="button" aria-pressed="false" data-view-target="experience">Experience</button>
+            </div>
+          </div>
+
+          <div class="preview-frame" data-preview-frame>
+            <div class="preview-frame__chrome"><span>ETERNAL POSE / PRESENTATION</span><span>LOCAL FACTS ONLY</span></div>
+
+            <section class="theme-screen theme-screen--atlas" id="theme-screen-field-atlas" data-theme-screen="field-atlas" role="tabpanel" aria-label="Field Atlas preview">
+              <div class="world-app atlas-app" data-view="home">
+                <header class="atlas-mast">
+                  <div><span class="world-kicker">FIELD ATLAS</span><h3>Kyoto, after the rain</h3><p>2026/10/03 <i>/</i> 2026/10/08 <span>Asia/Tokyo</span></p></div>
+                  <div class="atlas-route-index"><span>ROUTE INDEX</span><ol><li><b>01</b> Tea fields</li><li><b>02</b> Night market</li><li><b>03</b> River house</li></ol></div>
+                </header>
+                <div class="atlas-readiness"><div><span>PRETRIP</span><strong>03/05</strong><small>complete</small></div><div><span>CONFIRMED</span><strong>02</strong><small>reservations</small></div><div><span>PENDING</span><strong>01</strong><small>reservation</small></div></div>
+                <div class="atlas-home-grid"><section class="atlas-paper"><div class="world-section-heading"><span>FIELD NOTE 01</span><h4>Pretrip tasks</h4></div><label class="atlas-check"><input type="checkbox" checked /><span>Download rail passes</span></label><label class="atlas-check"><input type="checkbox" checked /><span>Pack rain shell</span></label><label class="atlas-check"><input type="checkbox" /><span>Confirm tea house</span></label></section><section class="atlas-paper atlas-paper--ledger"><div class="world-section-heading"><span>LEDGER</span><h4>Reservations</h4></div><ul class="ledger-list"><li><span>Kyoto machiya</span><b>CONFIRMED</b></li><li><span>Tea ceremony</span><b class="is-open">PENDING</b></li><li><span>Rail pass</span><b>CONFIRMED</b></li></ul></section></div>
+                <nav class="atlas-day-index" aria-label="Field Atlas days"><button type="button"><b>01</b><span>Tea fields</span><small>10/03 ↗</small></button><button type="button"><b>02</b><span>Night market</span><small>10/04 ↗</small></button><button type="button"><b>03</b><span>River house</span><small>10/05 ↗</small></button></nav>
+              </div>
+              <div class="world-app atlas-app" data-view="experience" hidden>
+                <div class="atlas-experience"><div class="atlas-map mock-map"><span class="map-label map-label--north">NORTH HIGASHIYAMA</span><span class="map-line map-line--a"></span><span class="map-line map-line--b"></span><span class="map-route map-route--blue"></span><span class="map-pin map-pin--one">01</span><span class="map-pin map-pin--two">02</span><span class="map-pin map-pin--three">03</span><span class="map-coordinates">35°00′N<br />135°46′E</span></div><aside class="atlas-sheet"><span class="world-kicker">DAY 01 / 03</span><h3>Tea fields</h3><p class="sheet-date">Sat 10/03 · route confirmed</p><div class="sheet-rule"></div><div class="sheet-stop"><b>09:20</b><span>Fushimi Inari<br /><small>walk · 18 min</small></span></div><div class="sheet-stop is-current"><b>11:40</b><span>Uji tea house<br /><small>reservation pending</small></span></div><button type="button" class="world-button">Open directions <span>↗</span></button></aside></div>
+              </div>
+            </section>
+
+            <section class="theme-screen theme-screen--arcade" id="theme-screen-reset-arcade" data-theme-screen="reset-arcade" role="tabpanel" aria-label="Reset Arcade preview" hidden>
+              <div class="world-app arcade-app" data-view="home">
+                <header class="arcade-mast"><div><span class="world-kicker">RESET ARCADE / TRIP BOARD</span><h3>Kyoto, after the rain</h3><p>3 chapters <i>·</i> 5 real decisions <i>·</i> no invented facts</p></div><span class="arcade-stamp">READY<br /><b>03/05</b></span></header>
+                <section class="arcade-mission"><div class="mission-copy"><span class="world-section-index">NEXT MISSION</span><h4>Confirm the tea house</h4><p>One unresolved reservation keeps the route open.</p><button type="button" class="world-button">Start mission <span>↗</span></button></div><div class="mission-badge"><span>02</span><small>OF 05</small></div></section>
+                <section class="arcade-board"><div class="world-section-heading"><span>STAGE SELECT</span><h4>Choose your next move</h4></div><div class="stage-cards"><button type="button" class="stage-card is-done"><b>01</b><span>Pack rain shell</span><small>DONE</small></button><button type="button" class="stage-card is-current"><b>02</b><span>Confirm tea house</span><small>OPEN</small></button><button type="button" class="stage-card"><b>03</b><span>Enter Day 01</span><small>LOCKED</small></button></div></section>
+              </div>
+              <div class="world-app arcade-app" data-view="experience" hidden>
+                <div class="arcade-experience"><div class="arcade-map mock-map"><span class="map-label map-label--north">STAGE MAP / DAY 01</span><span class="map-grid-line map-grid-line--one"></span><span class="map-grid-line map-grid-line--two"></span><span class="map-route map-route--orange"></span><span class="arcade-marker arcade-marker--one">01</span><span class="arcade-marker arcade-marker--two">02</span><span class="arcade-marker arcade-marker--three">03</span><span class="map-coordinates">CHECKPOINT<br />A-01</span></div><aside class="arcade-sheet"><div class="arcade-sheet__top"><span class="world-kicker">MISSION 02</span><span class="arcade-live">OPEN</span></div><h3>Confirm the tea house</h3><p>Uji · booking status: pending</p><ol class="arcade-steps"><li class="is-done"><b>01</b><span>Read the reservation note</span></li><li class="is-current"><b>02</b><span>Choose a confirmed option</span></li><li><b>03</b><span>Mark the mission complete</span></li></ol><button type="button" class="world-button">Review reservation <span>↗</span></button></aside></div>
+              </div>
+            </section>
+
+            <section class="theme-screen theme-screen--live" id="theme-screen-live-journey" data-theme-screen="live-journey" role="tabpanel" aria-label="Live Journey preview" hidden>
+              <div class="world-app live-app" data-view="home">
+                <header class="live-mast"><div><span class="world-kicker">LIVE JOURNEY / TRIP BOARD</span><h3>Kyoto, after the rain</h3><p>2026/10/03 <i>→</i> 2026/10/08 <span>Asia/Tokyo</span></p></div><section class="live-action"><span>NEAREST ACTION</span><strong>Resolve the tea house reservation.</strong><small>Based on the trip facts currently available.</small></section></header>
+                <div class="live-readiness"><div><span>PRETRIP</span><strong>03/05</strong><small>complete</small></div><div><span>CONFIRMED</span><strong>02</strong><small>reservations</small></div><div><span>OPEN</span><strong>01</strong><small>to resolve</small></div></div>
+                <div class="live-home-grid"><section class="live-worklist"><div class="world-section-heading"><span>WORKLIST</span><h4>Resolve before the next move</h4></div><div class="live-work-item is-actionable"><b>01</b><span><strong>Confirm the tea house</strong><small>Reservation pending</small></span><i>OPEN</i></div><div class="live-work-item"><b>02</b><span><strong>Download rail passes</strong><small>Task complete</small></span><i class="is-done">DONE</i></div></section><section class="live-commitments"><div class="world-section-heading"><span>COMMITMENTS</span><h4>Known reservations</h4></div><div class="commitment"><span>Kyoto machiya</span><b>CONFIRMED</b></div><div class="commitment"><span>Tea ceremony</span><b class="is-open">PENDING</b></div><div class="commitment"><span>Rail pass</span><b>CONFIRMED</b></div></section></div>
+                <nav class="live-day-index" aria-label="Live Journey days"><button type="button"><b>01</b><span><strong>Tea fields</strong><small>10/03</small></span><span>→</span></button><button type="button"><b>02</b><span><strong>Night market</strong><small>10/04</small></span><span>→</span></button></nav>
+              </div>
+              <div class="world-app live-app" data-view="experience" hidden>
+                <div class="live-experience"><div class="live-map mock-map"><span class="map-label map-label--north">LIVE ROUTE / UPDATED 11:14</span><span class="map-line map-line--a"></span><span class="map-line map-line--b"></span><span class="map-route map-route--teal"></span><span class="live-marker live-marker--one">NOW</span><span class="live-marker live-marker--two">NEXT</span><span class="map-coordinates">35.0116<br />135.7681</span></div><aside class="live-sheet"><div class="live-sheet__header"><span class="world-kicker">DAY 01 / SAT 10/03</span><span class="live-signal">LIVE</span></div><div class="now-next"><section class="now-card"><span>NOW</span><strong>Fushimi Inari</strong><small>Arrived · 09:20</small></section><section class="next-card"><span>NEXT</span><strong>Uji tea house</strong><small>Reservation pending</small></section></div><div class="live-timeline"><div class="is-complete"><b>09:20</b><span>Fushimi Inari</span></div><div class="is-current"><b>11:40</b><span>Uji tea house</span></div><div><b>14:10</b><span>River house</span></div></div><button type="button" class="world-button">Open disruption details <span>↗</span></button></aside></div>
+              </div>
+            </section>
+
+            <section class="theme-screen theme-screen--instrument" id="theme-screen-pocket-instrument" data-theme-screen="pocket-instrument" role="tabpanel" aria-label="Pocket Instrument preview" hidden>
+              <div class="world-app instrument-app" data-view="home">
+                <header class="instrument-mast"><div><span class="world-kicker">POCKET INSTRUMENT / TRIP UNIT</span><h3>Kyoto, after the rain</h3><p>2026/10/03 <i>→</i> 2026/10/08 <span>Asia/Tokyo</span></p></div><div class="instrument-status"><span class="lamp" aria-hidden="true"></span><strong>READY</strong><small>Trip facts loaded</small></div></header>
+                <section class="instrument-readout"><div><span>PRIMARY READOUT</span><h4>Readiness</h4><small>Only stored trip facts are shown.</small></div><strong>03/05<small>pretrip tasks complete</small></strong><strong>02<small>confirmed reservations</small></strong><strong>01<small>open commitments</small></strong></section>
+                <div class="instrument-modules"><section class="instrument-module"><div class="world-section-heading"><span>CHANNEL 01</span><h4>Preparation</h4></div><label><input type="checkbox" checked /><span>Download rail passes</span></label><label><input type="checkbox" checked /><span>Pack rain shell</span></label><label><input type="checkbox" /><span>Confirm tea house</span></label></section><section class="instrument-module"><div class="world-section-heading"><span>CHANNEL 02</span><h4>Reservations</h4></div><p><span>Kyoto machiya</span><b>CONFIRMED</b></p><p><span>Tea ceremony</span><b class="is-open">PENDING</b></p><p><span>Rail pass</span><b>CONFIRMED</b></p></section></div>
+                <nav class="instrument-channels" aria-label="Pocket Instrument channels"><button type="button"><b>01</b><span><strong>Tea fields</strong><small>10/03</small></span><span>↗</span></button><button type="button"><b>02</b><span><strong>Night market</strong><small>10/04</small></span><span>↗</span></button></nav>
+              </div>
+              <div class="world-app instrument-app" data-view="experience" hidden>
+                <div class="instrument-experience"><div class="instrument-map mock-map"><span class="map-label map-label--north">TECHNICAL MAP / CHANNEL 01</span><span class="map-line map-line--a"></span><span class="map-line map-line--b"></span><span class="map-route map-route--green"></span><span class="instrument-marker instrument-marker--one">01</span><span class="instrument-marker instrument-marker--two">02</span><span class="map-coordinates">CH 01<br />ROUTE OK</span></div><aside class="instrument-sheet"><div class="instrument-sheet__top"><span class="world-kicker">CHANNEL 01</span><div class="instrument-status"><span class="lamp" aria-hidden="true"></span><strong>ACTIVE</strong></div></div><h3>Tea fields</h3><p>Sat 10/03 · route confirmed</p><div class="channel-strip"><div><span>STOP</span><strong>01</strong></div><div><span>MODE</span><strong>WALK</strong></div><div><span>STATE</span><strong>READY</strong></div></div><div class="instrument-event"><span>11:40</span><strong>Uji tea house</strong><small>reservation pending</small></div><button type="button" class="world-button">Open channel details <span>↗</span></button></aside></div>
+              </div>
+            </section>
+          </div>
+          <p class="stage-caption"><span>INTERACTION NOTE</span> Select a world, then switch between its home and in-trip experience. The data stays the same; the product language changes.</p>
+        </div>
+      </section>
+
+      <section class="customization-callout" aria-labelledby="customize-title">
+        <div><p class="demo-eyebrow">YOUR SITE, YOUR SURFACE</p><h2 id="customize-title">Keep the facts.<br /><em>Change everything else.</em></h2></div>
+        <div class="customization-steps"><div><b>01</b><strong>Tokens</strong><span>palette, type, spacing</span></div><div><b>02</b><strong>Components</strong><span>cards, sheets, markers</span></div><div><b>03</b><strong>Presentation</strong><span>home and experience</span></div><div><b>04</b><strong>Full replacement</strong><span>keep the semantic contract</span></div></div>
+      </section>
+    </main>
+
+    <footer class="demo-footer"><a href="/">← Back to Laugh Tale</a><span>Internal v2 recipe preview · no runtime theme dependency</span><a href={repoUrl}>Source on GitHub ↗</a></footer>
+  </div>
+</ThemeDemoBase>
+
+<script>
+  const gallery = document.querySelector('[data-theme-gallery]')
+  const themeButtons = [...gallery.querySelectorAll('[data-theme-target]')]
+  const viewButtons = [...gallery.querySelectorAll('[data-view-target]')]
+  const screens = [...gallery.querySelectorAll('[data-theme-screen]')]
+  const stageLabel = gallery.querySelector('[data-stage-label]')
+  const labels = Object.fromEntries(themeButtons.map((button) => [button.dataset.themeTarget, button.querySelector('strong').textContent]))
+
+  function setView(view) {
+    gallery.dataset.activeView = view
+    viewButtons.forEach((button) => {
+      const selected = button.dataset.viewTarget === view
+      button.classList.toggle('is-selected', selected)
+      button.setAttribute('aria-pressed', String(selected))
+    })
+    const activeTheme = gallery.dataset.activeTheme
+    const activeScreen = screens.find((screen) => screen.dataset.themeScreen === activeTheme)
+    activeScreen?.querySelectorAll('[data-view]').forEach((panel) => { panel.hidden = panel.dataset.view !== view })
+    if (stageLabel) stageLabel.textContent = `${labels[activeTheme]} · ${view === 'home' ? 'Home' : 'Experience'}`
+  }
+
+  function setTheme(theme) {
+    gallery.dataset.activeTheme = theme
+    themeButtons.forEach((button) => {
+      const selected = button.dataset.themeTarget === theme
+      button.classList.toggle('is-selected', selected)
+      button.setAttribute('aria-selected', String(selected))
+      button.tabIndex = selected ? 0 : -1
+      if (selected) button.focus({ preventScroll: true })
+    })
+    screens.forEach((screen) => { screen.hidden = screen.dataset.themeScreen !== theme })
+    setView(gallery.dataset.activeView || 'home')
+  }
+
+  themeButtons.forEach((button, index) => {
+    button.addEventListener('click', () => setTheme(button.dataset.themeTarget))
+    button.addEventListener('keydown', (event) => {
+      if (!['ArrowDown', 'ArrowRight', 'ArrowUp', 'ArrowLeft'].includes(event.key)) return
+      event.preventDefault()
+      const offset = event.key === 'ArrowDown' || event.key === 'ArrowRight' ? 1 : -1
+      const next = themeButtons[(index + offset + themeButtons.length) % themeButtons.length]
+      setTheme(next.dataset.themeTarget)
+    })
+  })
+  viewButtons.forEach((button) => button.addEventListener('click', () => setView(button.dataset.viewTarget)))
+  setView('home')
+</script>

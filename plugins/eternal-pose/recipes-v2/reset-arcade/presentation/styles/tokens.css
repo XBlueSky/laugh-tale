@@ -1,0 +1,36 @@
+:root {
+  color-scheme: light;
+  --arcade-font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --arcade-font-index: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Roboto Mono", Consolas, monospace;
+  --arcade-canvas: #e7e8e3;
+  --arcade-surface: #f7f7f3;
+  --arcade-surface-strong: #d9ddd6;
+  --arcade-surface-deep: #bec7bf;
+  --arcade-ink: #171918;
+  --arcade-ink-soft: #3d4540;
+  --arcade-rule: #6f786f;
+  --arcade-rule-soft: #a7aea7;
+  --arcade-accent: #d64b28;
+  --arcade-accent-strong: #9e321c;
+  --arcade-accent-soft: #f3d5c9;
+  --arcade-success: #2d5542;
+  --arcade-danger: #8b2d28;
+  --arcade-focus: #164b8b;
+  --arcade-scrim: rgb(23 25 24 / 52%);
+  --arcade-shadow: #171918;
+  --arcade-rule-width: 1px;
+  --arcade-rule-strong: 2px;
+  --arcade-space-1: 0.25rem;
+  --arcade-space-2: 0.5rem;
+  --arcade-space-3: 0.75rem;
+  --arcade-space-4: 1rem;
+  --arcade-space-5: 1.5rem;
+  --arcade-space-6: 2rem;
+  --arcade-state-duration: 180ms;
+  --arcade-easing: cubic-bezier(0.16, 1, 0.3, 1);
+  --arcade-layer-map: 0;
+  --arcade-layer-grid: 2;
+  --arcade-layer-chrome: 10;
+  --arcade-layer-sheet: 20;
+  --arcade-layer-dialog: 40;
+}
