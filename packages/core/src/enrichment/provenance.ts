@@ -1,0 +1,50 @@
+import { Temporal } from "@js-temporal/polyfill";
+
+import { clonePlaceSearchQuery, type PlaceSearchQuery } from "./place-search.js";
+
+export interface PlaceResolutionProvenance {
+  schemaVersion: 1;
+  ownerId: string;
+  source: string;
+  query: PlaceSearchQuery;
+  provider: string;
+  observedAt: string;
+}
+
+const CANONICAL_UTC_MILLISECOND = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+function requiredText(value: string, field: string): string {
+  const normalized = value.trim();
+  if (normalized.length === 0) throw new Error(`${field} must be nonblank.`);
+  return normalized;
+}
+
+function canonicalObservedAt(observedAt: string): string {
+  if (!CANONICAL_UTC_MILLISECOND.test(observedAt)) {
+    throw new Error("observedAt must be an exact UTC-millisecond timestamp.");
+  }
+
+  const instant = Temporal.Instant.from(observedAt);
+  if (instant.toString({ fractionalSecondDigits: 3 }) !== observedAt) {
+    throw new Error("observedAt must be canonical.");
+  }
+
+  return observedAt;
+}
+
+export function createPlaceResolutionProvenance(input: {
+  ownerId: string;
+  source: string;
+  query: PlaceSearchQuery;
+  provider: string;
+  observedAt: string;
+}): PlaceResolutionProvenance {
+  return {
+    schemaVersion: 1,
+    ownerId: requiredText(input.ownerId, "ownerId"),
+    source: requiredText(input.source, "source"),
+    query: clonePlaceSearchQuery(input.query),
+    provider: requiredText(input.provider, "provider"),
+    observedAt: canonicalObservedAt(input.observedAt),
+  };
+}

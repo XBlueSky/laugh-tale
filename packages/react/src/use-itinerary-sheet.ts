@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -11,6 +12,7 @@ import {
 import {
   clampSheetHeight,
   nearestSheetSnap,
+  resolveSheetGeometry,
   type SheetGeometry,
   type SheetSnap,
 } from "@laugh-tale-island/core";
@@ -18,7 +20,7 @@ import {
 export interface UseItinerarySheetOptions {
   /** Controlled snap; the hook never stores its own. */
   snap: SheetSnap;
-  geometry: SheetGeometry;
+  geometry: SheetGeometry | null;
   onSnapChange: (snap: SheetSnap) => void;
   /** When true, transitions are always suppressed, not only while dragging. */
   reducedMotion?: boolean;
@@ -35,6 +37,9 @@ export interface SheetHandleProps {
   onLostPointerCapture: (event: SheetPointerEvent) => void;
   onKeyDown: (event: SheetKeyboardEvent) => void;
   "aria-keyshortcuts": string;
+  "aria-valuenow": number;
+  "aria-valuemin": number;
+  "aria-valuemax": number;
 }
 
 export interface SheetProps {
@@ -48,14 +53,14 @@ export interface ItinerarySheetController {
   snap: SheetSnap;
   dragging: boolean;
   /** Live target height in pixels: the drag frame while dragging, otherwise the snap height. */
-  height: number;
-  ceiling: number;
+  height: number | null;
+  ceiling: number | null;
   setSnap: (snap: SheetSnap) => void;
   step: (direction: 1 | -1) => void;
   getSheetProps: () => SheetProps;
   getHandleProps: (
     userProps?: Partial<SheetHandleProps> & Record<string, unknown>,
-  ) => SheetHandleProps & Record<string, unknown>;
+  ) => Partial<SheetHandleProps> & Record<string, unknown>;
 }
 
 interface DragSample {
@@ -63,12 +68,11 @@ interface DragSample {
   startY: number;
   startHeight: number;
   geometry: SheetGeometry;
-  lastY: number;
-  lastTime: number;
 }
 
 interface DragFrame {
   height: number;
+  floor: number;
   ceiling: number;
 }
 
@@ -80,17 +84,19 @@ function snapHeight(snap: SheetSnap, geometry: SheetGeometry): number {
 
 /**
  * Interruptible bottom-sheet behavior for a controlled snap: pointer-captured
- * dragging measured from the rendered surface, velocity/distance snapping,
- * keyboard stepping, and drag-time transition suppression. Rendering,
- * wording, and styling stay with the consumer; a consumer handler that calls
- * `preventDefault()` suppresses the package behavior for that event.
+ * dragging measured from the rendered surface, frame-coalesced position
+ * snapping, keyboard stepping, and drag-time transition suppression.
+ * Rendering, wording, and styling stay with the consumer; a consumer handler
+ * that calls `preventDefault()` suppresses the package behavior for that event.
  */
 export function useItinerarySheet(options: UseItinerarySheetOptions): ItinerarySheetController {
   const { snap, geometry, onSnapChange, reducedMotion = false } = options;
   const elementRef = useRef<HTMLElement | null>(null);
   const dragRef = useRef<DragSample | null>(null);
+  const dragHeightRef = useRef<number | null>(null);
+  const dragFrameRef = useRef<number | null>(null);
   const [dragFrame, setDragFrame] = useState<DragFrame | null>(null);
-  const dragging = dragFrame !== null;
+  const dragging = geometry !== null && dragFrame !== null;
 
   const setElement = useCallback<RefCallback<HTMLElement>>((element) => {
     elementRef.current = element;
@@ -98,79 +104,155 @@ export function useItinerarySheet(options: UseItinerarySheetOptions): ItineraryS
 
   const beginDrag = useCallback(
     (event: SheetPointerEvent): void => {
-      const renderedHeight = elementRef.current?.getBoundingClientRect().height ?? 0;
+      if (geometry === null) return;
+      const target = event.target;
+      if (
+        dragRef.current !== null ||
+        (target instanceof Element && target.closest("button") !== null)
+      ) {
+        return;
+      }
+      const element = elementRef.current;
+      const renderedHeight = element?.getBoundingClientRect().height ?? 0;
+      const computedMaxHeight = Number.parseFloat(
+        element === null || element === undefined
+          ? ""
+          : getComputedStyle(element).maxHeight,
+      );
+      const sessionGeometry = resolveSheetGeometry({
+        collapsedHeight: geometry.collapsed,
+        halfHeight: geometry.half,
+        expandedHeight: Number.isFinite(computedMaxHeight)
+          ? computedMaxHeight
+          : geometry.expanded,
+      });
       const startHeight = clampSheetHeight(
         renderedHeight > 0 ? renderedHeight : snapHeight(snap, geometry),
-        { min: geometry.collapsed, max: geometry.ceiling },
+        { min: sessionGeometry.collapsed, max: sessionGeometry.ceiling },
       );
       dragRef.current = {
         pointerId: event.pointerId,
         startY: event.clientY,
         startHeight,
-        geometry: { ...geometry },
-        lastY: event.clientY,
-        lastTime: event.timeStamp,
+        geometry: sessionGeometry,
       };
-      setDragFrame({ height: startHeight, ceiling: geometry.ceiling });
+      dragHeightRef.current = startHeight;
+      setDragFrame({ height: startHeight, floor: sessionGeometry.collapsed, ceiling: sessionGeometry.ceiling });
       event.currentTarget.setPointerCapture?.(event.pointerId);
     },
     [geometry, snap],
   );
 
-  const moveDrag = useCallback((event: SheetPointerEvent): void => {
-    const sample = dragRef.current;
-    if (sample === null || sample.pointerId !== event.pointerId) {
-      return;
-    }
-    const height = clampSheetHeight(sample.startHeight + sample.startY - event.clientY, {
-      min: sample.geometry.collapsed,
-      max: sample.geometry.ceiling,
-    });
-    sample.lastY = event.clientY;
-    sample.lastTime = event.timeStamp;
-    setDragFrame({ height, ceiling: sample.geometry.ceiling });
-  }, []);
+  const scheduleDragHeight = useCallback(
+    (height: number): void => {
+      const geometry = dragRef.current?.geometry;
+      if (geometry === undefined) return;
+      dragHeightRef.current = height;
+      if (dragFrameRef.current !== null) {
+        return;
+      }
+      dragFrameRef.current = requestAnimationFrame(() => {
+        dragFrameRef.current = null;
+        setDragFrame({
+          height: dragHeightRef.current ?? height,
+          floor: dragRef.current?.geometry.collapsed ?? geometry.collapsed,
+          ceiling: dragRef.current?.geometry.ceiling ?? geometry.ceiling,
+        });
+      });
+    },
+    [],
+  );
 
-  const finishDrag = useCallback(
+  const moveDrag = useCallback(
     (event: SheetPointerEvent): void => {
       const sample = dragRef.current;
       if (sample === null || sample.pointerId !== event.pointerId) {
         return;
       }
-      const height = clampSheetHeight(sample.startHeight + sample.startY - event.clientY, {
-        min: sample.geometry.collapsed,
-        max: sample.geometry.ceiling,
-      });
-      const elapsed = event.timeStamp - sample.lastTime;
-      const velocityY = elapsed > 0 ? (event.clientY - sample.lastY) / elapsed : 0;
+      scheduleDragHeight(
+        clampSheetHeight(
+          sample.startHeight + sample.startY - event.clientY,
+          {
+            min: sample.geometry.collapsed,
+            max: sample.geometry.ceiling,
+          },
+        ),
+      );
+    },
+    [scheduleDragHeight],
+  );
+
+  const settleDrag = useCallback(
+    (event: SheetPointerEvent, releaseCapture: boolean): void => {
+      const sample = dragRef.current;
+      if (sample === null || sample.pointerId !== event.pointerId) {
+        return;
+      }
+      const height = dragHeightRef.current ?? sample.startHeight;
+      if (dragFrameRef.current !== null) {
+        cancelAnimationFrame(dragFrameRef.current);
+      }
+      dragFrameRef.current = null;
       dragRef.current = null;
+      dragHeightRef.current = null;
       setDragFrame(null);
-      onSnapChange(nearestSheetSnap(height, sample.geometry, velocityY));
-      if (event.currentTarget.hasPointerCapture?.(event.pointerId) !== false) {
+      onSnapChange(nearestSheetSnap(height, sample.geometry));
+      if (
+        releaseCapture &&
+        event.currentTarget.hasPointerCapture?.(event.pointerId)
+      ) {
         event.currentTarget.releasePointerCapture?.(event.pointerId);
       }
     },
     [onSnapChange],
   );
 
-  const cancelDrag = useCallback((event: SheetPointerEvent): void => {
-    const sample = dragRef.current;
-    if (sample === null || sample.pointerId !== event.pointerId) {
-      return;
-    }
-    dragRef.current = null;
-    setDragFrame(null);
+  const finishDrag = useCallback(
+    (event: SheetPointerEvent): void => {
+      settleDrag(event, true);
+    },
+    [settleDrag],
+  );
+
+  const losePointerCapture = useCallback(
+    (event: SheetPointerEvent): void => {
+      settleDrag(event, false);
+    },
+    [settleDrag],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (dragFrameRef.current !== null) {
+        cancelAnimationFrame(dragFrameRef.current);
+      }
+      dragFrameRef.current = null;
+      dragRef.current = null;
+      dragHeightRef.current = null;
+    };
   }, []);
+
+  useEffect(() => {
+    if (geometry !== null) return;
+    if (dragFrameRef.current !== null) {
+      cancelAnimationFrame(dragFrameRef.current);
+    }
+    dragFrameRef.current = null;
+    dragRef.current = null;
+    dragHeightRef.current = null;
+    setDragFrame((current) => (current === null ? current : null));
+  }, [geometry]);
 
   const setSnap = useCallback(
     (next: SheetSnap): void => {
-      onSnapChange(next);
+      if (geometry !== null) onSnapChange(next);
     },
-    [onSnapChange],
+    [geometry, onSnapChange],
   );
 
   const step = useCallback(
     (direction: 1 | -1): void => {
+      if (geometry === null) return;
       const currentIndex = SNAP_ORDER.indexOf(snap);
       const nextSnap =
         SNAP_ORDER[Math.min(SNAP_ORDER.length - 1, Math.max(0, currentIndex + direction))];
@@ -178,11 +260,12 @@ export function useItinerarySheet(options: UseItinerarySheetOptions): ItineraryS
         onSnapChange(nextSnap);
       }
     },
-    [onSnapChange, snap],
+    [geometry, onSnapChange, snap],
   );
 
   const moveWithKeyboard = useCallback(
     (event: SheetKeyboardEvent): void => {
+      if (geometry === null) return;
       const currentIndex = SNAP_ORDER.indexOf(snap);
       const nextSnap =
         event.key === "ArrowUp"
@@ -200,20 +283,28 @@ export function useItinerarySheet(options: UseItinerarySheetOptions): ItineraryS
       event.preventDefault();
       onSnapChange(nextSnap);
     },
-    [onSnapChange, snap],
+    [geometry, onSnapChange, snap],
   );
 
-  const height = dragFrame?.height ?? snapHeight(snap, geometry);
-  const ceiling = dragFrame?.ceiling ?? geometry.ceiling;
+  const height =
+    geometry === null ? null : (dragFrame?.height ?? snapHeight(snap, geometry));
+  const ceiling =
+    geometry === null ? null : (dragFrame?.ceiling ?? geometry.ceiling);
+  const floor = geometry === null ? null : (dragFrame?.floor ?? geometry.collapsed);
 
   const getSheetProps = useCallback(
     (): SheetProps => ({
       ref: setElement,
-      style: {
-        height: `${height}px`,
-        maxHeight: `${ceiling}px`,
-        ...(dragging || reducedMotion ? { transitionDuration: "0ms" } : {}),
-      },
+      style:
+        height === null || ceiling === null
+          ? {}
+          : {
+              height: `${height}px`,
+              maxHeight: `${ceiling}px`,
+              ...(dragging || reducedMotion
+                ? { transitionDuration: "0ms" }
+                : {}),
+            },
       "data-dragging": dragging ? "true" : "false",
       "data-snap": snap,
     }),
@@ -223,7 +314,8 @@ export function useItinerarySheet(options: UseItinerarySheetOptions): ItineraryS
   const getHandleProps = useCallback(
     (
       userProps: Partial<SheetHandleProps> & Record<string, unknown> = {},
-    ): SheetHandleProps & Record<string, unknown> => {
+    ): Partial<SheetHandleProps> & Record<string, unknown> => {
+      if (geometry === null) return userProps;
       const composePointer = (
         user: ((event: SheetPointerEvent) => void) | undefined,
         own: (event: SheetPointerEvent) => void,
@@ -249,8 +341,11 @@ export function useItinerarySheet(options: UseItinerarySheetOptions): ItineraryS
         onPointerDown: composePointer(onPointerDown, beginDrag),
         onPointerMove: composePointer(onPointerMove, moveDrag),
         onPointerUp: composePointer(onPointerUp, finishDrag),
-        onPointerCancel: composePointer(onPointerCancel, cancelDrag),
-        onLostPointerCapture: composePointer(onLostPointerCapture, cancelDrag),
+        onPointerCancel: composePointer(onPointerCancel, finishDrag),
+        onLostPointerCapture: composePointer(
+          onLostPointerCapture,
+          losePointerCapture,
+        ),
         onKeyDown: (event: SheetKeyboardEvent): void => {
           onKeyDown?.(event);
           if (!event.defaultPrevented) {
@@ -258,9 +353,22 @@ export function useItinerarySheet(options: UseItinerarySheetOptions): ItineraryS
           }
         },
         "aria-keyshortcuts": "ArrowUp ArrowDown Home End",
+        "aria-valuenow": height!,
+        "aria-valuemin": floor!,
+        "aria-valuemax": ceiling!,
       };
     },
-    [beginDrag, cancelDrag, finishDrag, moveDrag, moveWithKeyboard],
+    [
+      beginDrag,
+      ceiling,
+      finishDrag,
+      floor,
+      geometry,
+      height,
+      losePointerCapture,
+      moveDrag,
+      moveWithKeyboard,
+    ],
   );
 
   return {

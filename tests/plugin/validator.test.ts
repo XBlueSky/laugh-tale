@@ -68,6 +68,19 @@ describe("plugin contract validator", () => {
     await expect(validateFixture(createValidFixture())).resolves.toEqual([]);
   });
 
+  test.each([
+    "plugins/eternal-pose/.codex-plugin/plugin.json",
+    ".claude-plugin/marketplace.json",
+    ".agents/plugins/marketplace.json",
+  ])("rejects version disagreement in %s", async (path) => {
+    const root = createValidFixture();
+    const declaration = readJson(path) as { version?: string; plugins?: Array<{ version?: string }> };
+    if (declaration.plugins) declaration.plugins[0].version = "2.0.1";
+    else declaration.version = "2.0.1";
+    writeJson(root, path, declaration);
+    expect((await validateFixture(root)).join("\n")).toMatch(/version|eternal-pose@/i);
+  });
+
   test("rejects a Codex marketplace entry outside Developer Tools", async () => {
     const fixtureRoot = createValidFixture();
     const marketplace = readJson(".agents/plugins/marketplace.json") as {

@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - codex/eternal-pose-v2-public
 
 permissions:
   contents: read
@@ -12,6 +13,7 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -23,16 +25,43 @@ jobs:
       # file: tarballs; npm 11 resolves the same tree fine.
       - run: npm install -g npm@11
       - run: npm ci
-      - run: npm run stage:starter
+      - name: Install pinned font validation tools
+        run: |
+          python3 -m venv tmp/oak-font-validation
+          tmp/oak-font-validation/bin/python -m pip install --disable-pip-version-check -r scripts/requirements-oak-huninn.txt
+          echo "$GITHUB_WORKSPACE/tmp/oak-font-validation/bin" >> "$GITHUB_PATH"
+      # Build, pack, and install the four unpublished packages in DAG order.
+      - run: npm run stage:starter -- --setup-locale en
       - run: npm run check
+        timeout-minutes: 15
         env:
           LAUGH_TALE_STARTER_ROOT: ${{ github.workspace }}/tmp/staged-starter
       - run: npm run test:starter:staged
       - run: npm --prefix tmp/staged-starter exec playwright install --with-deps chromium
       - run: npm run test:e2e:staged
+      - run: npm run test:oak-washi:browser
+
+  # Generate a synthetic example against locally packed, unpublished packages.
+  # Provider calls remain fake in its end-to-end suite.
+  example-meridian:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install -g npm@11
+      - run: npm ci
+      - run: npm run stage:example
+      - run: npm run test:example:identity
+      - run: npm run test:example:staged
+      - run: npm --prefix tmp/staged-meridian exec playwright install --with-deps chromium
+      - run: npm run test:example:e2e
 
   release:
-    needs: check
+    needs: [check, example-meridian]
     # Only release from the default branch (not PRs or tags). semantic-release
     # creates the tags itself; its [skip ci] bump commit won't re-trigger CI.
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'

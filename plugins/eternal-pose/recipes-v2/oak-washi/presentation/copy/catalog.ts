@@ -1,0 +1,271 @@
+import type { OakWashiCopy } from "./schema.js";
+
+export const locale = "zh-Hant-TW";
+
+export const catalog = {
+  "accessibleNames": {
+    "candidateDialog": "比較候選項目",
+    "collapseDayRail": "收合日期導覽",
+    "collapseSheet": "收合行程",
+    "dayRail": "旅程日期",
+    "expandDayRail": "展開日期導覽",
+    "expandSheet": "展開行程",
+    "header": "旅程日期標頭",
+    "itinerarySheet": "行程",
+    "map": "旅程地圖",
+    "marker": "地圖標記",
+    "openDetails": "開啟詳細資訊",
+    "route": "路線",
+    "userLocation": "你的位置"
+  },
+  "booking": {
+    "confirmed": "已確認",
+    "none": "無預約",
+    "open": "開啟預約",
+    "pending": "待確認",
+    "reference": "預約編號"
+  },
+  "candidate": {
+    "browse": "瀏覽",
+    "cancel": "取消",
+    "confirm": "確認",
+    "draft": "預覽中",
+    "open": "比較候選項目",
+    "preview": "預覽",
+    "reopen": "變更選擇",
+    "selected": "已選候選項目",
+    "single": "選擇一項",
+    "title": "候選項目",
+    "unresolved": "地點尚未解析"
+  },
+  "certainty": {
+    "candidate": "候選",
+    "confirmed": "已確認",
+    "suggested": "建議",
+    "unverified": "未驗證"
+  },
+  "experience": {
+    "collapseDayRail": "隱藏旅程日期",
+    "collapseSheet": "收合",
+    "day": "第",
+    "dayOfTrip": "第 {ordinal} 天",
+    "expandDayRail": "顯示旅程日期",
+    "expandSheet": "展開",
+    "home": "旅程首頁",
+    "itinerary": "行程",
+    "mapCoverageNone": "主要目的地 {mapped}／{total} 已標示；其餘位置仍待驗證，行程仍可照常閱讀。",
+    "mapCoveragePartial": "主要目的地 {mapped}／{total} 已標示；其餘位置仍待驗證。",
+    "primaryCount": "{count} 個目的地",
+    "summary": "當日摘要",
+    "tripTime": "旅程時間"
+  },
+  "facts": {
+    "area": "區域",
+    "arrivalBuffer": "提前 {minutes} 分鐘抵達",
+    "base": "住宿據點",
+    "bus": "巴士",
+    "checkIn": "入住",
+    "checkOut": "退房",
+    "checklist": "待辦清單",
+    "cuisine": "料理",
+    "customKind": "活動",
+    "duration": "所需時間",
+    "false": "否",
+    "meters": "{distance} 公尺",
+    "mode": "移動方式",
+    "must": "必買",
+    "nice": "有餘裕再買",
+    "plan": "移動計畫",
+    "priority": "優先程度",
+    "rail": "鐵路",
+    "return": "返回住宿",
+    "status": "狀態",
+    "terminal": "航廈／站區",
+    "true": "是",
+    "unverifiedLocation": "地點尚未驗證",
+    "unverifiedLocationConsequence": "地點尚未驗證，暫無地圖標記與導航"
+  },
+  "fatal": {
+    "externalNavigationRetained": "仍可使用外部導航。",
+    "homeRetained": "仍可使用旅程總覽。",
+    "itineraryRetained": "仍可使用行程內容。",
+    "openHome": "返回首頁",
+    "provider": "服務提供者已停止回應。",
+    "render": "無法顯示旅程。",
+    "retry": "再試一次",
+    "state": "旅程進入無效狀態。",
+    "title": "發生錯誤"
+  },
+  "home": {
+    "dates": "日期",
+    "days": "旅程日期",
+    "destination": "目的地",
+    "lodging": "住宿",
+    "noLodging": "沒有住宿資訊",
+    "noReservations": "沒有預約",
+    "noTasks": "沒有行前任務",
+    "openDay": "開啟當日行程",
+    "openExperience": "開啟行程",
+    "reservations": "預約",
+    "tasks": "出發前",
+    "title": "旅程總覽",
+    "travelers": "旅伴"
+  },
+  "loading": {
+    "experience": "正在準備行程",
+    "home": "正在準備你的旅程",
+    "location": "正在取得你的位置",
+    "map": "正在載入地圖",
+    "places": "正在載入地點資訊",
+    "progress": "正在載入旅程進度",
+    "routes": "正在載入路線",
+    "title": "載入中"
+  },
+  "location": {
+    "active": "定位已啟用",
+    "denied": "定位權限遭拒",
+    "idle": "定位已關閉",
+    "locate": "使用我的位置",
+    "recenter": "重新置中到我的位置",
+    "requesting": "正在要求定位",
+    "stop": "停止使用我的位置",
+    "unavailable": "無法取得位置",
+    "waitingForFix": "正在等待定位"
+  },
+  "metadata": {
+    "productName": "Eternal Pose",
+    "setupDescription": "加入有效的旅程資料即可開始規劃。",
+    "setupTitle": "設定你的旅程"
+  },
+  "navigation": {
+    "open": "開啟路線導航",
+    "restoreFullDay": "顯示完整行程",
+    "returnToCurrent": "返回目前行程",
+    "returnToLodging": "返回住宿地點",
+    "unavailable": "無法使用路線導航"
+  },
+  "openingHours": {
+    "absent": "未提供營業時間",
+    "alwaysOpen": "全天營業",
+    "closed": "目前休息",
+    "incomplete": "營業時間不完整",
+    "invalid": "無法取得營業時間",
+    "open": "目前營業",
+    "permanentlyClosed": "永久停業",
+    "temporarilyClosed": "暫時停業",
+    "unknown": "營業狀態不明"
+  },
+  "persistence": {
+    "cancelReset": "取消",
+    "confirmReset": "確認重設",
+    "manageProgress": "管理進度",
+    "memoryOnly": "僅在本次瀏覽期間儲存",
+    "memoryOnlyNotice": "關閉此頁面後，變更將會遺失。",
+    "persistent": "已儲存在此裝置",
+    "resetDay": "重設當日進度",
+    "resetDayScope": "要重設的日期",
+    "resetDone": "已重設進度。",
+    "resetExplanation": "清除此範圍內的完成項目、略過地點、購物進度及候選選擇。行程內容維持不變。",
+    "resetTrip": "重設旅程進度"
+  },
+  "progress": {
+    "complete": "完成",
+    "completedOfTotal": "已完成 {completed}／{total}",
+    "markComplete": "標示為完成",
+    "markIncomplete": "標示為未完成",
+    "pending": "待處理",
+    "purchased": "已購買",
+    "restore": "還原",
+    "skip": "略過",
+    "skipped": "已略過",
+    "unavailable": "無法取得"
+  },
+  "provider": {
+    "cancelled": "要求已取消",
+    "idle": "尚未開始",
+    "implausibleResult": "服務提供者傳回不合理的結果",
+    "loaderFailed": "無法載入服務提供者",
+    "loading": "載入中",
+    "malformedResponse": "服務提供者傳回無效資料",
+    "map": "地圖",
+    "missingConfiguration": "缺少服務提供者設定",
+    "network": "網路要求失敗",
+    "notFound": "找不到結果",
+    "places": "地點",
+    "ready": "就緒",
+    "requestDenied": "服務提供者拒絕要求",
+    "retry": "重試",
+    "routes": "路線",
+    "unavailable": "無法使用",
+    "unsupported": "服務提供者不支援此要求"
+  },
+  "roles": {
+    "base": "據點",
+    "connector": "路線",
+    "journey": "長途移動",
+    "logisticsGroup": "行程事項",
+    "primary": "目的地",
+    "task": "任務"
+  },
+  "routes": {
+    "authoredFallback": "使用旅程原有路線資訊",
+    "distance": "距離 {distance}",
+    "driving": "開車",
+    "duration": "{duration} 分鐘",
+    "external": "開啟外部導航",
+    "flight": "航班",
+    "idle": "尚未要求路線",
+    "loading": "正在載入路線",
+    "manual": "旅程原有路線",
+    "noDetails": "無法取得路線資訊",
+    "provider": "服務提供者路線",
+    "ready": "路線已就緒",
+    "recomposed": "已更新路線",
+    "retry": "重試路線",
+    "steps": "導航步驟",
+    "transit": "大眾運輸",
+    "unavailable": "無法取得路線",
+    "unknown": "未指定移動方式",
+    "walking": "步行"
+  },
+  "setup": {
+    "invalidTrip": "旅程資料無效。",
+    "missingTrip": "尚未加入旅程。",
+    "retry": "再次檢查",
+    "title": "需要設定旅程"
+  },
+  "status": {
+    "candidate": "候選",
+    "completed": "已完成",
+    "current": "目前",
+    "next": "下一站",
+    "selected": "已選取",
+    "skipped": "已略過",
+    "unresolved": "未解析",
+    "viewing": "正在查看"
+  },
+  "timeline": {
+    "logisticsGroup": "行程事項"
+  },
+  "timing": {
+    "end": "結束於 {time}",
+    "fixed": "固定時間",
+    "nextDay": "隔日",
+    "range": "{start}–{end}",
+    "start": "開始於 {time}",
+    "suggested": "建議時間",
+    "unknown": "時間不明",
+    "untimed": "未設定時間"
+  },
+  "types": {
+    "custom": "活動",
+    "dining": "餐飲",
+    "experience": "體驗",
+    "lodging": "住宿",
+    "logistics": "行程事項",
+    "shopping": "購物",
+    "sightseeing": "景點",
+    "transfer": "轉乘",
+    "transport": "交通"
+  }
+} satisfies OakWashiCopy;

@@ -24,7 +24,7 @@ function sightseeing(id: string, title: string): TripNode {
     optionality: "core",
     place: {
       name: title,
-      coordinates: { lat: 35.7, lng: 139.7 },
+      identity: { status: "resolved", coordinates: { lat: 35.7, lng: 139.7 } },
       certainty: "confirmed",
     },
     payload: {},
@@ -66,6 +66,7 @@ function effectiveTrip(nodes: TripNode[], routes: RouteEdge[]): EffectiveTrip {
   const trip: Trip = {
     id: "timeline-structure-trip",
     title: "Timeline structure",
+    locale: "en",
     timezone: "Asia/Tokyo",
     startDate: "2040-06-12",
     endDate: "2040-06-12",
@@ -201,17 +202,59 @@ describe("buildTimelineEntries", () => {
     const firstGroup = entries[0] as LogisticsGroupEntry;
 
     expect(entries.map((entry) => `${entry.kind}:${entry.id}`)).toEqual([
-      "logistics-group:logistics:immigration--bags",
+      'logistics-group:logistics-group:["immigration","bags"]',
       "node:lobby",
       "node:ticket",
       "route:ticket--platform",
-      "logistics-group:logistics:platform--board",
+      'logistics-group:logistics-group:["platform","board"]',
     ]);
     expect(firstGroup.entries).toEqual([
       { kind: "node", id: "immigration", node: nodes[0] },
       { kind: "node", id: "bags", node: nodes[1] },
     ]);
     expect(firstGroup.entries[0]).not.toBe(firstGroup.entries[1]);
+  });
+
+  it("retains recomposed active routes while rendering skipped authored rows", () => {
+    const trip = effectiveTrip(
+      [
+        sightseeing("a", "A"),
+        { ...sightseeing("b", "B"), optionality: "optional" },
+        sightseeing("c", "C"),
+      ],
+      [route("a-b", "a", "b"), route("b-c", "b", "c")],
+    );
+    const day = trip.days[0];
+    day.nodes[1] = { ...day.nodes[1], skipped: true };
+
+    expect(buildTimelineEntries(day, trip).map(({ kind, id }) => `${kind}:${id}`)).toEqual([
+      "node:a", "route:route:a--c", "node:b", "node:c",
+    ]);
+  });
+
+  it("keeps every child-origin route exactly once and splits groups for reverse adjacent edges", () => {
+    const routes = [
+      route("first-branch", "one", "outside"),
+      route("second-branch", "two", "outside"),
+      route("reverse-adjacent", "three", "two"),
+    ];
+    const trip = effectiveTrip(
+      [logistics("one", "One"), logistics("two", "Two"), logistics("three", "Three"), sightseeing("outside", "Outside")],
+      routes,
+    );
+    trip.routes = routes;
+
+    const entries = buildTimelineEntries(trip.days[0], trip);
+    expect(entries.map(({ kind, id }) => `${kind}:${id}`)).toEqual([
+      'logistics-group:logistics-group:["one","two"]',
+      "route:first-branch",
+      "route:second-branch",
+      "node:three",
+      "route:reverse-adjacent",
+      "node:outside",
+    ]);
+    const routeIds = entries.filter((entry): entry is RouteEntry => entry.kind === "route").map(({ id }) => id);
+    expect(routeIds).toEqual(["first-branch", "second-branch", "reverse-adjacent"]);
   });
 
   it("emits every effective route owner exactly once in all-day order", () => {

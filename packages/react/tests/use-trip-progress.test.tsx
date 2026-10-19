@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { StrictMode, useEffect, useMemo } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,7 +6,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Trip } from "@laugh-tale-island/core";
 import { checklistCompletionKey, emptyTripProgress, nodeCompletionKey, taskCompletionKey, type TripProgressV1 } from "@laugh-tale-island/core";
 import { createLocalStorageProgressStore } from "@laugh-tale-island/core/browser";
-import { useTripProgress, type TripProgressController } from "@laugh-tale-island/react";
+import { useTripProgress, type TripProgressController } from "../src/use-trip-progress.js";
+
+it("resets every trip progress namespace through its existing store owner", async () => {
+  const store = createLocalStorageProgressStore("reset-trip");
+  store.write(JSON.stringify({ version: 1, selectedCandidateIds: { group: "option" }, shoppingStatuses: { item: "purchased" }, skippedNodeIds: ["node"], completedIds: ["task:pack"] }));
+  const { result } = renderHook(() => useTripProgress(twoDayTrip(), store));
+  await waitFor(() => expect(result.current.hydrated).toBe(true));
+  act(() => result.current.resetTrip());
+  expect(result.current.progress).toEqual(emptyTripProgress());
+  expect(store.read()).toEqual({ status: "ready", value: JSON.stringify(emptyTripProgress()) });
+});
 
 function tripProgressStorageKey(tripId: string): string {
   return `eternal-pose:trip-progress:v1:${tripId}`;
@@ -56,6 +66,7 @@ function twoDayTrip(id = "trip-alpha"): Trip {
   return {
     id,
     title: "Synthetic progress trip",
+    locale: "en",
     timezone: "Etc/UTC",
     startDate: "2040-06-12",
     endDate: "2040-06-13",
@@ -198,6 +209,36 @@ function dispatchStorage(key: string, newValue: string | null): void {
 }
 
 describe("useTripProgress", () => {
+  it("invalidates both trip and store ownership before hydration and ignores detached subscriptions", async () => {
+    const listeners: Array<(value: string | null) => void> = [];
+    let active = 0;
+    let saved = JSON.stringify({ ...emptyTripProgress(), completedIds: ["task:first"] });
+    const write = vi.fn(() => false);
+    const store = { read: () => ({ status: "ready" as const, value: saved }), write, subscribe: (listener: (value: string | null) => void) => { listeners.push(listener); active++; return () => { active--; }; } };
+    const hook = renderHook(({ trip, store }) => useTripProgress(trip, store), { initialProps: { trip: twoDayTrip(), store } });
+    await waitFor(() => expect(hook.result.current.hydrated).toBe(true));
+    const oldController = hook.result.current;
+    saved = JSON.stringify({ ...emptyTripProgress(), completedIds: ["task:second"] });
+    hook.rerender({ trip: twoDayTrip("next"), store });
+    expect(hook.result.current.hydrated).toBe(false);
+    expect(hook.result.current.progress.completedIds).toEqual([]);
+    act(() => { oldController.setCompleted("task:stale", true); hook.result.current.setCompleted("task:too-early", true); listeners[0](JSON.stringify({ ...emptyTripProgress(), completedIds: ["task:stale-tab"] })); });
+    expect(write).not.toHaveBeenCalled();
+    await waitFor(() => expect(hook.result.current.hydrated).toBe(true));
+    expect(hook.result.current.progress.completedIds).toEqual(["task:second"]);
+    act(() => { listeners[0](JSON.stringify({ ...emptyTripProgress(), completedIds: ["task:stale-tab"] })); });
+    expect(hook.result.current.progress.completedIds).toEqual(["task:second"]);
+    const replacement = { ...store, read: () => ({ status: "ready" as const, value: JSON.stringify(emptyTripProgress()) }) };
+    hook.rerender({ trip: twoDayTrip("next"), store: replacement });
+    expect(hook.result.current.hydrated).toBe(false);
+    expect(hook.result.current.progress.completedIds).toEqual([]);
+    await waitFor(() => expect(hook.result.current.hydrated).toBe(true));
+    act(() => { listeners[1](JSON.stringify({ ...emptyTripProgress(), completedIds: ["task:old-store"] })); });
+    expect(hook.result.current.progress.completedIds).toEqual([]);
+    expect(active).toBe(1);
+    hook.unmount();
+    expect(active).toBe(0);
+  });
   it("hydrates one atomic state in StrictMode without echoing or writing an empty schema", async () => {
     const trip = twoDayTrip();
     const seeded: TripProgressV1 = {

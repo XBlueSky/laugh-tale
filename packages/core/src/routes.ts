@@ -1,5 +1,6 @@
 import type { PlaceRef, RouteEdge, RouteMode, TripDay, TripNode } from "./model.js";
 import type { EffectiveNode } from "./resolve-itinerary.js";
+import { deriveNavigationTarget } from "./navigation-target.js";
 
 export interface RoutePresentation {
   edge: RouteEdge;
@@ -14,6 +15,8 @@ function routeOwnerError(id: string): Error {
 }
 
 export interface RouteOwnerOptions {
+  /** Providers supported by the navigation adapter; no provider is implicit. */
+  supportedNavigationProviders?: readonly string[];
   /**
    * How to handle duplicate route owner IDs. `validateTrip` already reports
    * duplicates as structured issues; `"throw"` turns them into a hard error
@@ -44,21 +47,17 @@ export function deduplicateRouteOwners(
   return unique;
 }
 
-function navigationEndpoint(node: EffectiveNode): string | undefined {
-  const name = node.node.place?.name;
-  return name !== undefined && name.trim().length > 0 ? name : undefined;
-}
-
 function placeFingerprint(place: PlaceRef | undefined): string {
   if (place === undefined) {
     return "missing";
   }
   return JSON.stringify([
     place.name,
-    place.coordinates?.lat ?? null,
-    place.coordinates?.lng ?? null,
-    place.provider?.name ?? null,
-    place.provider?.placeId ?? null,
+    place.identity.status,
+    place.identity.status === "resolved" ? place.identity.coordinates?.lat ?? null : null,
+    place.identity.status === "resolved" ? place.identity.coordinates?.lng ?? null : null,
+    place.identity.status === "resolved" ? place.identity.providerReference?.provider ?? null : null,
+    place.identity.status === "resolved" ? place.identity.providerReference?.id ?? null : null,
   ]);
 }
 
@@ -66,26 +65,17 @@ function endpointPlaceChanged(sourceNode: TripNode, effectiveNode: EffectiveNode
   return placeFingerprint(sourceNode.place) !== placeFingerprint(effectiveNode.node.place);
 }
 
-function endpointNavigation(
-  origin: EffectiveNode,
-  destination: EffectiveNode,
-): RouteEdge["navigation"] | undefined {
-  const navigationOrigin = navigationEndpoint(origin);
-  const navigationDestination = navigationEndpoint(destination);
-  return navigationOrigin !== undefined && navigationDestination !== undefined
-    ? { origin: navigationOrigin, destination: navigationDestination }
+function validNavigation(navigation: RouteEdge["navigation"] | undefined): RouteEdge["navigation"] | undefined {
+  return navigation !== undefined && navigation.origin.trim().length > 0 && navigation.destination.trim().length > 0
+    ? navigation
     : undefined;
 }
 
 function freshEstimatedEdge(
   edge: Pick<RouteEdge, "id" | "dayId" | "fromNodeId" | "toNodeId" | "mode">,
-  origin: EffectiveNode,
-  destination: EffectiveNode,
-  options: { summary?: string; includeNavigation: boolean },
+  authoredNavigation?: RouteEdge["navigation"],
 ): RouteEdge {
-  const navigation = options.includeNavigation
-    ? endpointNavigation(origin, destination)
-    : undefined;
+  const navigation = validNavigation(authoredNavigation);
   return {
     id: edge.id,
     dayId: edge.dayId,
@@ -94,17 +84,14 @@ function freshEstimatedEdge(
     mode: edge.mode,
     source: "recomposed",
     certainty: "unverified",
-    ...(options.summary === undefined ? {} : { summary: options.summary }),
     ...(navigation === undefined ? {} : { navigation }),
   };
 }
 
-interface AggregateMode {
-  mode: RouteMode;
-  mixedSummary?: string;
-}
-
-function aggregateMode(path: readonly RouteEdge[]): AggregateMode {
+function aggregateMode(path: readonly RouteEdge[]): RouteMode {
+  if (path.some(({ mode }) => mode === "unknown")) {
+    return "unknown";
+  }
   const substantiveModes: RouteMode[] = [];
   for (const { mode } of path) {
     if (mode !== "walking" && !substantiveModes.includes(mode)) {
@@ -113,17 +100,12 @@ function aggregateMode(path: readonly RouteEdge[]): AggregateMode {
   }
 
   if (substantiveModes.length === 0) {
-    return { mode: "walking" };
+    return "walking";
   }
   if (substantiveModes.length === 1) {
-    return { mode: substantiveModes[0] ?? "walking" };
+    return substantiveModes[0] ?? "walking";
   }
-
-  // The first substantive leg is the deterministic primary presentation mode.
-  return {
-    mode: substantiveModes[0] ?? "walking",
-    mixedSummary: `Mixed modes: ${substantiveModes.join(" → ")}`,
-  };
+  return "unknown";
 }
 
 function recomposeEdge(
@@ -165,13 +147,7 @@ function recomposeEdge(
       dayId: day.id,
       fromNodeId: origin.sourceNodeId,
       toNodeId: destination.sourceNodeId,
-      mode: aggregate.mode,
-    },
-    origin,
-    destination,
-    {
-      summary: aggregate.mixedSummary,
-      includeNavigation: aggregate.mixedSummary === undefined && aggregate.mode !== "flight",
+      mode: aggregate,
     },
   );
 }
@@ -213,9 +189,7 @@ export function resolveRouteEdges(
       output.push(
         ...direct.map((edge) =>
           placeChanged
-            ? freshEstimatedEdge(edge, origin, destination, {
-                includeNavigation: edge.mode !== "flight",
-              })
+            ? freshEstimatedEdge(edge, edge.mode === "unknown" ? edge.navigation : undefined)
             : { ...edge },
         ),
       );
@@ -231,13 +205,7 @@ export function resolveRouteEdges(
   return deduplicateRouteOwners(output, options);
 }
 
-function isNavigable(edge: RouteEdge, nodesById: ReadonlyMap<string, EffectiveNode>): boolean {
-  if (edge.mode === "flight") {
-    return false;
-  }
-  if (edge.source === "recomposed" && edge.summary?.startsWith("Mixed modes: ") === true) {
-    return false;
-  }
+function isNavigable(edge: RouteEdge, nodesById: ReadonlyMap<string, EffectiveNode>, supportedProviders: readonly string[]): boolean {
   if (
     edge.navigation !== undefined &&
     edge.navigation.origin.trim().length > 0 &&
@@ -246,13 +214,17 @@ function isNavigable(edge: RouteEdge, nodesById: ReadonlyMap<string, EffectiveNo
     return true;
   }
 
+  if (edge.mode === "unknown" || edge.mode === "flight") {
+    return false;
+  }
+
   const origin = nodesById.get(edge.fromNodeId);
   const destination = nodesById.get(edge.toNodeId);
   return (
     origin !== undefined &&
     destination !== undefined &&
-    navigationEndpoint(origin) !== undefined &&
-    navigationEndpoint(destination) !== undefined
+    deriveNavigationTarget(origin.node.place, supportedProviders) !== null &&
+    deriveNavigationTarget(destination.node.place, supportedProviders) !== null
   );
 }
 
@@ -272,6 +244,6 @@ export function buildRoutePresentations(
       edge.durationMinutes <= 5
         ? "compact"
         : "full",
-    navigable: isNavigable(edge, nodesById),
+    navigable: isNavigable(edge, nodesById, options.supportedNavigationProviders ?? []),
   }));
 }

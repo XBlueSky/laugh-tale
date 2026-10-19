@@ -61,8 +61,13 @@ async function main() {
         commandEvents.push({ ...command, at: Date.now(), phase: "complete" }),
     },
   );
-  runNpm(["run", "check"], result.stagedRoot);
+  const skipApplicationCheck = process.env.STAGE_CHILD_SKIP_APP_CHECK === "1";
+  if (!skipApplicationCheck) runNpm(["run", "check"], result.stagedRoot);
   console.log(
-    `STAGE_CHILD_RESULT:${JSON.stringify({ ...result, check: "passed", commandEvents })}`,
+    `STAGE_CHILD_RESULT:${JSON.stringify({
+      ...result,
+      applicationCheck: skipApplicationCheck ? "skipped" : "passed",
+      commandEvents,
+    })}`,
   );
 }

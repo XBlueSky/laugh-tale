@@ -1,0 +1,68 @@
+:root {
+  color-scheme: light;
+  --oak-canvas: #f6f2ea;
+  --oak-surface: #fbf9f5;
+  --oak-surface-muted: #f2ede4;
+  --oak-surface-strong: #fffdf9;
+  --oak-ink: #352f2a;
+  --oak-ink-muted: #766e65;
+  --oak-rule: #d8d0c4;
+  --oak-route-teal: #6f8f8c;
+  --oak-accent: #b86f4b;
+  --oak-accent-surface: #f2e3d9;
+  --oak-selection-surface: #f7eee7;
+  --oak-selection-rule: var(--oak-accent);
+  --oak-warning: #9a7338;
+  --oak-focus: #8f5036;
+  --oak-map-surface: #e8e2d8;
+
+  /* Dark semantic text roles preserve AA on the warm surfaces. */
+  --oak-text-primary: var(--oak-ink);
+  --oak-text-secondary: #5e574f;
+  --oak-text-action: var(--oak-focus);
+  --oak-text-route: #496b68;
+  --oak-text-warning: #76521f;
+
+  --oak-font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --oak-font-zh-hant: "Oak Huninn", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
+  --oak-font-ja: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP", sans-serif;
+  --oak-font-display: "Hiragino Mincho ProN", "Songti TC", "Noto Serif CJK TC", ui-serif, serif;
+
+  --oak-space-1: 0.25rem;
+  --oak-space-2: 0.5rem;
+  --oak-space-3: 0.75rem;
+  --oak-space-4: 1rem;
+  --oak-space-5: 1.5rem;
+  --oak-space-6: 2rem;
+  --oak-rule-width: 1px;
+  --oak-radius-control: 0.625rem;
+  --oak-radius-header: 1rem;
+  --oak-radius-sheet: 1.5rem;
+  --oak-shadow-header: 0 4px 16px rgb(53 47 42 / 8%);
+  --oak-shadow-sheet: 0 -4px 20px rgb(53 47 42 / 8%);
+  --oak-shadow-floating-header: 0 0.5rem 1.5rem rgb(53 47 42 / 13%);
+  --oak-shadow-floating-sheet: 0 -0.75rem 2.5rem rgb(53 47 42 / 14%);
+
+  --oak-motion-expand: 220ms;
+  --oak-motion-collapse: 160ms;
+  --oak-motion-sheet: 220ms;
+  --oak-motion-feedback: 160ms;
+  --oak-motion-press: 80ms;
+  --oak-motion-reveal: 200ms;
+  --oak-motion-dismiss: 180ms;
+  --oak-motion-easing: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --oak-safe-area-top: env(safe-area-inset-top, 0px);
+  --oak-safe-area-right: env(safe-area-inset-right, 0px);
+  --oak-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --oak-safe-area-left: env(safe-area-inset-left, 0px);
+}
+
+.oak-locale--zh-hant {
+  --oak-font-ui: var(--oak-font-zh-hant);
+  --oak-font-display: "Oak Huninn", system-ui, -apple-system, BlinkMacSystemFont, "Noto Sans TC", sans-serif;
+}
+
+.oak-locale--ja {
+  --oak-font-ui: var(--oak-font-ja);
+}

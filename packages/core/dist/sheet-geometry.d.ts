@@ -1,9 +1,8 @@
 export type SheetSnap = "collapsed" | "half" | "expanded";
 export interface SheetGeometryInput {
-    viewportHeight: number;
-    topClearance: number;
-    safeBottom: number;
     collapsedHeight: number;
+    halfHeight: number;
+    expandedHeight: number;
 }
 export interface SheetGeometry {
     collapsed: number;
@@ -17,5 +16,5 @@ interface SheetHeightBounds {
 }
 export declare function clampSheetHeight(height: number, bounds: SheetHeightBounds): number;
 export declare function resolveSheetGeometry(input: SheetGeometryInput): SheetGeometry;
-export declare function nearestSheetSnap(height: number, geometry: Pick<SheetGeometry, "collapsed" | "half" | "expanded">, velocityY?: number): SheetSnap;
+export declare function nearestSheetSnap(height: number, geometry: Pick<SheetGeometry, "collapsed" | "half" | "expanded">): SheetSnap;
 export {};

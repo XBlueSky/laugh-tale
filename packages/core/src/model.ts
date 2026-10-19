@@ -10,7 +10,7 @@ export type BuiltInNodeKind =
 
 export type TimingCertainty = "fixed" | "suggested" | "unknown";
 export type Optionality = "core" | "optional" | "candidate";
-export type RouteMode = "walking" | "transit" | "driving" | "flight";
+export type RouteMode = "walking" | "transit" | "driving" | "flight" | "unknown";
 export type FactCertainty = "confirmed" | "suggested" | "candidate" | "unverified";
 
 export interface Coordinates {
@@ -18,11 +18,46 @@ export interface Coordinates {
   lng: number;
 }
 
+export type TimelineRole =
+  | "primary"
+  | "base"
+  | "journey"
+  | "connector"
+  | "task"
+  | "logistics-group";
+
+export type MarkerMode = "numbered" | "base" | "none";
+
+export interface ProviderReference {
+  provider: string;
+  id: string;
+}
+
+export type PlaceUnresolvedReason =
+  | "not-reviewed"
+  | "no-accepted-candidate"
+  | "ambiguous";
+
+export type ResolvedPlaceIdentity =
+  | {
+      status: "resolved";
+      coordinates: Coordinates;
+      providerReference?: ProviderReference;
+    }
+  | {
+      status: "resolved";
+      providerReference: ProviderReference;
+      coordinates?: never;
+    };
+
+export type PlaceIdentity =
+  | ResolvedPlaceIdentity
+  | { status: "unresolved"; reason: PlaceUnresolvedReason };
+
 export interface PlaceRef {
   name: string;
-  coordinates?: Coordinates;
-  provider?: { name: "google"; placeId?: string };
   certainty: FactCertainty;
+  identity: PlaceIdentity;
 }
 
 export interface Timing {
@@ -73,6 +108,7 @@ export type ShoppingStatus = "pending" | "purchased" | "unavailable" | "skipped"
 export interface ShoppingItem {
   id: string;
   title: string;
+  note?: string;
   priority?: "must" | "nice";
   initialStatus?: ShoppingStatus;
 }
@@ -95,7 +131,7 @@ export type BuiltInNode =
       "transport",
       { mode: "walking" | "transit" | "driving"; plan?: string }
     >
-  | NodeBase<"transfer", { mode: "flight" | "rail" | "bus"; terminal?: string }>
+  | NodeBase<"transfer", { mode: "unknown" | "flight" | "rail" | "bus"; terminal?: string }>
   | NodeBase<
       "lodging",
       {
@@ -113,6 +149,7 @@ export type CustomNode = NodeBase<
   "custom",
   {
     customKind: string;
+    presentationRole: "primary" | "journey" | "task";
     capabilities: NodeCapabilities;
     data: Record<string, string | number | boolean>;
   }
@@ -141,6 +178,7 @@ export interface TripDay {
   date: string;
   title: string;
   summary?: string;
+  routeLabel?: string;
   nodes: TripNode[];
 }
 
@@ -161,9 +199,13 @@ export interface RouteEdge {
 export interface Trip {
   id: string;
   title: string;
+  locale: string;
   timezone: string;
   startDate: string;
   endDate: string;
+  destinationLabel?: string;
+  travelerLabel?: string;
+  clockPlaceLabel?: string;
   days: TripDay[];
   routes: RouteEdge[];
   candidateGroups: CandidateGroup[];

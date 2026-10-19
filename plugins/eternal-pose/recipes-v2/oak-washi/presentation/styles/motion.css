@@ -1,0 +1,43 @@
+/* One feedback vocabulary, without moving text or shrinking touch targets. */
+.oak-washi :is(.oak-control, .oak-day-choice, .oak-row-selection, .oak-route-selection, .oak-candidate-option) {
+  transition: background-color var(--oak-motion-feedback) var(--oak-motion-easing), border-color var(--oak-motion-feedback) var(--oak-motion-easing), color var(--oak-motion-feedback) var(--oak-motion-easing), box-shadow var(--oak-motion-feedback) var(--oak-motion-easing);
+}
+.oak-washi :is(.oak-control, .oak-day-choice, .oak-row-selection, .oak-route-selection, .oak-candidate-option):active {
+  transition-duration: var(--oak-motion-press);
+}
+.oak-primary-summary, .oak-support-summary, .oak-marker-drop {
+  transition: background-color var(--oak-motion-feedback) var(--oak-motion-easing), border-color var(--oak-motion-feedback) var(--oak-motion-easing), box-shadow var(--oak-motion-feedback) var(--oak-motion-easing);
+}
+.oak-day-choice:not([aria-current]):is(:hover, :focus-visible) { background: var(--oak-surface-muted); }
+.oak-day-choice:not([aria-current]):active { background: var(--oak-accent-surface); }
+
+/* Exit content is inert immediately; only its visual footprint is retained.
+   Grid preserves natural height and makes a reversal continue from this frame. */
+.oak-detail-motion {
+  display: grid;
+  grid-template-rows: 1fr;
+  min-width: 0;
+  opacity: 1;
+  transition: grid-template-rows var(--oak-motion-reveal) var(--oak-motion-easing), opacity var(--oak-motion-reveal) var(--oak-motion-easing);
+}
+.oak-detail-motion[data-open="false"] {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition-duration: var(--oak-motion-dismiss);
+}
+.oak-detail-motion-content { min-height: 0; min-width: 0; overflow: clip; display: flow-root; }
+
+.oak-disclosure-arrow { transition: transform var(--oak-motion-expand) var(--oak-motion-easing); }
+.oak-day-header[data-header-expanded="false"] .oak-disclosure-arrow { transition-duration: var(--oak-motion-collapse); }
+.oak-sheet-toggle .oak-disclosure-arrow { transition-duration: var(--oak-motion-sheet); }
+.oak-day-header[data-header-expanded="true"] .oak-disclosure-arrow,
+.oak-itinerary-sheet[data-sheet-snap="expanded"] > .oak-sheet-handle-row .oak-disclosure-arrow { transform: rotate(180deg); }
+
+/* Native details owns visibility and keyboard behavior. This short opacity
+   entrance enhances already-visible content; no new menu or focus policy. */
+@keyframes oak-content-reveal { from { opacity: 0.6; } to { opacity: 1; } }
+.oak-progress-reset[open] > .oak-progress-reset-content,
+.oak-candidate-dialog { animation: oak-content-reveal var(--oak-motion-reveal) var(--oak-motion-easing); }
+
+.oak-experience[data-motion="reduced"] .oak-detail-motion { transition-duration: 0ms; }
+.oak-experience[data-motion="reduced"] .oak-candidate-dialog { animation-duration: 0ms; }

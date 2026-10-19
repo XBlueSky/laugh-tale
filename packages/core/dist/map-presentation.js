@@ -1,34 +1,55 @@
 import { candidateMapOwnerId, nodeMapOwnerId } from "./map-owners.js";
 function validCoordinates(value) {
-    return (value !== undefined &&
-        Number.isFinite(value.lat) &&
-        value.lat >= -90 &&
-        value.lat <= 90 &&
-        Number.isFinite(value.lng) &&
-        value.lng >= -180 &&
-        value.lng <= 180);
+    if (typeof value !== "object" || value === null)
+        return false;
+    const { lat, lng } = value;
+    return (typeof lat === "number" && Number.isFinite(lat) && lat >= -90 && lat <= 90 &&
+        typeof lng === "number" && Number.isFinite(lng) && lng >= -180 && lng <= 180);
+}
+function validGeometry(value) {
+    if (!Array.isArray(value) || value.length < 2)
+        return false;
+    for (let index = 0; index < value.length; index += 1)
+        if (!Object.hasOwn(value, index) || !validCoordinates(value[index]))
+            return false;
+    return true;
+}
+function readyGeometry(value) {
+    return typeof value === "object" && value !== null &&
+        value.status === "ready" &&
+        validGeometry(value.geometry);
 }
 function cloneCoordinates({ lat, lng }) {
     return { lat, lng };
+}
+function resolvedCoordinates(place) {
+    return place?.identity !== undefined &&
+        typeof place.identity === "object" &&
+        place.identity !== null &&
+        place.identity.status === "resolved"
+        ? place.identity.coordinates
+        : undefined;
 }
 function effectivePlaces(effectiveDay, context) {
     const expandedParentId = context.expandedCandidateGroup?.parentNodeId;
     return effectiveDay.nodes.flatMap((effectiveNode) => {
         const { node, sourceNodeId } = effectiveNode;
         if (sourceNodeId === expandedParentId ||
-            !validCoordinates(node.place?.coordinates)) {
+            !validCoordinates(resolvedCoordinates(node.place))) {
             return [];
         }
         const tone = sourceNodeId === context.selectedNodeId
             ? "selected"
-            : effectiveNode.completed
-                ? "completed"
-                : "default";
+            : effectiveNode.skipped
+                ? "skipped"
+                : effectiveNode.completed
+                    ? "completed"
+                    : "default";
         return [
             {
                 ownerId: nodeMapOwnerId(sourceNodeId),
                 label: node.title,
-                coordinates: cloneCoordinates(node.place.coordinates),
+                coordinates: cloneCoordinates(resolvedCoordinates(node.place)),
                 tone,
             },
         ];
@@ -41,14 +62,15 @@ function expandedCandidatePlaces(effectiveDay, context) {
         return [];
     }
     return group.options.flatMap((option) => {
-        if (!validCoordinates(option.place?.coordinates)) {
+        const coordinates = resolvedCoordinates(option.place);
+        if (!validCoordinates(coordinates)) {
             return [];
         }
         return [
             {
                 ownerId: candidateMapOwnerId(option.id),
                 label: option.title,
-                coordinates: cloneCoordinates(option.place.coordinates),
+                coordinates: cloneCoordinates(coordinates),
                 tone: option.id === context.activeCandidateOptionId
                     ? "selected"
                     : "candidate",
@@ -93,7 +115,7 @@ export function buildMapPresentation(effectiveDay, context = {}) {
         }
         routeOwners.add(edge.id);
         const result = routeResults[edge.id];
-        if (result === undefined) {
+        if (!readyGeometry(result)) {
             return [];
         }
         const semantics = {
@@ -101,25 +123,12 @@ export function buildMapPresentation(effectiveDay, context = {}) {
             certainty: edge.certainty,
             mode: edge.mode,
         };
-        return result.status === "ready"
-            ? [
-                {
-                    edgeId: edge.id,
-                    path: result.path.map(cloneCoordinates),
-                    tone: edge.id === context.selectedRouteId
-                        ? "selected"
-                        : "default",
-                    ...semantics,
-                },
-            ]
-            : [
-                {
-                    edgeId: edge.id,
-                    path: [],
-                    tone: "unavailable",
-                    ...semantics,
-                },
-            ];
+        return [{
+                edgeId: edge.id,
+                path: result.geometry.map(cloneCoordinates),
+                tone: edge.id === context.selectedRouteId ? "selected" : "default",
+                ...semantics,
+            }];
     });
     const selectedPlace = selectedPlaceOwnerId(places, context);
     return {

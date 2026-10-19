@@ -1,5 +1,6 @@
-import type { MapFocusTarget, MapPadding, MapPresentation, RouteRequest, RouteResult } from "@laugh-tale-island/core";
-import type { MapAdapter, MapEvents, RouteAdapter } from "@laugh-tale-island/core/browser";
+import type { CameraIntent, RouteRequestV2, RouteProviderResult } from "@laugh-tale-island/core";
+import type { MapAdapterV2, MapMountConfig, MapPresentationV2, RouteAdapterV2 } from "@laugh-tale-island/core/browser";
+import { FakeMapAdapterV2 } from "@laugh-tale-island/testing";
 import type { Coordinates, RouteEdge, Trip, TripNode } from "@laugh-tale-island/core";
 
 declare global {
@@ -18,7 +19,7 @@ const dayOneNodes: TripNode[] = [
     title: "Harbor House departure",
     timing: { start: "06:30", certainty: "fixed" },
     optionality: "core",
-    place: { name: "Harbor House", coordinates: point(35.6801, 139.7601), certainty: "confirmed" },
+    place: { name: "Harbor House", identity: { status: "resolved", coordinates: point(35.6801, 139.7601) }, certainty: "confirmed" },
     payload: { role: "base" },
   },
   {
@@ -28,7 +29,7 @@ const dayOneNodes: TripNode[] = [
     title: "Morning harbor shuttle",
     timing: { start: "07:00", certainty: "suggested" },
     optionality: "core",
-    place: { name: "Harbor shuttle stop", coordinates: point(35.681, 139.761), certainty: "suggested" },
+    place: { name: "Harbor shuttle stop", identity: { status: "resolved", coordinates: point(35.681, 139.761) }, certainty: "suggested" },
     payload: { mode: "transit", plan: "Board the blue local shuttle" },
   },
   {
@@ -38,7 +39,7 @@ const dayOneNodes: TripNode[] = [
     title: "Reserved island ferry",
     timing: { start: "08:00", end: "08:40", certainty: "fixed" },
     optionality: "core",
-    place: { name: "Ferry terminal", coordinates: point(35.682, 139.762), certainty: "confirmed" },
+    place: { name: "Ferry terminal", identity: { status: "resolved", coordinates: point(35.682, 139.762) }, certainty: "confirmed" },
     booking: {
       status: "confirmed",
       reference: "SYNTHETIC-FERRY",
@@ -54,7 +55,7 @@ const dayOneNodes: TripNode[] = [
     title: "Lookout terrace",
     timing: { start: "09:00", certainty: "suggested" },
     optionality: "core",
-    place: { name: "Lookout terrace", coordinates: point(35.683, 139.763), certainty: "suggested" },
+    place: { name: "Lookout terrace", identity: { status: "resolved", coordinates: point(35.683, 139.763) }, certainty: "suggested" },
     payload: { area: "North quay" },
   },
   {
@@ -73,7 +74,7 @@ const dayOneNodes: TripNode[] = [
     title: "Supply hall",
     timing: { start: "11:00", certainty: "unknown" },
     optionality: "optional",
-    place: { name: "Supply hall", coordinates: point(35.686, 139.766), certainty: "candidate" },
+    place: { name: "Supply hall", identity: { status: "resolved", coordinates: point(35.686, 139.766) }, certainty: "candidate" },
     payload: {
       items: [
         { id: "item-notebook", title: "Pocket notebook", priority: "must", initialStatus: "pending" },
@@ -88,7 +89,7 @@ const dayOneNodes: TripNode[] = [
     title: "Midday hotel return",
     timing: { start: "12:00", certainty: "suggested" },
     optionality: "core",
-    place: { name: "Harbor House", coordinates: point(35.6801, 139.7601), certainty: "confirmed" },
+    place: { name: "Harbor House", identity: { status: "resolved", coordinates: point(35.6801, 139.7601) }, certainty: "confirmed" },
     payload: { role: "return", checklist: [{ id: "drop-bags", title: "Drop off purchases" }] },
   },
   {
@@ -98,7 +99,7 @@ const dayOneNodes: TripNode[] = [
     title: "Sky room session",
     timing: { start: "14:00", end: "15:00", certainty: "fixed" },
     optionality: "core",
-    place: { name: "Sky room", coordinates: point(35.688, 139.768), certainty: "confirmed" },
+    place: { name: "Sky room", identity: { status: "resolved", coordinates: point(35.688, 139.768) }, certainty: "confirmed" },
     booking: {
       status: "confirmed",
       reference: "SYNTHETIC-SKY",
@@ -128,9 +129,10 @@ const dayOneNodes: TripNode[] = [
     title: "Exchange field notes",
     timing: { start: "17:00", certainty: "unknown" },
     optionality: "optional",
-    place: { name: "Field desk", coordinates: point(35.689, 139.769), certainty: "unverified" },
+    place: { name: "Field desk", identity: { status: "resolved", coordinates: point(35.689, 139.769) }, certainty: "unverified" },
     payload: {
       customKind: "field-notes",
+            presentationRole: "task",
       capabilities: { place: true, completion: true },
       data: { copies: 2, waterproof: true },
     },
@@ -140,9 +142,9 @@ const dayOneNodes: TripNode[] = [
     dayId: "day-one",
     kind: "lodging",
     title: "Harbor House night return",
-    timing: { start: "23:30", end: "00:15", certainty: "suggested" },
+    timing: { start: "23:30", end: "00:15", dayOffset: 1, certainty: "suggested" },
     optionality: "core",
-    place: { name: "Harbor House", coordinates: point(35.6801, 139.7601), certainty: "confirmed" },
+    place: { name: "Harbor House", identity: { status: "resolved", coordinates: point(35.6801, 139.7601) }, certainty: "confirmed" },
     payload: { role: "base" },
   },
 ];
@@ -185,6 +187,7 @@ const dayOneRoutes: RouteEdge[] = [
 export const e2eTrip: Trip = {
   id: "trip-e2e-archipelago",
   title: "Synthetic Archipelago Field Trip",
+  locale: "en",
   timezone: "Etc/UTC",
   startDate: "2042-04-18",
   endDate: "2042-04-21",
@@ -202,7 +205,7 @@ export const e2eTrip: Trip = {
           title: "Cove walk",
           timing: { start: "09:00", certainty: "fixed" },
           optionality: "core",
-          place: { name: "Cove walk", coordinates: point(35.7, 139.78), certainty: "confirmed" },
+          place: { name: "Cove walk", identity: { status: "resolved", coordinates: point(35.7, 139.78) }, certainty: "confirmed" },
           payload: { area: "South cove" },
         },
         {
@@ -212,7 +215,7 @@ export const e2eTrip: Trip = {
           title: "Closing lunch",
           timing: { start: "12:00", certainty: "suggested" },
           optionality: "core",
-          place: { name: "Cove kitchen", coordinates: point(35.71, 139.79), certainty: "confirmed" },
+          place: { name: "Cove kitchen", identity: { status: "resolved", coordinates: point(35.71, 139.79) }, certainty: "confirmed" },
           payload: { cuisine: "Seasonal plates" },
         },
       ],
@@ -231,7 +234,7 @@ export const e2eTrip: Trip = {
           optionality: "core",
           place: {
             name: "Riverside museum",
-            coordinates: point(35.72, 139.8),
+            identity: { status: "resolved", coordinates: point(35.72, 139.8) },
             certainty: "confirmed",
           },
           payload: { area: "East river" },
@@ -252,7 +255,7 @@ export const e2eTrip: Trip = {
           optionality: "core",
           place: {
             name: "Clifftop archive",
-            coordinates: point(35.73, 139.81),
+            identity: { status: "resolved", coordinates: point(35.73, 139.81) },
             certainty: "confirmed",
           },
           payload: { durationMinutes: 75 },
@@ -280,8 +283,8 @@ export const e2eTrip: Trip = {
       parentNodeId: "sightseeing-lookout",
       mode: "browse",
       options: [
-        { id: "snack-fruit", title: "Fruit window", place: { name: "Fruit window", coordinates: point(35.6832, 139.7632), certainty: "candidate" } },
-        { id: "snack-bun", title: "Steam bun cart", place: { name: "Steam bun cart", coordinates: point(35.6834, 139.7634), certainty: "candidate" } },
+        { id: "snack-fruit", title: "Fruit window", place: { name: "Fruit window", identity: { status: "resolved", coordinates: point(35.6832, 139.7632) }, certainty: "candidate" } },
+        { id: "snack-bun", title: "Steam bun cart", place: { name: "Steam bun cart", identity: { status: "resolved", coordinates: point(35.6834, 139.7634) }, certainty: "candidate" } },
       ],
     },
     {
@@ -293,13 +296,13 @@ export const e2eTrip: Trip = {
         {
           id: "lunch-garden",
           title: "Garden kitchen",
-          place: { name: "Garden kitchen", coordinates: point(35.684, 139.764), certainty: "candidate" },
+          place: { name: "Garden kitchen", identity: { status: "resolved", coordinates: point(35.684, 139.764) }, certainty: "candidate" },
           booking: { status: "pending", url: "https://example.com/garden-kitchen" },
         },
         {
           id: "lunch-canal",
           title: "Canal counter",
-          place: { name: "Canal counter", coordinates: point(35.685, 139.765), certainty: "candidate" },
+          place: { name: "Canal counter", identity: { status: "resolved", coordinates: point(35.685, 139.765) }, certainty: "candidate" },
           booking: { status: "none" },
         },
       ],
@@ -340,19 +343,13 @@ export const e2eTrip: Trip = {
   ],
 };
 
-function routePath(index: number): Coordinates[] {
-  const start = point(35.68 + index * 0.001, 139.76 + index * 0.001);
-  return [start, point(start.lat + 0.0006, start.lng + 0.0006)];
-}
-
 const routeResults = Object.fromEntries(
-  e2eTrip.routes.map((route, index): [string, RouteResult] => [
+  e2eTrip.routes.map((route, index): [string, RouteProviderResult] => [
     route.id,
     {
       status: "ready",
       durationMinutes: route.durationMinutes ?? 9,
       distanceMeters: 300 + index * 40,
-      path: routePath(index),
       steps: route.mode === "transit"
         ? [`Walk to ${route.fromNodeId}`, "Board synthetic blue line", `Exit for ${route.toNodeId}`]
         : [`Continue from ${route.fromNodeId}`, `Arrive at ${route.toNodeId}`],
@@ -360,51 +357,39 @@ const routeResults = Object.fromEntries(
   ]),
 );
 
-class E2EVisualMapAdapter implements MapAdapter {
+// A visual shell around the public test adapter; camera and marker policy stays packaged.
+class E2EVisualMapAdapter extends FakeMapAdapterV2 {
   private element: HTMLElement | null = null;
-  private events: MapEvents | null = null;
-  private presentation: MapPresentation = { places: [], routes: [] };
+  private presentation: MapPresentationV2 = { markers: [], routes: [] };
 
-  mount(element: HTMLElement, events: MapEvents): Promise<void> {
+  override async mount(element: HTMLElement, config: MapMountConfig): Promise<void> {
     this.element = element;
-    this.events = events;
+    await super.mount(element, config);
     element.dataset.e2eMapSurface = "true";
-    element.dataset.e2eMountCount = String(Number(element.dataset.e2eMountCount ?? "0") + 1);
-    this.paint();
-    return Promise.resolve();
-  }
-
-  render(presentation: MapPresentation): void {
-    this.presentation = {
-      ...presentation,
-      places: presentation.places.map((place) => ({ ...place, coordinates: { ...place.coordinates } })),
-      routes: presentation.routes.map((route) => ({ ...route, path: route.path.map((location) => ({ ...location })) })),
-    };
+    element.dataset.e2eMountCount = String(this.mountCalls.length);
     this.paint();
   }
-
-  focus(target: MapFocusTarget): void {
-    if (this.element !== null) {
-      this.element.dataset.e2eFocusKind = target.kind;
-      this.element.dataset.e2eFocusId = target.id;
-      this.element.dataset.e2eFocusCount = String(Number(this.element.dataset.e2eFocusCount ?? "0") + 1);
-    }
+  override render(presentation: MapPresentationV2): void {
+    super.render(presentation);
+    this.presentation = structuredClone(presentation);
+    this.paint();
   }
-
-  fit(ids: string[]): void {
-    if (this.element !== null) this.element.dataset.e2eFitIds = JSON.stringify(ids);
+  override applyCameraIntent(intent: CameraIntent): void {
+    super.applyCameraIntent(intent);
+    if (this.element === null) return;
+    this.element.dataset.e2eCameraIntent = JSON.stringify(intent);
+    this.element.dataset.e2eCameraKind = intent.kind;
+    this.element.dataset.e2eCameraCount = String(this.cameraIntentCalls.length);
+    this.element.dataset.e2eCameraRequestCount = String(new Set(this.cameraIntentCalls.map((call) => call.intentId)).size);
+    this.element.dataset.e2eEdgeInsets = JSON.stringify(intent.edgeInsets);
   }
-
-  setPadding(padding: MapPadding): void {
-    if (this.element !== null) this.element.dataset.e2ePadding = JSON.stringify(padding);
-  }
-
-  setUserLocation(location: Coordinates | null): void {
+  override setUserLocation(location: Coordinates | null): void {
+    super.setUserLocation(location);
     if (this.element !== null) this.element.dataset.e2eUserLocation = JSON.stringify(location);
+    this.paint();
   }
-
-  destroy(): void {
-    this.events = null;
+  override destroy(): void {
+    super.destroy();
     this.element?.replaceChildren();
     this.element = null;
   }
@@ -417,45 +402,38 @@ class E2EVisualMapAdapter implements MapAdapter {
     label.textContent = "Deterministic test map · E2E only";
     const places = document.createElement("div");
     places.dataset.e2eMapPlaces = "true";
-    for (const place of this.presentation.places) {
+    for (const place of this.presentation.markers) {
       const marker = document.createElement("button");
       marker.type = "button";
       marker.dataset.mapOwner = place.ownerId;
-      marker.dataset.mapTone = place.tone;
-      marker.setAttribute("aria-label", `Map place ${place.label}`);
-      marker.textContent = place.label;
+      marker.dataset.mapTone = place.states.includes("selected") ? "selected" : place.states.includes("candidate") ? "candidate" : "default";
+      marker.dataset.mapStates = place.states.join(" ");
+      marker.dataset.mapCoordinate = JSON.stringify(place.coordinates);
+      marker.setAttribute("aria-label", `Map place ${place.states.includes("candidate") && place.ordinal !== undefined ? `${place.ordinal} · ` : ""}${place.label}`);
+      marker.textContent = place.ordinal === undefined ? place.label : `${place.ordinal} · ${place.label}`;
+      const content = this.markerElements.slice().reverse().find((element) => element.dataset.ownerId === place.ownerId);
+      if (content !== undefined) marker.append(content);
       marker.style.minBlockSize = "44px";
       marker.style.minInlineSize = "44px";
-      marker.addEventListener("click", () => this.events?.onPlaceSelect(place.ownerId));
+      marker.addEventListener("click", () => this.emitMarkerSelect(place.ownerId));
       places.append(marker);
     }
     const routes = document.createElement("div");
     routes.dataset.e2eMapRoutes = "true";
     for (const route of this.presentation.routes) {
-      if (route.path.length < 2) continue;
+      if (route.geometry.length < 2) continue;
       const routeControl = document.createElement("button");
       routeControl.type = "button";
       routeControl.dataset.mapRoute = route.edgeId;
-      routeControl.dataset.mapTone = route.tone;
+      routeControl.dataset.mapGeometry = JSON.stringify(route.geometry);
+      routeControl.dataset.mapTone = route.selected ? "selected" : "default";
       routeControl.setAttribute("aria-label", `Map route ${route.edgeId}`);
       routeControl.textContent = route.edgeId;
       routeControl.style.minBlockSize = "44px";
       routeControl.style.minInlineSize = "44px";
-      routeControl.addEventListener("click", () => this.events?.onRouteSelect(route.edgeId));
+      routeControl.addEventListener("click", () => this.emitRouteSelect(route.edgeId));
       routes.append(routeControl);
     }
-    const providerControl = document.createElement("button");
-    providerControl.type = "button";
-    providerControl.dataset.e2eProviderControl = "true";
-    providerControl.setAttribute("aria-label", "Provider default map control");
-    providerControl.textContent = "+";
-    Object.assign(providerControl.style, {
-      position: "absolute",
-      insetBlockStart: "0",
-      insetInlineEnd: "0",
-      inlineSize: "44px",
-      blockSize: "44px",
-    });
     const attribution = document.createElement("small");
     attribution.dataset.e2eProviderAttribution = "true";
     attribution.textContent = "Provider map attribution";
@@ -466,18 +444,22 @@ class E2EVisualMapAdapter implements MapAdapter {
       background: "Canvas",
       color: "CanvasText",
     });
-    element.replaceChildren(label, places, routes, providerControl, attribution);
+    // The real adapter disables default UI; Oak supplies the map actions.
+    // Required provider attribution remains independently visible and hit-tested.
+    element.replaceChildren(label, places, routes, attribution);
+    const locationContent = this.userLocationCalls.at(-1) === null ? undefined : this.userLocationElements.at(-1);
+    if (locationContent !== undefined) element.append(locationContent);
   }
 }
 
-export function createE2EMapAdapter(): MapAdapter {
+export function createE2EMapAdapter(): MapAdapterV2 {
   return new E2EVisualMapAdapter();
 }
 
-class E2ERouteAdapter implements RouteAdapter {
+class E2ERouteAdapter implements RouteAdapterV2 {
   private readonly attempts = new Map<string, number>();
 
-  load(request: RouteRequest, signal: AbortSignal): Promise<RouteResult> {
+  load(request: RouteRequestV2, signal: AbortSignal): Promise<RouteProviderResult> {
     if (signal.aborted) {
       return Promise.reject(new DOMException("Route request aborted", "AbortError"));
     }
@@ -486,18 +468,23 @@ class E2ERouteAdapter implements RouteAdapter {
     if (request.edge.id === "route-shopping-hotel" && attempt === 1) {
       return Promise.resolve({
         status: "unavailable",
-        reason: "Synthetic first attempt unavailable",
+        reason: "network", retryable: true, diagnostic: "Synthetic first attempt unavailable",
       });
     }
     const result = routeResults[request.edge.id];
     if (result === undefined) {
-      return Promise.resolve({ status: "unavailable", reason: "Synthetic route missing" });
+      return Promise.resolve({ status: "unavailable", reason: "not-found", retryable: false });
     }
-    return Promise.resolve(structuredClone(result));
+    if (result.status !== "ready") return Promise.resolve(structuredClone(result));
+    const { origin, destination } = request;
+    if (origin.identity.status !== "resolved" || destination.identity.status !== "resolved" || origin.identity.coordinates === undefined || destination.identity.coordinates === undefined) {
+      throw new Error("Synthetic ready route requires resolved request endpoints");
+    }
+    return Promise.resolve(structuredClone({ ...result, geometry: [origin.identity.coordinates, destination.identity.coordinates] }));
   }
 }
 
-export function createE2ERouteAdapter(): RouteAdapter {
+export function createE2ERouteAdapter(): RouteAdapterV2 {
   return new E2ERouteAdapter();
 }
 

@@ -13,10 +13,10 @@ Treat a weather-only request and a flight-booking request as out of scope unless
 
 1. Inspect the target and classify Create, Update, Enrich, Restyle, Audit, or Prepare/Deploy.
 2. Read every source the user supplied before asking questions.
-3. Ask only about contradictions that change the result; preserve uncertain facts as uncertain.
+3. Ask about missing Trip locale/timezone and contradictions that change the result; preserve uncertain facts as uncertain. A Trip uses only `trip.locale`; an empty starter requires only explicit `--setup-locale` until Trip content is supplied. A locale outside the complete `en`/`zh-Hant` references requires validated authored `--copy-catalog` JSON.
 4. Read the routed references before editing.
-5. Draft or update without overwriting user-owned IA/UI.
-6. Verify data, map/list, mobile sheet, accessibility, safety, and build gates.
+5. Use the exact v2 commands in `references/workflow.md`: Create → install → optional Enrich search → human selection → Enrich accept → Validate → Verify. The sole/default generation recipe is `oak-washi` at 2.0.0. Draft or update without overwriting user-owned IA/UI.
+6. Verify data, map/list, mobile sheet, accessibility, safety, and build gates. Update and Restyle retain agent judgment and finish with Validate then Verify. Same-major Upgrade updates pins/lock/manifest; install with `npm ci` before Validate/Verify can certify the upgraded installed packages.
 7. Stop before remote creation, public access, push, or deploy unless explicitly authorized.
 
 ## Classify intent

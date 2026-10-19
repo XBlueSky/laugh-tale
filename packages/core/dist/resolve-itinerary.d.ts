@@ -5,6 +5,7 @@ export interface EffectiveNode {
     node: TripNode;
     sourceNodeId: string;
     completed: boolean;
+    skipped: boolean;
     selectedCandidateId?: string;
 }
 export interface EffectiveDay {

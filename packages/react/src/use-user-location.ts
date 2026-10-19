@@ -1,8 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useInsertionEffect, useRef, useState } from "react";
 
 import type { Coordinates } from "@laugh-tale-island/core";
-import { USER_LOCATION_OWNER_ID } from "@laugh-tale-island/core";
-import { type MapAdapter } from "@laugh-tale-island/core/browser";
 
 export type UserLocationStatus =
   | "idle"
@@ -43,10 +41,10 @@ function coordinatesFrom(position: GeolocationPosition): Coordinates | undefined
 }
 
 export function useUserLocation(
-  adapter: MapAdapter | null,
+  onRecenter: () => void,
   geolocation: Geolocation | undefined = browserGeolocation(),
 ): UserLocationController {
-  const adapterRef = useRef(adapter);
+  const recenterRef = useRef(onRecenter);
   const mountedRef = useRef(false);
   const generationRef = useRef(0);
   const watchRef = useRef<ActiveWatch | null>(null);
@@ -55,9 +53,7 @@ export function useUserLocation(
   const [status, setStatus] = useState<UserLocationStatus>("idle");
   const [location, setLocation] = useState<Coordinates | null>(null);
 
-  useEffect(() => {
-    adapterRef.current = adapter;
-  }, [adapter]);
+  useInsertionEffect(() => { recenterRef.current = onRecenter; }, [onRecenter]);
 
   const clearActiveWatch = useCallback((): void => {
     const active = watchRef.current;
@@ -78,24 +74,20 @@ export function useUserLocation(
   }, [clearActiveWatch]);
 
   useEffect(() => {
-    if (adapter === null || location === null || !mountedRef.current) {
+    if (location === null || !mountedRef.current) {
       return;
     }
-    adapter.setUserLocation(location);
     if (pendingFirstFocusRef.current === generationRef.current) {
-      adapter.focus({ kind: "place", id: USER_LOCATION_OWNER_ID });
       pendingFirstFocusRef.current = null;
+      recenterRef.current();
     }
-  }, [adapter, location]);
+  }, [location]);
 
   const start = useCallback((): void => {
     clearActiveWatch();
     const generation = generationRef.current + 1;
     generationRef.current = generation;
     pendingFirstFocusRef.current = generation;
-    if (latestLocationRef.current !== null) {
-      adapterRef.current?.setUserLocation(null);
-    }
     latestLocationRef.current = null;
     setLocation(null);
 
@@ -119,7 +111,6 @@ export function useUserLocation(
       pendingFirstFocusRef.current = null;
       latestLocationRef.current = null;
       setLocation(null);
-      adapterRef.current?.setUserLocation(null);
       setStatus(nextStatus);
     };
 
@@ -155,10 +146,7 @@ export function useUserLocation(
 
   const recenter = useCallback((): void => {
     if (latestLocationRef.current !== null) {
-      adapterRef.current?.focus({
-        kind: "place",
-        id: USER_LOCATION_OWNER_ID,
-      });
+      recenterRef.current();
     }
   }, []);
 
@@ -168,7 +156,6 @@ export function useUserLocation(
     pendingFirstFocusRef.current = null;
     latestLocationRef.current = null;
     setLocation(null);
-    adapterRef.current?.setUserLocation(null);
     setStatus("idle");
   }, [clearActiveWatch]);
 

@@ -1,8 +1,9 @@
 # Releasing Laugh Tale
 
-Three release lines share this repository: the Eternal Pose plugin/marketplace,
-and the two npm packages `@laugh-tale-island/core` and `@laugh-tale-island/react`.
-Since 2026-08-27 the two packages ship as **one lockstep release train**
+Two release lines share this repository: the Eternal Pose plugin/marketplace,
+and the four npm packages `@laugh-tale-island/core`, `@laugh-tale-island/react`,
+`@laugh-tale-island/adapters`, and `@laugh-tale-island/testing`.
+The four packages ship as **one lockstep release train**
 published automatically by semantic-release (modeled on `cc-marketspec`),
 superseding the earlier manual runbook. A successful local pack is still
 **never** a release.
@@ -15,11 +16,13 @@ superseding the earlier manual runbook. A successful local pack is still
    - the version is computed from conventional commits since the last tag
      (`fix:` → patch, `feat:` → minor, `BREAKING CHANGE:` → major; other types
      release nothing);
-   - `scripts/set-release-versions.mjs` lockstep-bumps both packages and pins
-     react's `peerDependencies`/`devDependencies` on core to the exact new
-     version, then the lockfile is resynced;
-   - both packages are built and published with `--provenance --access public`,
-     core before react;
+   - `scripts/set-release-versions.mjs` prevalidates all four manifests,
+     lockstep-bumps their versions and every exact internal dependency edge,
+     then the lockfile is resynced;
+   - one topological build pass runs before publication; packages are published
+     with `--provenance --access public` in order: core, React, adapters, testing.
+     React and adapters are peers in this publication order because each depends
+     on core; they do not depend on one another;
    - a GitHub release and `CHANGELOG.md` entry are created, and the version
      bump is committed back with `[skip ci]`.
 
@@ -35,13 +38,17 @@ There is no publish path outside that job. Locally you can rehearse with
 - [x] ~~Push the `v0.0.0` baseline tag together with `main`.~~ This step never
       ran: the baseline tag stayed local, so semantic-release started at
       `1.0.0` on 2026-08-27. `1.0.0` is therefore the first published version
-      of both packages, and the starter's pins were updated to match it.
+      of core and React, and the starter's pins were updated to match them.
 
 ## After the first successful publish (completed 2026-08-27 for 1.0.0)
 
-1. [x] The starter pins the published `1.0.0` packages and its lockfile
+The checklist below is historical evidence for the first 1.0.0 release, not a
+claim that the current V2 pins have been published. Current 2.0.0 workspace
+packages are verified through local staging until a separately approved release.
+
+1. [x] At that release, the starter pinned the published `1.0.0` packages and its lockfile
        resolves entirely from the public registry. CI deliberately keeps the
-       staged tarball flow (`npm run stage:starter`) instead of switching to
+       staged tarball flow (`npm run stage:starter -- --setup-locale en`) instead of switching to
        direct starter installs, so every check still exercises unpublished
        workspace changes the way a consumer would install them.
 2. [x] A clean site generated through
@@ -52,9 +59,9 @@ There is no publish path outside that job. Locally you can rehearse with
 
 ## Subsequent releases
 
-- Core and react always share one version; react declares the exact
-  `@laugh-tale-island/core` version it was tested against (enforced by
-  `set-release-versions.mjs`).
+- Core, React, adapters, and testing always share one version. React and adapters
+  each declare exact dependencies on core; testing declares exact dependencies
+  on all three (enforced by `set-release-versions.mjs`).
 - Before `1.0.0`, a breaking public API change requires a migration note and a
   minor-version bump — type the commit accordingly.
 - Starter pins and recorded `eternal-pose` versions are **not** bumped by the

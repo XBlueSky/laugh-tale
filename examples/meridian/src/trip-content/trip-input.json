@@ -1,0 +1,432 @@
+{
+  "enrichmentPolicy": null,
+  "placeOwners": [],
+  "schemaVersion": 2,
+  "trip": {
+    "candidateGroups": [
+      {
+        "defaultOptionId": "candidate-meal-a",
+        "id": "candidate-meal",
+        "mode": "single",
+        "options": [
+          {
+            "booking": {
+              "status": "pending"
+            },
+            "id": "candidate-meal-a",
+            "place": {
+              "certainty": "candidate",
+              "identity": {
+                "coordinates": {
+                  "lat": 10.05,
+                  "lng": 20.05
+                },
+                "status": "resolved"
+              },
+              "name": "Candidate Annex A"
+            },
+            "title": "Synthetic meal A"
+          },
+          {
+            "booking": {
+              "status": "none"
+            },
+            "id": "candidate-meal-b",
+            "place": {
+              "certainty": "candidate",
+              "identity": {
+                "providerReference": {
+                  "id": "candidate-annex-b",
+                  "provider": "synthetic"
+                },
+                "status": "resolved"
+              },
+              "name": "Candidate Annex B"
+            },
+            "title": "Synthetic meal B"
+          }
+        ],
+        "parentNodeId": "node-dining"
+      }
+    ],
+    "clockPlaceLabel": "UTC",
+    "days": [
+      {
+        "date": "2042-03-04",
+        "id": "day-synthetic",
+        "nodes": [
+          {
+            "dayId": "day-synthetic",
+            "id": "node-transport",
+            "kind": "transport",
+            "optionality": "core",
+            "payload": {
+              "mode": "transit",
+              "plan": "Board the neutral shuttle."
+            },
+            "place": {
+              "certainty": "confirmed",
+              "identity": {
+                "coordinates": {
+                  "lat": 10,
+                  "lng": 20
+                },
+                "status": "resolved"
+              },
+              "name": "Coordinate Gate"
+            },
+            "timing": {
+              "certainty": "suggested",
+              "end": "08:20",
+              "start": "08:00"
+            },
+            "title": "Synthetic shuttle"
+          },
+          {
+            "booking": {
+              "arrivalBufferMinutes": 20,
+              "reference": "SYNTHETIC-BOOKING",
+              "status": "confirmed",
+              "url": "https://example.invalid/synthetic-booking"
+            },
+            "dayId": "day-synthetic",
+            "id": "node-transfer",
+            "kind": "transfer",
+            "optionality": "core",
+            "payload": {
+              "mode": "flight",
+              "terminal": "Neutral Terminal"
+            },
+            "place": {
+              "certainty": "suggested",
+              "identity": {
+                "providerReference": {
+                  "id": "provider-gate-alpha",
+                  "provider": "synthetic"
+                },
+                "status": "resolved"
+              },
+              "name": "Provider Gate"
+            },
+            "timing": {
+              "certainty": "fixed",
+              "end": "09:30",
+              "start": "08:30"
+            },
+            "title": "Synthetic air transfer"
+          },
+          {
+            "dayId": "day-synthetic",
+            "id": "node-lodging",
+            "kind": "lodging",
+            "optionality": "core",
+            "payload": {
+              "checklist": [
+                {
+                  "id": "check-lodging",
+                  "title": "Confirm synthetic access token"
+                }
+              ],
+              "role": "check-in"
+            },
+            "place": {
+              "certainty": "confirmed",
+              "identity": {
+                "coordinates": {
+                  "lat": 10.01,
+                  "lng": 20.01
+                },
+                "status": "resolved"
+              },
+              "name": "Synthetic Base"
+            },
+            "timing": {
+              "certainty": "suggested",
+              "start": "10:00"
+            },
+            "title": "Synthetic base"
+          },
+          {
+            "dayId": "day-synthetic",
+            "id": "node-dining",
+            "kind": "dining",
+            "optionality": "candidate",
+            "payload": {
+              "candidateGroupId": "candidate-meal",
+              "cuisine": "Test cuisine"
+            },
+            "place": {
+              "certainty": "unverified",
+              "identity": {
+                "reason": "not-reviewed",
+                "status": "unresolved"
+              },
+              "name": "Unreviewed Meal Hall"
+            },
+            "timing": {
+              "certainty": "suggested",
+              "start": "12:00"
+            },
+            "title": "Choose a synthetic meal"
+          },
+          {
+            "dayId": "day-synthetic",
+            "id": "node-shopping",
+            "kind": "shopping",
+            "optionality": "optional",
+            "payload": {
+              "items": [
+                {
+                  "id": "shopping-journal",
+                  "initialStatus": "pending",
+                  "priority": "nice",
+                  "title": "Blank field journal"
+                }
+              ]
+            },
+            "place": {
+              "certainty": "candidate",
+              "identity": {
+                "coordinates": {
+                  "lat": 10.02,
+                  "lng": 20.02
+                },
+                "status": "resolved"
+              },
+              "name": "Supply Annex"
+            },
+            "timing": {
+              "certainty": "unknown",
+              "start": "13:00"
+            },
+            "title": "Synthetic supply stop"
+          },
+          {
+            "dayId": "day-synthetic",
+            "id": "node-sightseeing",
+            "kind": "sightseeing",
+            "optionality": "core",
+            "payload": {
+              "area": "Test ridge"
+            },
+            "place": {
+              "certainty": "suggested",
+              "identity": {
+                "coordinates": {
+                  "lat": 10.03,
+                  "lng": 20.03
+                },
+                "status": "resolved"
+              },
+              "name": "Neutral Overlook"
+            },
+            "timing": {
+              "certainty": "suggested",
+              "end": "15:00",
+              "start": "14:00"
+            },
+            "title": "Synthetic overlook"
+          },
+          {
+            "booking": {
+              "reference": "SYNTHETIC-WORKSHOP",
+              "status": "confirmed",
+              "url": "https://example.invalid/synthetic-workshop"
+            },
+            "dayId": "day-synthetic",
+            "id": "node-experience",
+            "kind": "experience",
+            "optionality": "core",
+            "payload": {
+              "durationMinutes": 60
+            },
+            "place": {
+              "certainty": "confirmed",
+              "identity": {
+                "coordinates": {
+                  "lat": 10.04,
+                  "lng": 20.04
+                },
+                "status": "resolved"
+              },
+              "name": "Workshop Annex"
+            },
+            "timing": {
+              "certainty": "fixed",
+              "end": "16:30",
+              "start": "15:30"
+            },
+            "title": "Synthetic workshop"
+          },
+          {
+            "dayId": "day-synthetic",
+            "id": "node-logistics",
+            "kind": "logistics",
+            "optionality": "core",
+            "payload": {
+              "checklist": [
+                {
+                  "id": "check-logistics",
+                  "title": "Collect neutral test parcel"
+                }
+              ]
+            },
+            "timing": {
+              "certainty": "suggested",
+              "start": "17:00"
+            },
+            "title": "Synthetic logistics check"
+          },
+          {
+            "dayId": "day-synthetic",
+            "id": "node-custom",
+            "kind": "custom",
+            "optionality": "optional",
+            "payload": {
+              "capabilities": {
+                "completion": true
+              },
+              "customKind": "field-note",
+              "data": {
+                "revision": 2,
+                "synthetic": true
+              },
+              "presentationRole": "task"
+            },
+            "timing": {
+              "certainty": "unknown",
+              "start": "18:00"
+            },
+            "title": "Synthetic field note"
+          }
+        ],
+        "summary": "Provider-neutral facts for deterministic tests.",
+        "title": "Synthetic contract day"
+      }
+    ],
+    "destinationLabel": "Neutral Test Archipelago",
+    "endDate": "2042-03-04",
+    "id": "trip-synthetic-v2",
+    "locale": "zh-Hant-TW",
+    "reservations": [
+      {
+        "booking": {
+          "arrivalBufferMinutes": 10,
+          "reference": "SYNTHETIC-HOLD",
+          "status": "confirmed",
+          "url": "https://example.invalid/synthetic-hold"
+        },
+        "id": "reservation-synthetic",
+        "ownerId": "node-experience",
+        "title": "Synthetic workshop hold"
+      }
+    ],
+    "routes": [
+      {
+        "certainty": "suggested",
+        "dayId": "day-synthetic",
+        "durationMinutes": 5,
+        "fromNodeId": "node-transport",
+        "id": "route-walking",
+        "mode": "walking",
+        "source": "manual",
+        "toNodeId": "node-transfer"
+      },
+      {
+        "certainty": "confirmed",
+        "dayId": "day-synthetic",
+        "durationMinutes": 60,
+        "fromNodeId": "node-transfer",
+        "id": "route-flight",
+        "mode": "flight",
+        "source": "provider",
+        "toNodeId": "node-lodging"
+      },
+      {
+        "certainty": "suggested",
+        "dayId": "day-synthetic",
+        "fromNodeId": "node-lodging",
+        "id": "route-transit",
+        "mode": "transit",
+        "source": "provider",
+        "toNodeId": "node-dining"
+      },
+      {
+        "certainty": "unverified",
+        "dayId": "day-synthetic",
+        "fromNodeId": "node-dining",
+        "id": "route-driving",
+        "mode": "driving",
+        "source": "recomposed",
+        "toNodeId": "node-shopping"
+      },
+      {
+        "certainty": "candidate",
+        "dayId": "day-synthetic",
+        "fromNodeId": "node-shopping",
+        "id": "route-walking-two",
+        "mode": "walking",
+        "source": "manual",
+        "toNodeId": "node-sightseeing"
+      },
+      {
+        "certainty": "suggested",
+        "dayId": "day-synthetic",
+        "fromNodeId": "node-sightseeing",
+        "id": "route-transit-two",
+        "mode": "transit",
+        "source": "provider",
+        "toNodeId": "node-experience"
+      },
+      {
+        "certainty": "suggested",
+        "dayId": "day-synthetic",
+        "fromNodeId": "node-experience",
+        "id": "route-driving-two",
+        "mode": "driving",
+        "source": "manual",
+        "toNodeId": "node-logistics"
+      },
+      {
+        "certainty": "unverified",
+        "dayId": "day-synthetic",
+        "fromNodeId": "node-logistics",
+        "id": "route-unknown",
+        "mode": "unknown",
+        "navigation": {
+          "destination": "Synthetic field note",
+          "origin": "Synthetic logistics"
+        },
+        "source": "manual",
+        "toNodeId": "node-custom"
+      }
+    ],
+    "startDate": "2042-03-04",
+    "tasks": [
+      {
+        "id": "task-pretrip",
+        "scope": "pretrip",
+        "title": "Prepare synthetic credentials"
+      },
+      {
+        "children": [
+          {
+            "id": "task-child",
+            "title": "Record deterministic outcome"
+          },
+          {
+            "id": "task-child-review",
+            "title": "Review deterministic outcome"
+          }
+        ],
+        "dayId": "day-synthetic",
+        "id": "task-day",
+        "scope": "day",
+        "title": "Complete day contract"
+      }
+    ],
+    "timezone": "UTC",
+    "title": "Synthetic Meridian Journey",
+    "travelerLabel": "Synthetic traveler"
+  }
+}

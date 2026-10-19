@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { collectDayProgressScope, emptyTripProgress, parseTripProgress, tripProgressReducer, } from "@laugh-tale-island/core";
+import { controllerStateOperation } from "./normalize-controller-error.js";
 const PROGRESS_KEYS = new Set([
     "version",
     "selectedCandidateIds",
@@ -61,11 +62,14 @@ function parseExternalProgress(raw) {
  * downgrade when a write is refused.
  */
 export function useTripProgress(trip, store) {
+    const tripId = trip.id;
+    const [unhydratedProgress] = useState(emptyTripProgress);
     const tripRef = useRef(trip);
     const writeSequenceRef = useRef(0);
     const [state, setState] = useState(() => ({
         progress: emptyTripProgress(),
         hydratedStore: null,
+        hydratedTripId: null,
         persistenceStatus: "persistent",
         pendingWriteId: null,
     }));
@@ -74,7 +78,7 @@ export function useTripProgress(trip, store) {
     }, [trip]);
     useEffect(() => {
         let active = true;
-        const read = store.read();
+        const read = controllerStateOperation(() => store.read());
         const progress = read.status === "ready" ? parseTripProgress(read.value) : emptyTripProgress();
         const persistenceStatus = read.status === "ready" ? "persistent" : "memory-only";
         queueMicrotask(() => {
@@ -82,6 +86,7 @@ export function useTripProgress(trip, store) {
                 setState({
                     progress,
                     hydratedStore: store,
+                    hydratedTripId: tripId,
                     persistenceStatus,
                     pendingWriteId: null,
                 });
@@ -90,32 +95,39 @@ export function useTripProgress(trip, store) {
         return () => {
             active = false;
         };
-    }, [store]);
+    }, [store, tripId]);
     useEffect(() => {
-        const unsubscribe = store.subscribe((value) => {
+        let active = true;
+        const unsubscribe = controllerStateOperation(() => store.subscribe((value) => {
+            if (!active)
+                return;
             const progress = parseExternalProgress(value);
             if (progress === null) {
                 return;
             }
-            setState((current) => current.hydratedStore === store
+            setState((current) => current.hydratedStore === store && current.hydratedTripId === tripId
                 ? { ...current, progress, pendingWriteId: null }
                 : current);
-        });
-        return unsubscribe;
-    }, [store]);
+        }));
+        return () => {
+            active = false;
+            controllerStateOperation(() => unsubscribe());
+        };
+    }, [store, tripId]);
     useEffect(() => {
         if (state.hydratedStore !== store ||
+            state.hydratedTripId !== tripId ||
             state.persistenceStatus === "memory-only" ||
             state.pendingWriteId === null) {
             return;
         }
         let active = true;
-        if (!store.write(JSON.stringify(state.progress))) {
+        if (!controllerStateOperation(() => store.write(JSON.stringify(state.progress)))) {
             queueMicrotask(() => {
                 if (!active) {
                     return;
                 }
-                setState((current) => current.hydratedStore === store && current.pendingWriteId === state.pendingWriteId
+                setState((current) => current.hydratedStore === store && current.hydratedTripId === tripId && current.pendingWriteId === state.pendingWriteId
                     ? { ...current, persistenceStatus: "memory-only" }
                     : current);
             });
@@ -123,9 +135,11 @@ export function useTripProgress(trip, store) {
         return () => {
             active = false;
         };
-    }, [state, store]);
+    }, [state, store, tripId]);
     const dispatch = useCallback((reduce) => {
         setState((current) => {
+            if (current.hydratedStore !== store || current.hydratedTripId !== tripId)
+                return current;
             const progress = reduce(current.progress);
             if (progress === current.progress) {
                 return current;
@@ -137,7 +151,7 @@ export function useTripProgress(trip, store) {
                 pendingWriteId: writeSequenceRef.current,
             };
         });
-    }, []);
+    }, [store, tripId]);
     const selectCandidate = useCallback((groupId, candidateId) => {
         dispatch((current) => tripProgressReducer(current, {
             type: "select-candidate",
@@ -172,14 +186,18 @@ export function useTripProgress(trip, store) {
             scope: collectDayProgressScope(tripRef.current, dayId),
         }));
     }, [dispatch]);
+    const resetTrip = useCallback(() => {
+        dispatch(() => emptyTripProgress());
+    }, [dispatch]);
     return {
-        progress: state.progress,
-        hydrated: state.hydratedStore === store,
+        progress: state.hydratedStore === store && state.hydratedTripId === tripId ? state.progress : unhydratedProgress,
+        hydrated: state.hydratedStore === store && state.hydratedTripId === tripId,
         persistenceStatus: state.persistenceStatus,
         selectCandidate,
         setShoppingStatus,
         setSkipped,
         setCompleted,
         resetDay,
+        resetTrip,
     };
 }

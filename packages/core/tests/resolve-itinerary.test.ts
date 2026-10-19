@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { RouteEdge, Trip } from "@laugh-tale-island/core";
-import { emptyTripProgress, nodeCompletionKey } from "@laugh-tale-island/core";
+import { emptyTripProgress, nodeCompletionKey, validateTrip } from "@laugh-tale-island/core";
 import { resolveEffectiveItinerary } from "@laugh-tale-island/core";
 
 function deepFreeze<T>(value: T): T {
@@ -18,6 +18,7 @@ function tripFixture(): Trip {
   return {
     id: "trip-resolver",
     title: "Resolver trip",
+    locale: "en",
     timezone: "Asia/Tokyo",
     startDate: "2026-08-23",
     endDate: "2026-08-23",
@@ -36,7 +37,7 @@ function tripFixture(): Trip {
             optionality: "candidate",
             place: {
               name: "Parent venue",
-              coordinates: { lat: 35.1, lng: 139.1 },
+              identity: { status: "resolved", coordinates: { lat: 35.1, lng: 139.1 } },
               certainty: "suggested",
             },
             booking: {
@@ -55,7 +56,7 @@ function tripFixture(): Trip {
             optionality: "optional",
             place: {
               name: "Middle",
-              coordinates: { lat: 35.2, lng: 139.2 },
+              identity: { status: "resolved", coordinates: { lat: 35.2, lng: 139.2 } },
               certainty: "candidate",
             },
             payload: {},
@@ -69,7 +70,7 @@ function tripFixture(): Trip {
             optionality: "core",
             place: {
               name: "Locker",
-              coordinates: { lat: 35.3, lng: 139.3 },
+              identity: { status: "resolved", coordinates: { lat: 35.3, lng: 139.3 } },
               certainty: "confirmed",
             },
             payload: { checklist: [{ id: "c-child", title: "Show receipt" }] },
@@ -115,12 +116,15 @@ function tripFixture(): Trip {
             title: "Selected counter",
             place: {
               name: "Selected counter",
-              coordinates: { lat: 35.4, lng: 139.4 },
-              provider: {
-                name: "google",
-                placeId: " safe-place-id ",
-                secret: "must-not-leak",
-              } as { name: "google"; placeId: string },
+              identity: {
+                status: "resolved",
+                coordinates: { lat: 35.4, lng: 139.4 },
+                providerReference: {
+                  provider: "google",
+                  id: " safe-place-id ",
+                  secret: "must-not-leak",
+                } as { provider: string; id: string },
+              },
               certainty: "candidate",
               html: "<script>bad()</script>",
             } as Trip["days"][number]["nodes"][number]["place"],
@@ -140,6 +144,23 @@ function tripFixture(): Trip {
 }
 
 describe("resolveEffectiveItinerary", () => {
+  it.each(["node", "candidate"] as const)("rejects malformed %s coordinates and resolves selection without throwing", (owner) => {
+    const trip = tripFixture();
+    const place = owner === "node" ? trip.days[0].nodes[0].place! : trip.candidateGroups[0].options[0].place!;
+    place.identity = {
+      status: "resolved", coordinates: null,
+      providerReference: { provider: "google", id: "reviewed-id" },
+    } as unknown as typeof place.identity;
+    if (owner === "node") trip.candidateGroups[0].options[0].place = undefined;
+    expect.soft(validateTrip(trip).errors).toContainEqual(expect.objectContaining({ code: "INVALID_COORDINATE" }));
+    const effective = resolveEffectiveItinerary(trip, {
+      ...emptyTripProgress(), selectedCandidateIds: { "dinner-group": "candidate-safe" },
+    });
+    expect(effective.days[0].nodes[0].node.place?.identity).toEqual({
+      status: "resolved", providerReference: { provider: "google", id: "reviewed-id" },
+    });
+  });
+
   it("overlays a selected candidate defensively and falls back to the parent booking", () => {
     const mutableTrip = tripFixture();
     const snapshot = structuredClone(mutableTrip);
@@ -161,8 +182,11 @@ describe("resolveEffectiveItinerary", () => {
         title: "Selected counter",
         place: {
           name: "Selected counter",
-          coordinates: { lat: 35.4, lng: 139.4 },
-          provider: { name: "google", placeId: " safe-place-id " },
+          identity: {
+            status: "resolved",
+            coordinates: { lat: 35.4, lng: 139.4 },
+            providerReference: { provider: "google", id: " safe-place-id " },
+          },
           certainty: "candidate",
         },
         booking: {
@@ -173,7 +197,7 @@ describe("resolveEffectiveItinerary", () => {
       },
     });
     expect(selected?.node.place).not.toHaveProperty("html");
-    expect(selected?.node.place?.provider).not.toHaveProperty("secret");
+    expect(selected?.node.place?.identity).not.toHaveProperty("secret");
     expect(selected?.node).not.toHaveProperty("metadata");
     expect(trip).toEqual(snapshot);
   });
@@ -211,11 +235,11 @@ describe("resolveEffectiveItinerary", () => {
       mode: "walking",
       source: "recomposed",
       certainty: "unverified",
-      navigation: { origin: "Selected counter", destination: "Middle" },
     });
     expect(rebuilt).not.toHaveProperty("durationMinutes");
     expect(rebuilt).not.toHaveProperty("distanceMeters");
     expect(rebuilt).not.toHaveProperty("summary");
+    expect(rebuilt).not.toHaveProperty("navigation");
     expect(rebuilt).not.toHaveProperty("providerPlan");
     expect(rebuilt).not.toHaveProperty("departureTime");
     expect(rebuilt).not.toHaveProperty("steps");
@@ -384,7 +408,7 @@ describe("resolveEffectiveItinerary", () => {
     });
   });
 
-  it("keeps completed logistics visible, removes skipped optionals, and recomposes routes", () => {
+  it("retains skipped authored owners while recomposing active routes", () => {
     const trip = deepFreeze(tripFixture());
     const effective = resolveEffectiveItinerary(trip, {
       ...emptyTripProgress(),
@@ -393,9 +417,13 @@ describe("resolveEffectiveItinerary", () => {
     });
 
     expect(effective.tripId).toBe("trip-resolver");
-    expect(effective.days[0]?.nodes.map(({ sourceNodeId }) => sourceNodeId)).toEqual(["a", "c"]);
+    expect(effective.days[0]?.nodes.map(({ sourceNodeId }) => sourceNodeId)).toEqual(["a", "b", "c"]);
+    expect(effective.days[0]?.nodes.find(({ sourceNodeId }) => sourceNodeId === "b")).toMatchObject({
+      skipped: true,
+    });
     expect(effective.days[0]?.nodes.find(({ sourceNodeId }) => sourceNodeId === "c")).toMatchObject({
       completed: true,
+      skipped: false,
     });
 
     const recomposed = effective.routes[0];
@@ -406,11 +434,11 @@ describe("resolveEffectiveItinerary", () => {
       toNodeId: "c",
       source: "recomposed",
       certainty: "unverified",
-      navigation: { origin: "Parent venue", destination: "Locker" },
     });
     expect(recomposed).not.toHaveProperty("durationMinutes");
     expect(recomposed).not.toHaveProperty("distanceMeters");
     expect(recomposed).not.toHaveProperty("summary");
+    expect(recomposed).not.toHaveProperty("navigation");
     expect(recomposed).not.toHaveProperty("providerPlan");
     expect(recomposed).not.toHaveProperty("departureTime");
     expect(recomposed).not.toHaveProperty("steps");

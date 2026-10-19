@@ -1,0 +1,123 @@
+.oak-washi {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  min-height: 100dvh;
+  overflow-x: clip;
+  color: var(--oak-text-primary);
+  background: var(--oak-canvas);
+  isolation: isolate;
+  font-family: var(--oak-font-ui);
+}
+
+.oak-experience {
+  --oak-clearance-gap: 12px;
+  --oak-control-minimum: 44px;
+  --oak-legal-lane: calc(max(44px, 2.75rem) + var(--oak-safe-area-bottom));
+  --oak-collapsed-height: calc(104px + var(--oak-safe-area-bottom));
+  --oak-half-height: clamp(300px, 46dvh, 430px);
+  position: fixed;
+  inset: 0;
+  height: 100dvh;
+  min-height: 0;
+}
+
+/* MapLibre positions its attribution above the measured sheet when header
+   chrome leaves room. Crowded or enlarged-text layouts retain the legal lane. */
+html[data-oak-map-provider="maplibre"] .oak-experience:not([data-chrome-scroll="true"]):not([data-large-text="true"]) {
+  --oak-legal-lane: 0px;
+}
+
+.oak-home { box-sizing: border-box; overflow-wrap: anywhere; font-family: var(--oak-font-ui); padding: max(24px, var(--oak-safe-area-top)) max(20px, var(--oak-safe-area-right)) max(32px, var(--oak-safe-area-bottom)) max(20px, var(--oak-safe-area-left)); }
+.oak-home-content { max-width: 52rem; min-width: 0; margin-inline: auto; }
+.oak-home-flow, .oak-home-utilities, .oak-home-section { min-width: 0; }
+.oak-home-flow { display: grid; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 56rem) {
+  .oak-home { padding-block-start: max(48px, var(--oak-safe-area-top)); }
+  .oak-home-flow:has(> .oak-home-utilities) { grid-template-columns: minmax(0, 1fr) minmax(0, 15rem); column-gap: 3rem; }
+}
+.oak-upper-clearance {
+  position: absolute;
+  top: max(12px, var(--oak-safe-area-top));
+  left: max(12px, var(--oak-safe-area-left));
+  right: max(12px, var(--oak-safe-area-right));
+  margin-inline: auto;
+  pointer-events: none;
+}
+.oak-upper-clearance > * { pointer-events: auto; }
+.oak-experience[data-chrome-scroll="true"] .oak-upper-clearance { max-height: var(--oak-upper-budget); overflow-y: auto; overscroll-behavior: contain; pointer-events: auto; }
+.oak-experience[data-chrome-scroll="true"] > .oak-map-status { max-height: var(--oak-status-budget); overflow-y: auto; overscroll-behavior: contain; }
+.oak-day-header { position: relative; }
+.oak-controls-row { position: relative; margin-top: 8px; width: fit-content; margin-left: auto; }
+.oak-experience[data-chrome-scroll="true"] .oak-controls-row { margin-bottom: 2px; }
+.oak-controls-row:has(.oak-map-controls:empty) { display: none; }
+.oak-experience > .oak-map-status { right: max(12px, var(--oak-safe-area-right)); margin-inline: auto; max-width: 35rem; }
+.oak-itinerary-sheet {
+  position: absolute;
+  box-sizing: border-box;
+  bottom: var(--oak-legal-lane);
+  left: 0;
+  right: 0;
+  width: 100%;
+  margin-inline: auto;
+  height: var(--oak-half-height);
+  max-height: var(--oak-sheet-ceiling, 100dvh);
+  display: flex;
+  flex-direction: column;
+  padding-bottom: var(--oak-safe-area-bottom);
+}
+.oak-sheet-body { display: contents; }
+/* Selection reveal owns automatic positioning; native anchoring must not move
+   an interrupted reader when expanded details enter or leave this port. */
+.oak-sheet-scroll { min-height: 0; overflow-y: auto; overflow-anchor: none; overscroll-behavior: contain; touch-action: pan-y; padding-inline: max(12px, var(--oak-safe-area-left)) max(12px, var(--oak-safe-area-right)); }
+/* Measured crowded chrome leaves only the minimum sheet. Share its remaining
+   space between heading and timeline so neither can consume the scrollport. */
+.oak-experience[data-chrome-scroll="true"] .oak-sheet-body { display: block; min-height: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
+.oak-experience[data-chrome-scroll="true"] .oak-sheet-scroll { overflow: visible; overflow-anchor: auto; }
+@media (max-width: 14rem) {
+  /* Let the complete heading and timeline share the remaining viewport when
+     fixed chrome would otherwise consume it. Ordinary sheet layout is unchanged. */
+  .oak-sheet-body { display: block; min-height: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
+  .oak-sheet-scroll { overflow: visible; overflow-anchor: auto; }
+}
+.oak-geometry { position: absolute; inset: 0 auto auto 0; width: 1px; visibility: hidden; pointer-events: none; }
+.oak-geometry-collapsed { height: var(--oak-collapsed-height); }
+.oak-geometry-half { height: min(var(--oak-half-height), var(--oak-sheet-ceiling, 100dvh)); }
+.oak-geometry-legal { height: var(--oak-legal-lane); }
+@media (max-width: 44rem) and (min-height: 44rem) {
+  .oak-experience[data-map-density="sparse"] { --oak-half-height: clamp(440px, 55dvh, 480px); }
+}
+@media (max-height: 43.749rem) {
+  .oak-experience { --oak-clearance-gap: 8px; --oak-half-height: max(min(17rem, var(--oak-sheet-ceiling, 100dvh)), 43dvh); }
+}
+.oak-safe-area {
+  padding:
+    max(var(--oak-space-3), var(--oak-safe-area-top))
+    max(var(--oak-space-3), var(--oak-safe-area-right))
+    max(var(--oak-space-3), var(--oak-safe-area-bottom))
+    max(var(--oak-space-3), var(--oak-safe-area-left));
+}
+
+.oak-map-content,
+.oak-route-layer,
+.oak-marker-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.oak-rail {
+  width: min(calc(100% - 1.5rem), 35rem);
+  min-width: 0;
+  margin-inline: auto;
+}
+
+@media (max-width: 24rem) {
+  .oak-connector-row { padding-inline-start: 12px; }
+}
+
+@media (min-width: 45rem) {
+  .oak-header-rail {
+    width: min(calc(100% - 2rem), 32.5rem);
+  }
+  .oak-itinerary-sheet { width: min(100%, 42rem); }
+}
