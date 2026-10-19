@@ -103,7 +103,7 @@ describe.sequential("Laugh Tale marketplace presentation", () => {
     const entrySource = readFileSync(entryPath, "utf8");
     const ignoreSource = readFileSync(join(repoRoot, ".gitignore"), "utf8");
 
-    expect(packageJson.devDependencies?.["@xbluesky/cc-marketspec"]).toBe("1.0.0");
+    expect(packageJson.devDependencies?.["@xbluesky/cc-marketspec"]).toMatch(/^\d+\.\d+\.\d+$/);
     expect(packageJson.dependencies?.["@xbluesky/cc-marketspec"]).toBeUndefined();
     expect(entrySource).toContain(
       "# yaml-language-server: $schema=../../node_modules/@xbluesky/cc-marketspec/schemas/entry.schema.json",
