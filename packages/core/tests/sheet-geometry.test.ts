@@ -1,56 +1,105 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
   clampSheetHeight,
   nearestSheetSnap,
   resolveSheetGeometry,
+  type SheetGeometry,
+  type SheetSnap,
 } from "@laugh-tale-island/core";
 
 describe("sheet geometry", () => {
-  it("uses one safe-area-aware ceiling for every snap on a short screen", () => {
+  it("normalizes supplied snap heights without deriving presentation policy", () => {
     expect(
       resolveSheetGeometry({
-        viewportHeight: 500,
-        topClearance: 236,
-        safeBottom: 0,
-        collapsedHeight: 128,
+        collapsedHeight: Number.NaN,
+        halfHeight: 40.4,
+        expandedHeight: 100.5,
       }),
-    ).toEqual({ collapsed: 128, half: 186, expanded: 264, ceiling: 264 });
-  });
+    ).toEqual({ collapsed: 0, half: 40, expanded: 101, ceiling: 101 });
 
-  it("never raises the ceiling above the header on extremely short screens", () => {
     expect(
       resolveSheetGeometry({
-        viewportHeight: 260,
-        topClearance: 180,
-        safeBottom: 34,
-        collapsedHeight: 128,
+        collapsedHeight: -24,
+        halfHeight: Number.POSITIVE_INFINITY,
+        expandedHeight: 320.4,
       }),
-    ).toEqual({ collapsed: 128, half: 128, expanded: 128, ceiling: 128 });
+    ).toEqual({ collapsed: 0, half: 0, expanded: 320, ceiling: 320 });
   });
 
-  it("subtracts the bottom safe area and clamps every derived height", () => {
-    const geometry = resolveSheetGeometry({
-      viewportHeight: 844,
-      topClearance: 118,
-      safeBottom: 34,
-      collapsedHeight: 128,
-    });
+  it("orders, clamps, and rounds each supplied snap height once", () => {
+    expect(
+      resolveSheetGeometry({
+        collapsedHeight: 100.6,
+        halfHeight: 500.2,
+        expandedHeight: 80.4,
+      }),
+    ).toEqual({ collapsed: 101, half: 101, expanded: 101, ceiling: 101 });
 
-    expect(geometry.ceiling).toBe(692);
-    expect(geometry.expanded).toBe(692);
-    expect(geometry.half).toBeGreaterThanOrEqual(geometry.collapsed);
-    expect(geometry.half).toBeLessThanOrEqual(geometry.expanded);
+    expect(
+      resolveSheetGeometry({
+        collapsedHeight: 100.4,
+        halfHeight: 150.6,
+        expandedHeight: 200.6,
+      }),
+    ).toEqual({ collapsed: 100, half: 151, expanded: 201, ceiling: 201 });
+  });
+
+  it("clamps arbitrary heights against normalized bounds", () => {
     expect(clampSheetHeight(90, { min: 128, max: 264 })).toBe(128);
     expect(clampSheetHeight(320, { min: 128, max: 264 })).toBe(264);
+    expect(clampSheetHeight(Number.NaN, { min: 264, max: 128 })).toBe(128);
   });
 
-  it("uses release velocity to select the next stable snap in the drag direction", () => {
-    const geometry = { collapsed: 128, half: 186, expanded: 249 };
+  it.each([
+    {
+      release: "slow",
+      samples: [
+        { height: 300, timeStamp: 0 },
+        { height: 400, timeStamp: 400 },
+        { height: 450, timeStamp: 800 },
+      ],
+    },
+    {
+      release: "fast",
+      samples: [
+        { height: 300, timeStamp: 0 },
+        { height: 400, timeStamp: 90 },
+        { height: 450, timeStamp: 100 },
+      ],
+    },
+  ])("settles a $release release solely from its final position", ({ samples }) => {
+    const finalHeight = samples.at(-1)?.height;
+    expect(finalHeight).toBe(450);
+    expect(
+      nearestSheetSnap(finalHeight ?? Number.NaN, {
+        collapsed: 100,
+        half: 300,
+        expanded: 600,
+      }),
+    ).toBe("half");
+  });
 
-    expect(nearestSheetSnap(249, geometry, -0.6)).toBe("expanded");
-    expect(nearestSheetSnap(170, geometry, -0.6)).toBe("half");
-    expect(nearestSheetSnap(170, geometry, 0.6)).toBe("collapsed");
-    expect(nearestSheetSnap(220, geometry, 0)).toBe("expanded");
+  it.each([
+    [200, "collapsed"],
+    [450, "half"],
+  ] satisfies ReadonlyArray<readonly [number, SheetSnap]>) (
+    "breaks the exact midpoint at %d toward the lower-height snap",
+    (height, expected) => {
+      expect(
+        nearestSheetSnap(height, {
+          collapsed: 100,
+          half: 300,
+          expanded: 600,
+        }),
+      ).toBe(expected);
+    },
+  );
+
+  it("exposes a position-only two-argument snap resolver", () => {
+    expectTypeOf(nearestSheetSnap).parameters.toEqualTypeOf<[
+      height: number,
+      geometry: Pick<SheetGeometry, "collapsed" | "half" | "expanded">,
+    ]>();
   });
 });

@@ -6,6 +6,15 @@ function nodeEntry(effectiveNode) {
         node: effectiveNode.node,
     };
 }
+function fallbackRoutePresentation(route) {
+    return {
+        edge: route,
+        display: route.mode === "walking" && route.durationMinutes !== undefined && route.durationMinutes <= 5
+            ? "compact"
+            : "full",
+        navigable: route.navigation !== undefined && route.navigation.origin.trim().length > 0 && route.navigation.destination.trim().length > 0,
+    };
+}
 /**
  * Builds the list-only projection of one effective day. Route edges retain
  * their own IDs and positions; visual grouping never transfers route
@@ -13,9 +22,21 @@ function nodeEntry(effectiveNode) {
  */
 export function buildTimelineEntries(day, effectiveTrip) {
     const dayRoutes = effectiveTrip.routes.filter((route) => route.dayId === day.day.id);
-    const routePresentations = buildRoutePresentations({ ...day.day, routes: dayRoutes }, day.nodes);
+    const routePresentations = buildRoutePresentations({ ...day.day, routes: dayRoutes }, day.nodes.filter(({ skipped }) => !skipped));
+    const canonicalRoutes = new Map(routePresentations.map((route) => [route.edge.id, route]));
+    const activeNodeIds = new Set(day.nodes.filter(({ skipped }) => !skipped).map(({ sourceNodeId }) => sourceNodeId));
+    const retainedRoutePresentations = [
+        ...routePresentations,
+        ...dayRoutes.flatMap((route) => canonicalRoutes.has(route.id) ||
+            !activeNodeIds.has(route.fromNodeId) ||
+            !activeNodeIds.has(route.toNodeId)
+            ? []
+            : [fallbackRoutePresentation(route)]),
+    ];
+    const routesConnect = (leftId, rightId) => retainedRoutePresentations.some(({ edge }) => (edge.fromNodeId === leftId && edge.toNodeId === rightId) ||
+        (edge.fromNodeId === rightId && edge.toNodeId === leftId));
     const routeEntriesByOrigin = new Map();
-    for (const route of routePresentations) {
+    for (const route of retainedRoutePresentations) {
         const entries = routeEntriesByOrigin.get(route.edge.fromNodeId) ?? [];
         entries.push({ kind: "route", id: route.edge.id, route });
         routeEntriesByOrigin.set(route.edge.fromNodeId, entries);
@@ -33,7 +54,7 @@ export function buildTimelineEntries(day, effectiveTrip) {
                 const previous = day.nodes[end];
                 if (candidate?.node.kind !== "logistics" ||
                     previous === undefined ||
-                    (routeEntriesByOrigin.get(previous.sourceNodeId)?.length ?? 0) > 0) {
+                    routesConnect(previous.sourceNodeId, candidate.sourceNodeId)) {
                     break;
                 }
                 end += 1;
@@ -43,14 +64,13 @@ export function buildTimelineEntries(day, effectiveTrip) {
                     .slice(index, end + 1)
                     .map(nodeEntry);
                 const first = entries[0];
-                const last = entries.at(-1);
-                if (first !== undefined && last !== undefined) {
+                if (first !== undefined) {
                     output.push({
                         kind: "logistics-group",
-                        id: `logistics:${first.id}--${last.id}`,
+                        id: `logistics-group:${JSON.stringify(entries.map(({ id }) => id))}`,
                         entries,
                     });
-                    output.push(...(routeEntriesByOrigin.get(last.id) ?? []));
+                    output.push(...entries.flatMap(({ id }) => routeEntriesByOrigin.get(id) ?? []));
                     index = end + 1;
                     continue;
                 }

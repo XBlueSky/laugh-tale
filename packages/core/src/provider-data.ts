@@ -1,5 +1,7 @@
 import type { Coordinates, PlaceRef, RouteEdge } from "./model.js";
 
+export type { ProviderFailureReason, ProviderUnavailableResult } from "./provider-failure.js";
+
 export interface MapPlacePresentation {
   ownerId: string;
   label: string;

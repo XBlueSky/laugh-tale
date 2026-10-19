@@ -1,4 +1,5 @@
-import { expect, test as base, type Page } from "@playwright/test";
+import { expect, test as base, type Locator, type Page } from "@playwright/test";
+import type { CameraIntent } from "@laugh-tale-island/core";
 
 interface E2EGeolocationControl {
   latestId(): number;
@@ -9,6 +10,7 @@ interface E2EGeolocationControl {
 interface BrowserE2EGlobals {
   __e2eGeo: E2EGeolocationControl;
   __ETERNAL_POSE_E2E_NOW__?: string;
+  __e2eNavigation?: string;
 }
 
 const test = base.extend<{ externalRequests: string[] }>({
@@ -16,10 +18,7 @@ const test = base.extend<{ externalRequests: string[] }>({
     const requests: string[] = [];
     await page.route("**/*", async (route) => {
       const url = new URL(route.request().url());
-      if (
-        (url.protocol === "http:" || url.protocol === "https:") &&
-        (url.hostname === "127.0.0.1" || url.hostname === "localhost")
-      ) {
+      if (url.origin === "http://127.0.0.1:4173") {
         await route.continue();
         return;
       }
@@ -36,6 +35,7 @@ const test = base.extend<{ externalRequests: string[] }>({
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
+    window.open = (url) => { (window as unknown as BrowserE2EGlobals).__e2eNavigation = String(url); return null; };
     let nextId = 0;
     const callbacks = new Map<
       number,
@@ -97,207 +97,55 @@ test.afterEach(({ externalRequests }) => {
   expect(externalRequests.some((url) => /googleapis\.com|maps\.googleapis\.com|google\.com\/maps/.test(url))).toBe(false);
 });
 
-async function openTrip(page: Page): Promise<void> {
+import { catalog, candidateDecision, dayButton, enterDay, mapSurface, openTrip, ownerButton, ownerRow, retryUnavailableRoute, setSheetSnap, sheetHandle, sheetSurface } from "./contract-driver";
+import { locale } from "../../src/presentation/copy/catalog";
+
+test("native shopping and reset controls keep one keyboard and enlarged-text vocabulary", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
   await page.goto("/");
-  await expect(page.getByTestId("trip-home")).toBeVisible();
-  await page.getByRole("button", { name: /(?:Enter|進入) Day 1 · Harbor field day/ }).click();
-  await expect(page.getByTestId("trip-experience")).toBeVisible();
-  await expect(page.getByTestId("itinerary-map")).toHaveAttribute("data-e2e-map-surface", "true");
-  await expect(page.locator("[data-route-id]").first()).toBeVisible();
-}
+  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  await page.locator(".oak-progress-reset > summary").click();
+  const reset = page.locator(".oak-progress-reset .oak-native-select");
+  const resetSelect = reset.locator("select");
+  await resetSelect.focus();
+  await expect(resetSelect).toHaveAccessibleName(catalog.persistence.resetDayScope);
+  const appearance = async (control: typeof reset) => control.evaluate(element => {
+    const select = element.querySelector("select")!;
+    const style = getComputedStyle(select), wrapper = getComputedStyle(element), bounds = select.getBoundingClientRect();
+    return { border: style.border, background: style.backgroundColor, outline: Number.parseFloat(wrapper.outlineWidth), height: bounds.height, right: bounds.right };
+  });
+  const resetStyle = await appearance(reset);
+  expect(resetStyle.outline).toBeGreaterThanOrEqual(2);
+  expect(resetStyle.height).toBeGreaterThanOrEqual(44);
+  expect(resetStyle.right).toBeLessThanOrEqual(320);
+  const optionCount = await resetSelect.locator("option").count();
+  expect(optionCount).toBeGreaterThan(1);
+  await resetSelect.selectOption({ index: optionCount - 1 });
+  const chosenDay = await resetSelect.inputValue();
+  await expect(resetSelect).toHaveValue("day-four");
+  await expect(resetSelect.locator("option:checked")).toHaveText("2042-04-21 · Clifftop archive survey");
+  const resetDay = page.getByRole("button", { name: catalog.persistence.resetDay, exact: true });
+  await resetDay.click();
+  await expect(page.getByRole("group", { name: catalog.persistence.confirmReset, exact: true })).toContainText("2042-04-21 · Clifftop archive survey");
+  await page.getByRole("button", { name: catalog.persistence.cancelReset, exact: true }).click();
+  await expect(resetDay).toBeFocused();
+  await expect(resetSelect).toHaveValue(chosenDay);
 
-async function setVisibleFieldAtlasDayCount(
-  page: Page,
-  count: 2 | 3 | 4,
-): Promise<boolean> {
-  const experience = page.getByTestId("trip-experience");
-  if ((await experience.getAttribute("data-map-chrome-layout")) !== "bounded") return false;
-
-  await page.locator(".atlas-day-index__rail button").evaluateAll((buttons, visibleCount) => {
-    buttons.forEach((button, index) => {
-      (button as HTMLElement).style.display = index < visibleCount ? "" : "none";
-    });
-    document.querySelector<HTMLElement>(".atlas-day-index__rail")!.scrollLeft = 0;
-  }, count);
-  return true;
-}
-
-async function expectContainedFieldAtlasChrome(
-  page: Page,
-  expectedDayCount = 4,
-): Promise<void> {
-  const experience = page.getByTestId("trip-experience");
-  if ((await experience.getAttribute("data-map-chrome-layout")) !== "bounded") return;
-
-  await expect
-    .poll(() =>
-      page.evaluate(() => {
-        const header = document.querySelector<HTMLElement>(".day-header")!;
-        const primary = header.querySelector<HTMLElement>(".atlas-day-index__primary")!;
-        const title = primary.querySelector<HTMLElement>("strong")!;
-        const rail = header.querySelector<HTMLElement>(".atlas-day-index__rail")!;
-        const toolbar = document.querySelector<HTMLElement>(
-          ".atlas-detail-surface__toolbar",
-        )!;
-        const headerRect = header.getBoundingClientRect();
-        const titleRect = title.getBoundingClientRect();
-        const railRect = rail.getBoundingClientRect();
-        const buttons = Array.from(rail.querySelectorAll<HTMLElement>("button")).filter(
-          (button) => button.getClientRects().length > 0,
-        );
-        const desktop = window.innerWidth >= 768;
-        const contained = (owner: DOMRect, child: DOMRect) =>
-          child.left >= owner.left - 1 &&
-          child.right <= owner.right + 1 &&
-          child.top >= owner.top - 1 &&
-          child.bottom <= owner.bottom + 1;
-        return {
-          documentFits: document.documentElement.scrollWidth <= window.innerWidth,
-          bodyFits: document.body.scrollWidth <= window.innerWidth,
-          headerFits: header.scrollHeight <= header.clientHeight + 1,
-          titleHasWidth: title.clientWidth > 0 && titleRect.width > 0,
-          titleContained: contained(headerRect, titleRect),
-          railContained: contained(headerRect, railRect),
-          visibleDayCount: buttons.length,
-          railScrollsInternally: desktop
-            ? rail.scrollWidth <= rail.clientWidth + 1
-            : buttons.length < 3 || rail.scrollWidth > rail.clientWidth + 1,
-          railDirectionCorrect: desktop
-            ? getComputedStyle(rail).display === "grid" &&
-              buttons.every((button, index) =>
-                index === 0 ||
-                button.getBoundingClientRect().top >=
-                  buttons[index - 1].getBoundingClientRect().bottom - 1,
-              )
-            : getComputedStyle(rail).display === "flex" &&
-              getComputedStyle(rail).overflowX === "auto",
-          dayLabelsReadable: buttons.every((button) => {
-            const rect = button.getBoundingClientRect();
-            return (
-              (desktop || rect.width + 0.5 >= 140) &&
-              button.scrollWidth <= button.clientWidth + 1 &&
-              button.scrollHeight <= button.clientHeight + 1
-            );
-          }),
-          mobileToolbarCompact: desktop || toolbar.getBoundingClientRect().height <= 72,
-          controlsAre44: [
-            ...primary.querySelectorAll<HTMLElement>("button"),
-            ...toolbar.querySelectorAll<HTMLElement>("button"),
-            ...buttons,
-          ].every((button) => {
-            const rect = button.getBoundingClientRect();
-            return rect.width + 0.5 >= 44 && rect.height + 0.5 >= 44;
-          }),
-        };
-      }),
-    )
-    .toEqual({
-      documentFits: true,
-      bodyFits: true,
-      headerFits: true,
-      titleHasWidth: true,
-      titleContained: true,
-      railContained: true,
-      visibleDayCount: expectedDayCount,
-      railScrollsInternally: true,
-      railDirectionCorrect: true,
-      dayLabelsReadable: true,
-      mobileToolbarCompact: true,
-      controlsAre44: true,
-    });
-}
-
-async function expectLastFieldAtlasDayReachable(page: Page): Promise<void> {
-  const experience = page.getByTestId("trip-experience");
-  if ((await experience.getAttribute("data-map-chrome-layout")) !== "bounded") return;
-
-  const rail = page.locator(".atlas-day-index__rail");
-  const initialScrollLeft = await rail.evaluate((element) => element.scrollLeft);
-  const lastDay = page.locator(".atlas-day-index__rail button:visible").last();
-  await lastDay.scrollIntoViewIfNeeded();
-  await expect
-    .poll(() =>
-      page.evaluate((startingScrollLeft) => {
-        const rail = document.querySelector<HTMLElement>(".atlas-day-index__rail")!;
-        const buttons = Array.from(rail.querySelectorAll<HTMLElement>("button")).filter(
-          (button) => button.getClientRects().length > 0,
-        );
-        const last = buttons.at(-1);
-        if (last === undefined) return false;
-        const railRect = rail.getBoundingClientRect();
-        const lastRect = last.getBoundingClientRect();
-        return (
-          rail.scrollLeft > startingScrollLeft &&
-          lastRect.left >= railRect.left - 1 &&
-          lastRect.right <= railRect.right + 1 &&
-          lastRect.width + 0.5 >= 44 &&
-          lastRect.height + 0.5 >= 44 &&
-          document.documentElement.scrollWidth <= window.innerWidth
-        );
-      }, initialScrollLeft),
-    )
-    .toBe(true);
-}
-
-async function expectBoundedProviderChrome(page: Page): Promise<void> {
-  const bounded = await page
-    .getByTestId("trip-experience")
-    .getAttribute("data-map-chrome-layout");
-  if (bounded !== "bounded") return;
-  await expect
-    .poll(() =>
-      page.evaluate(() => {
-        const map = document.querySelector<HTMLElement>("[data-provider-canvas='bounded']")!;
-        const header = document.querySelector<HTMLElement>(".day-header")!;
-        const sheet = document.querySelector<HTMLElement>(".itinerary-sheet")!;
-        const control = map.querySelector<HTMLElement>("[data-e2e-provider-control]")!;
-        const attribution = map.querySelector<HTMLElement>("[data-e2e-provider-attribution]")!;
-        const mapRect = map.getBoundingClientRect();
-        const headerRect = header.getBoundingClientRect();
-        const sheetRect = sheet.getBoundingClientRect();
-        const controlRect = control.getBoundingClientRect();
-        const attributionRect = attribution.getBoundingClientRect();
-        const controlHit = document
-          .elementFromPoint(
-            controlRect.left + controlRect.width / 2,
-            controlRect.top + controlRect.height / 2,
-          )
-          ?.closest("[data-e2e-provider-control]");
-        const separated = (first: DOMRect, second: DOMRect) =>
-          first.right <= second.left + 1 ||
-          first.left >= second.right - 1 ||
-          first.bottom <= second.top + 1 ||
-          first.top >= second.bottom - 1;
-        const desktop = window.innerWidth >= 768;
-        return {
-          clearsHeader: desktop
-            ? separated(mapRect, headerRect)
-            : mapRect.top >= headerRect.bottom,
-          clearsSheet: desktop
-            ? separated(mapRect, sheetRect)
-            : mapRect.bottom <= sheetRect.top - 7,
-          controlContained:
-            controlRect.left >= mapRect.left &&
-            controlRect.right <= mapRect.right &&
-            controlRect.top >= mapRect.top &&
-            controlRect.bottom <= mapRect.bottom,
-          attributionContained:
-            attributionRect.left >= mapRect.left &&
-            attributionRect.right <= mapRect.right &&
-            attributionRect.top >= mapRect.top &&
-            attributionRect.bottom <= mapRect.bottom,
-          controlOperable: controlHit === control,
-        };
-      }),
-    )
-    .toEqual({
-      clearsHeader: true,
-      clearsSheet: true,
-      controlContained: true,
-      attributionContained: true,
-      controlOperable: true,
-    });
-}
+  await enterDay(page);
+  await ownerButton(page, "shopping-supplies").click();
+  const shopping = ownerRow(page, "shopping-supplies").locator(".oak-native-select").first();
+  const shoppingSelect = shopping.locator("select");
+  await shoppingSelect.focus();
+  const shoppingStyle = await appearance(shopping);
+  expect(shoppingStyle.border).toBe(resetStyle.border);
+  expect(shoppingStyle.background).toBe(resetStyle.background);
+  expect(shoppingStyle.outline).toBeGreaterThanOrEqual(2);
+  expect(shoppingStyle.height).toBeGreaterThanOrEqual(44);
+  expect(shoppingStyle.right).toBeLessThanOrEqual(320);
+  await shoppingSelect.selectOption("purchased");
+  await page.reload(); await enterDay(page); await ownerButton(page, "shopping-supplies").click();
+  await expect(ownerRow(page, "shopping-supplies").locator(".oak-native-select select").first()).toHaveValue("purchased");
+});
 
 async function visibleInteractiveTargetFailures(page: Page): Promise<Array<{
   name: string;
@@ -348,6 +196,14 @@ async function visibleInteractiveTargetFailures(page: Page): Promise<Array<{
         ) {
           return [];
         }
+        // A native choice and its enclosing label form one clickable region.
+        // Keep auditing every visible label, including undersized alternatives.
+        if (target === input && targets.some(label => {
+          if (label === input || !label.contains(input) || label.closest("[inert], [hidden], [aria-hidden='true']")) return false;
+          const css = getComputedStyle(label), bounds = label.getBoundingClientRect();
+          return css.display !== "none" && css.visibility === "visible" && bounds.width >= 44 && bounds.height >= 44
+            && bounds.left <= rect.left && bounds.right >= rect.right && bounds.top <= rect.top && bounds.bottom >= rect.bottom;
+        })) return [];
         return rect.width + 0.5 < 44 || rect.height + 0.5 < 44
           ? [{
               name: element.getAttribute("aria-label") ?? element.textContent?.trim().slice(0, 80) ?? element.tagName,
@@ -360,97 +216,6 @@ async function visibleInteractiveTargetFailures(page: Page): Promise<Array<{
   });
 }
 
-async function expectCompleteFieldAtlasReflow(page: Page): Promise<void> {
-  const experience = page.getByTestId("trip-experience");
-  if ((await experience.getAttribute("data-map-chrome-layout")) !== "bounded") return;
-
-  const layout = experience.locator(".atlas-responsive-layout");
-  await expect(layout).toBeVisible();
-  await expect
-    .poll(() =>
-      page.evaluate(() => {
-        const header = document.querySelector<HTMLElement>(".day-header")!;
-        const sheet = document.querySelector<HTMLElement>(".itinerary-sheet")!;
-        const layoutNode = document.querySelector<HTMLElement>(".atlas-responsive-layout")!;
-        const map = document.querySelector<HTMLElement>("[data-provider-canvas='bounded']")!;
-        const itinerary = document.querySelector<HTMLElement>("[data-scroll-region='itinerary']")!;
-        const tripTitle = header.querySelector<HTMLElement>(".atlas-day-index__primary strong")!;
-        const dayTitle = sheet.querySelector<HTMLElement>(".atlas-detail-surface__heading strong")!;
-        const contains = (owner: HTMLElement, child: HTMLElement) => {
-          const ownerRect = owner.getBoundingClientRect();
-          const childRect = child.getBoundingClientRect();
-          return (
-            childRect.left >= ownerRect.left - 1 &&
-            childRect.right <= ownerRect.right + 1 &&
-            childRect.top >= ownerRect.top - 1 &&
-            childRect.bottom <= ownerRect.bottom + 1
-          );
-        };
-        const criticalControls = [
-          ...header.querySelectorAll<HTMLElement>("button"),
-          ...sheet.querySelectorAll<HTMLElement>("button"),
-          ...document.querySelectorAll<HTMLElement>(".atlas-map-controls button"),
-        ].filter((control) => control.getClientRects().length > 0);
-        return {
-          documentFits: document.documentElement.scrollWidth <= window.innerWidth,
-          bodyFits: document.body.scrollWidth <= window.innerWidth,
-          flowMode: getComputedStyle(layoutNode).display === "grid",
-          verticalFlow: layoutNode.scrollHeight > layoutNode.clientHeight,
-          headerFits: header.scrollHeight <= header.clientHeight + 1,
-          sheetFits: sheet.scrollHeight <= sheet.clientHeight + 1,
-          tripTitleFits:
-            contains(header, tripTitle) &&
-            tripTitle.scrollWidth <= tripTitle.clientWidth + 1 &&
-            tripTitle.scrollHeight <= tripTitle.clientHeight + 1,
-          dayTitleFits:
-            contains(sheet, dayTitle) &&
-            dayTitle.scrollWidth <= dayTitle.clientWidth + 1 &&
-            dayTitle.scrollHeight <= dayTitle.clientHeight + 1,
-          itineraryHasFlow:
-            itinerary.clientHeight > 0 &&
-            itinerary.scrollHeight > 0 &&
-            itinerary.getBoundingClientRect().width > 0,
-          mapHasCanvas:
-            map.getBoundingClientRect().width > 0 &&
-            map.getBoundingClientRect().height > 0,
-          targetsAre44:
-            criticalControls.length > 0 &&
-            criticalControls.every((control) => {
-              const rect = control.getBoundingClientRect();
-              return rect.width + 0.5 >= 44 && rect.height + 0.5 >= 44;
-            }),
-        };
-      }),
-    )
-    .toEqual({
-      documentFits: true,
-      bodyFits: true,
-      flowMode: true,
-      verticalFlow: true,
-      headerFits: true,
-      sheetFits: true,
-      tripTitleFits: true,
-      dayTitleFits: true,
-      itineraryHasFlow: true,
-      mapHasCanvas: true,
-      targetsAre44: true,
-    });
-
-  const criticalControls = page.locator(
-    ".day-header button, .itinerary-sheet button, .atlas-map-controls button",
-  );
-  for (let index = 0; index < (await criticalControls.count()); index += 1) {
-    const control = criticalControls.nth(index);
-    if (await control.isVisible()) {
-      await control.scrollIntoViewIfNeeded();
-      await expect(control).toBeInViewport();
-    }
-  }
-
-  await page.getByTestId("itinerary-map").scrollIntoViewIfNeeded();
-  await expectBoundedProviderChrome(page);
-}
-
 test("touch target audit catches offscreen and label-backed undersized controls", async ({ page }) => {
   await page.setContent(`
     <button aria-label="Offscreen small control" style="position:absolute;top:2000px;left:0;width:24px;height:24px;padding:0">O</button>
@@ -461,6 +226,7 @@ test("touch target audit catches offscreen and label-backed undersized controls"
     <input id="second-label-choice" type="radio" aria-label="Visible second label control" style="position:absolute;width:0;height:0;opacity:0">
     <label for="second-label-choice" hidden>Hidden first choice label</label>
     <label for="second-label-choice" style="display:block;width:24px;height:24px">Visible second choice label</label>
+    <label style="display:block;width:60px;height:44px"><input type="checkbox" aria-label="Covered native choice" style="width:20px;height:20px;margin:0">Safe</label>
     <div hidden>
       <input id="hidden-only" type="checkbox" aria-label="Hidden small control" style="width:24px;height:24px">
       <label for="hidden-only" style="display:block;width:24px;height:24px">Hidden small label</label>
@@ -481,230 +247,289 @@ test("touch target audit catches offscreen and label-backed undersized controls"
   expect(failures.map(({ name }) => name)).not.toEqual(expect.arrayContaining([
     "Hidden small control",
     "Inert small control",
+    "Covered native choice",
   ]));
 });
 
+
+async function expectGeometry(page: Page): Promise<void> {
+  await expect.poll(() => page.evaluate(() => {
+    const header = document.querySelector<HTMLElement>(".oak-day-header")!.getBoundingClientRect();
+    const sheet = document.querySelector<HTMLElement>(".oak-itinerary-sheet")!.getBoundingClientRect();
+    const map = document.querySelector<HTMLElement>(".oak-map-content")!.getBoundingClientRect();
+    return {
+      fits: document.documentElement.scrollWidth <= innerWidth && document.body.scrollWidth <= innerWidth,
+      header: header.top >= 0 && header.left >= 0 && header.right <= innerWidth + 1,
+      sheet: sheet.top >= 0 && sheet.bottom <= innerHeight + 1 && sheet.left >= 0 && sheet.right <= innerWidth + 1,
+      map: map.width > 0 && map.height > 0,
+    };
+  })).toEqual({ fits: true, header: true, sheet: true, map: true });
+}
+async function expectDayRail(page: Page, count = 4): Promise<void> {
+  const rail = page.getByRole("navigation", { name: catalog.accessibleNames.dayRail });
+  await expect(rail.getByRole("button")).toHaveCount(count);
+  const last = rail.getByRole("button").last();
+  await last.scrollIntoViewIfNeeded();
+  await expect(last).toBeInViewport();
+  for (const button of await rail.getByRole("button").all()) {
+    const box = await button.boundingBox();
+    expect(box?.width).toBeGreaterThanOrEqual(44);
+    expect(box?.height).toBeGreaterThanOrEqual(44);
+  }
+}
+
+async function expectActionReachable(control: Locator): Promise<void> {
+  await control.scrollIntoViewIfNeeded();
+  await expect(control).toBeInViewport();
+  await expect.poll(() => control.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    let left = Math.max(0, rect.left), right = Math.min(innerWidth, rect.right), top = Math.max(0, rect.top), bottom = Math.min(innerHeight, rect.bottom);
+    for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+      const css = getComputedStyle(parent), box = parent.getBoundingClientRect();
+      if (["auto", "scroll", "hidden", "clip"].includes(css.overflowX)) { left = Math.max(left, box.left); right = Math.min(right, box.right); }
+      if (["auto", "scroll", "hidden", "clip"].includes(css.overflowY)) { top = Math.max(top, box.top); bottom = Math.min(bottom, box.bottom); }
+    }
+    const hit = document.elementFromPoint((left + right) / 2, (top + bottom) / 2);
+    return right - left >= 43.5 && bottom - top >= 43.5 && element.contains(hit);
+  })).toBe(true);
+}
+
+async function expectOakReflowReachability(page: Page): Promise<void> {
+  await expectGeometry(page);
+  await expect.poll(() => page.evaluate(() => {
+    const header = document.querySelector<HTMLElement>(".oak-day-header")!;
+    const sheet = document.querySelector<HTMLElement>(".oak-itinerary-sheet")!;
+    const body = document.querySelector<HTMLElement>(".oak-sheet-body")!;
+    const itinerary = getComputedStyle(body).overflowY === "auto" ? body : document.querySelector<HTMLElement>(".oak-sheet-scroll")!;
+    const title = header.querySelector<HTMLElement>("h1")!;
+    const heading = sheet.querySelector<HTMLElement>("h2")!;
+    const contains = (owner: HTMLElement, child: HTMLElement) => {
+      const a = owner.getBoundingClientRect(), b = child.getBoundingClientRect();
+      return b.left >= a.left - 1 && b.right <= a.right + 1 && b.top >= a.top - 1 && b.bottom <= a.bottom + 1;
+    };
+    return {
+      titleReadable: title.clientWidth > 0 && title.clientHeight > 0 && contains(header, title) && !!title.getAttribute("aria-label"),
+      headingReadable: heading.clientWidth > 0 && contains(sheet, heading) && heading.scrollWidth <= heading.clientWidth + 1 && heading.scrollHeight <= heading.clientHeight + 1,
+      itineraryUsable: itinerary.clientHeight >= 44 && itinerary.clientWidth >= 44 && itinerary.scrollHeight > itinerary.clientHeight,
+      itineraryContained: contains(sheet, itinerary),
+      rowsPresent: itinerary.querySelectorAll("[data-owner-id]").length > 0,
+    };
+  })).toEqual({ titleReadable: true, headingReadable: true, itineraryUsable: true, itineraryContained: true, rowsPresent: true });
+  expect(await visibleInteractiveTargetFailures(page)).toEqual([]);
+  // Scroll every real header, sheet and map action into view, including final rows.
+  // A rectangle alone does not prove the user can hit the action through overlays.
+  const controls = page.locator(".oak-day-header button, .oak-itinerary-sheet button, .oak-map-controls button");
+  for (const control of await controls.all()) {
+    if (!await control.isVisible()) continue;
+    await expectActionReachable(control);
+  }
+  for (const fact of await page.locator(".oak-sheet-scroll .oak-row-selection > span:not(.oak-visually-hidden)").all()) {
+    if (!await fact.isVisible()) continue;
+    await fact.scrollIntoViewIfNeeded();
+    await expect(fact).toBeInViewport();
+    expect(await fact.evaluate(element => {
+      const r = element.getBoundingClientRect();
+      return r.width > 0 && r.left >= 0 && r.right <= innerWidth && (element as HTMLElement).scrollWidth <= (element as HTMLElement).clientWidth + 1;
+    })).toBe(true);
+  }
+  const finalOwner = ownerButton(page, "shopping-supplies");
+  await finalOwner.focus();
+  await expect(finalOwner).toBeFocused();
+  await expectActionReachable(finalOwner);
+  await finalOwner.click();
+  await expect(finalOwner).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(() => page.evaluate(() => {
+    const map = document.querySelector<HTMLElement>(".oak-map-content")!;
+    const mapRect = map.getBoundingClientRect();
+    const attribution = map.querySelector<HTMLElement>("[data-e2e-provider-attribution]")!;
+    const probe = (element: HTMLElement) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        contained: rect.width > 0 && rect.height > 0 && rect.left >= Math.max(0, mapRect.left) && rect.right <= Math.min(innerWidth, mapRect.right) && rect.top >= Math.max(0, mapRect.top) && rect.bottom <= Math.min(innerHeight, mapRect.bottom),
+        hit: element.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)),
+      };
+    };
+    return probe(attribution);
+  })).toEqual({ contained: true, hit: true });
+  await page.getByRole("button", { name: catalog.location.locate, exact: true }).click();
+  const id = await page.evaluate(() => (window as unknown as BrowserE2EGlobals).__e2eGeo.latestId());
+  expect(id).toBeGreaterThan(0);
+  await page.evaluate(id => (window as unknown as BrowserE2EGlobals).__e2eGeo.success(id, 35.69, 139.77), id);
+  await expect(mapSurface(page)).toHaveAttribute("data-e2e-user-location", JSON.stringify({ lat: 35.69, lng: 139.77 }));
+  for (const control of await page.locator(".oak-map-controls button").all()) await expectActionReachable(control);
+  const cameraCount = Number(await mapSurface(page).getAttribute("data-e2e-camera-request-count"));
+  await page.getByRole("button", { name: catalog.location.recenter, exact: true }).click();
+  await expect.poll(async () => Number(await mapSurface(page).getAttribute("data-e2e-camera-request-count"))).toBe(cameraCount + 1);
+  await page.getByRole("button", { name: catalog.location.stop, exact: true }).click();
+  await expect(mapSurface(page)).toHaveAttribute("data-e2e-user-location", "null");
+}
+
 test("keeps the persistent map and interruptible three-snap sheet inside every mobile viewport", async ({ page }) => {
   await openTrip(page);
-  const map = page.getByTestId("itinerary-map");
-  const sheet = page.getByRole("region", { name: "Itinerary" });
-  const handle = page.getByRole("button", { name: "Drag itinerary sheet" });
-
-  await expect(map).toBeVisible();
+  const map = mapSurface(page), sheet = sheetSurface(page), handle = sheetHandle(page);
   await expect(map.getByText("Deterministic test map · E2E only")).toBeVisible();
-  await expect(sheet).toHaveAttribute("data-snap", "half");
-  if (await setVisibleFieldAtlasDayCount(page, 2)) {
-    for (const dayCount of [2, 3, 4] as const) {
-      await setVisibleFieldAtlasDayCount(page, dayCount);
-      await expectContainedFieldAtlasChrome(page, dayCount);
-      if (dayCount >= 3) await expectLastFieldAtlasDayReachable(page);
-    }
-  } else {
-    await expectContainedFieldAtlasChrome(page);
-  }
-  await expectBoundedProviderChrome(page);
-  expect(await page.evaluate(() => ({
-    document: document.documentElement.scrollWidth <= window.innerWidth,
-    body: document.body.scrollWidth <= window.innerWidth,
-  }))).toEqual({ document: true, body: true });
-
+  await expect(sheet).toHaveAttribute("data-sheet-snap", "half");
+  await expectDayRail(page);
+  await expectGeometry(page);
   const handleBox = await handle.boundingBox();
   expect(handleBox?.width).toBeGreaterThanOrEqual(44);
   expect(handleBox?.height).toBeGreaterThanOrEqual(44);
-  await handle.press("Home");
-  await expect(sheet).toHaveAttribute("data-snap", "collapsed");
-  await expectBoundedProviderChrome(page);
-  await handle.press("End");
-  await expect(sheet).toHaveAttribute("data-snap", "expanded");
-  await expectBoundedProviderChrome(page);
-
-  await handle.hover();
-  const dragBox = await handle.boundingBox();
-  expect(dragBox).not.toBeNull();
-  await page.mouse.move(dragBox!.x + dragBox!.width / 2, dragBox!.y + dragBox!.height / 2);
+  await setSheetSnap(page, "collapsed");
+  await expectGeometry(page);
+  await setSheetSnap(page, "expanded");
+  await expectGeometry(page);
+  const drag = (await handle.boundingBox())!;
+  await page.mouse.move(drag.x + 25, drag.y + 10);
   await page.mouse.down();
-  await page.mouse.move(dragBox!.x + dragBox!.width / 2, dragBox!.y + 240, { steps: 4 });
+  await page.mouse.move(drag.x + 25, drag.y + 180, { steps: 4 });
   await expect(sheet).toHaveAttribute("data-dragging", "true");
-  expect(await sheet.evaluate((element) => (element as HTMLElement).style.transitionDuration)).toBe("0ms");
+  expect(await sheet.evaluate(element => (element as HTMLElement).style.transitionDuration)).toBe("0ms");
   await page.mouse.up();
-  await expect(sheet).not.toHaveAttribute("data-snap", "expanded");
-
-  const boundedFieldAtlas =
-    (await page.getByTestId("trip-experience").getAttribute("data-map-chrome-layout")) ===
-    "bounded";
-  if (page.viewportSize()?.width === 320 && boundedFieldAtlas) {
-    await page.getByRole("button", { name: "Set half itinerary" }).click();
-    await page.evaluate(() => {
-      document.documentElement.style.fontSize = "200%";
-      window.dispatchEvent(new Event("resize"));
-    });
-    await expectCompleteFieldAtlasReflow(page);
-    await page.evaluate(() => {
-      document.documentElement.style.removeProperty("font-size");
-      window.dispatchEvent(new Event("resize"));
-    });
-
-    await page.setViewportSize({ width: 160, height: 284 });
-    await expectCompleteFieldAtlasReflow(page);
-    await page.setViewportSize({ width: 320, height: 568 });
-    await expect(sheet).toHaveAttribute("data-snap", "half");
-    await expectBoundedProviderChrome(page);
-    await expectContainedFieldAtlasChrome(page);
-
-    await page.setViewportSize({ width: 1440, height: 1000 });
-    await expectContainedFieldAtlasChrome(page);
-    await expectBoundedProviderChrome(page);
-    await page.setViewportSize({ width: 320, height: 568 });
-    await expectContainedFieldAtlasChrome(page);
-  }
-
-  const geometry = await page.evaluate(() => {
-    const header = document.querySelector<HTMLElement>(".day-header")!.getBoundingClientRect();
-    const sheetRect = document.querySelector<HTMLElement>(".itinerary-sheet")!.getBoundingClientRect();
-    return {
-      headerTop: header.top,
-      sheetTop: sheetRect.top,
-      sheetBottom: sheetRect.bottom,
-      height: window.innerHeight,
-    };
+  await expect(sheet).not.toHaveAttribute("data-sheet-snap", "expanded");
+  // A second gesture interrupts an in-flight snap rather than queuing it.
+  // Target the live moving band atomically, without a stale cross-command box.
+  const second = await handle.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    element.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 1, pointerType: "mouse", buttons: 1, clientX: rect.x + 25, clientY: rect.y + 10 }));
+    return { x: rect.x + 25, y: rect.y + 10 };
   });
-  expect(geometry.headerTop).toBeGreaterThanOrEqual(0);
-  expect(geometry.sheetTop).toBeGreaterThanOrEqual(0);
-  expect(geometry.sheetBottom).toBeLessThanOrEqual(geometry.height + 1);
+  await handle.dispatchEvent("pointermove", { pointerId: 1, clientX: second.x, clientY: second.y - 60 });
+  await expect(sheet).toHaveAttribute("data-dragging", "true");
+  await handle.dispatchEvent("pointerup", { pointerId: 1, clientX: second.x, clientY: second.y - 60 });
+  await expect(sheet).toHaveAttribute("data-dragging", "false");
+  await setSheetSnap(page, "half");
+  if (page.viewportSize()?.width === 320) {
+    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; window.dispatchEvent(new Event("resize")); });
+    await expectGeometry(page);
+    await expectDayRail(page);
+    await page.evaluate(() => { document.documentElement.style.removeProperty("font-size"); window.dispatchEvent(new Event("resize")); });
+    await page.setViewportSize({ width: 160, height: 284 });
+    await page.locator(".oak-upper-clearance").evaluate(element => { element.scrollTop = 0; });
+    await expectGeometry(page);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await expectGeometry(page);
+    await expectDayRail(page);
+    await page.setViewportSize({ width: 320, height: 568 });
+  }
+  await expectGeometry(page);
 });
 
+for (const [height, textScale] of [[300, 1], [260, 1], [300, 2]] as const) {
+  test(`short landscape 956x${height} at ${textScale * 100} percent retains scroll reachability`, async ({ page }) => {
+    await page.setViewportSize({ width: 956, height });
+    await openTrip(page);
+    await page.evaluate(scale => { document.documentElement.style.fontSize = `${16 * scale}px`; window.dispatchEvent(new Event("resize")); }, textScale);
+    for (const snap of ["half", "expanded"] as const) {
+      await setSheetSnap(page, snap);
+      await expect(page.locator(".oak-experience")).toHaveAttribute("data-chrome-scroll", "true");
+      const upper = page.locator(".oak-upper-clearance");
+      const carriedScroll = await upper.evaluate(element => element.scrollTop);
+      // The previous sweep deliberately reveals map actions in this scrollport.
+      // Restore the initial pose for independent title/date checks; user scroll
+      // persists across snap changes and is not a presentation failure.
+      await upper.evaluate(element => { element.scrollTop = 0; });
+      await page.locator(".oak-sheet-body").evaluate(element => { element.scrollTop = 0; });
+      const title = page.locator(".oak-day-header h1");
+      expect(await title.evaluate(element => {
+        const port = element.closest(".oak-upper-clearance")!.getBoundingClientRect();
+        const range = document.createRange(); range.selectNodeContents(element);
+        return [...range.getClientRects()].every(line => line.left >= port.left && line.right <= port.right && line.top >= port.top && line.bottom <= port.bottom);
+      })).toBe(true);
+      console.log("LANDSCAPE_SWEEP_POSE", { height, textScale, snap, carriedScroll, restoredScroll: await upper.evaluate(element => element.scrollTop) });
+      await expectOakReflowReachability(page);
+    }
+  });
+}
+
+for (const reflow of ["200 percent text", "160 CSS pixels"] as const) {
+  test(`retains content, action reachability and provider chrome at ${reflow}`, async ({ page }) => {
+    await openTrip(page);
+    if (reflow === "200 percent text") {
+      await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; window.dispatchEvent(new Event("resize")); });
+    } else await page.setViewportSize({ width: 160, height: 284 });
+    await expectOakReflowReachability(page);
+  });
+}
+
 test("proves asymmetric safe areas, clock advancement, route retry, and persistent map identity", async ({ page }) => {
-  await page.addInitScript(() => {
-    (window as unknown as BrowserE2EGlobals).__ETERNAL_POSE_E2E_NOW__ = "2042-04-18T08:50:00Z";
-  });
+  await page.clock.install();
+  await page.addInitScript(() => { (window as unknown as BrowserE2EGlobals).__ETERNAL_POSE_E2E_NOW__ = "2042-04-18T08:50:00Z"; });
   await openTrip(page);
-  const experience = page.getByTestId("trip-experience");
-  const map = page.getByTestId("itinerary-map");
-  const mapHandle = await map.elementHandle();
-  expect(mapHandle).not.toBeNull();
-  const initialMountCount = Number(await map.getAttribute("data-e2e-mount-count"));
-  expect(initialMountCount).toBeGreaterThan(0);
-  await expect(page.getByLabel("Etc/UTC time")).toHaveText("08:50");
-  await expect(page.getByRole("button", { name: /(?:About|約) 09:00 Lookout terrace/ })).toHaveAttribute(
-    "data-selection-source",
-    "automatic",
-  );
-
-  await page.addStyleTag({
-    content: ".safe-area-probe { padding-top: 13px !important; padding-bottom: 29px !important; }",
-  });
+  const map = mapSurface(page), original = await map.elementHandle();
+  const mounts = await map.getAttribute("data-e2e-mount-count");
+  await expect(page.getByLabel(catalog.experience.tripTime)).toHaveText("08:50");
+  await expect(ownerRow(page, "sightseeing-lookout")).toHaveAttribute("data-next", "true");
+  await expect(ownerButton(page, "sightseeing-lookout")).toHaveAttribute("aria-pressed", "true");
+  await page.addStyleTag({ content: ".oak-experience { --oak-safe-area-top: 13px; --oak-safe-area-bottom: 29px; --oak-safe-area-left: 7px; --oak-safe-area-right: 19px; }" });
   await page.evaluate(() => window.dispatchEvent(new Event("resize")));
-  await expect.poll(() => experience.evaluate((element) => ({
-    top: element.style.getPropertyValue("--safe-area-top"),
-    bottom: element.style.getPropertyValue("--safe-area-bottom"),
-  }))).toEqual({ top: "13px", bottom: "29px" });
-  const padding = JSON.parse((await map.getAttribute("data-e2e-padding"))!) as {
-    top: number;
-    bottom: number;
-  };
-  if ((await experience.getAttribute("data-map-chrome-layout")) === "bounded") {
-    expect(padding).toEqual({ top: 16, right: 16, bottom: 16, left: 16 });
-    await expectBoundedProviderChrome(page);
-  } else {
-    expect(padding.top).toBeGreaterThan(13);
-    expect(padding.bottom).toBeGreaterThan(29);
-    expect(padding.top).not.toBe(padding.bottom);
-  }
-
-  const unavailable = page.locator(
-    '[data-route-owner="route-shopping-hotel"][data-state="error"]',
-  );
-  await expect(unavailable).toContainText("Synthetic first attempt unavailable");
-  await unavailable.getByRole("button", { name: "Retry route" }).click();
-  await expect(page.locator('[data-route-id="route-shopping-hotel"]')).toBeVisible();
-  await expect(unavailable).toHaveCount(0);
-
-  await page.evaluate(() => {
-    (window as unknown as BrowserE2EGlobals).__ETERNAL_POSE_E2E_NOW__ = "2042-04-18T10:15:00Z";
-  });
-  await page.getByRole("button", { name: "Collapse date choices" }).click();
-  await expect(page.getByLabel("Etc/UTC time")).toHaveText("10:15");
-  await expect(page.getByRole("button", { name: /(?:About|約) 10:00 Garden kitchen/ })).toHaveAttribute(
-    "aria-current",
-    "step",
-  );
-
-  await page.getByRole("button", { name: "Expand date choices" }).click();
-  await page.getByRole("button", { name: /Day 2: Cove closing day/ }).click();
-  await page.getByRole("button", { name: "Return to the current itinerary item" }).first().click();
-  expect(await mapHandle.evaluate((element) =>
-    element.isConnected && element === document.querySelector('[data-testid="itinerary-map"]'),
-  )).toBe(true);
-  await expect(map).toHaveAttribute("data-e2e-mount-count", String(initialMountCount));
+  await expect.poll(async () => {
+    const padding = JSON.parse((await map.getAttribute("data-e2e-edge-insets"))!) as { top: number; bottom: number };
+    return padding.top > 13 && padding.bottom > 29 && padding.top !== padding.bottom;
+  }).toBe(true);
+  expect(await sheetSurface(page).evaluate(element => getComputedStyle(element).paddingBottom)).toBe("29px");
+  await expectGeometry(page);
+  await retryUnavailableRoute(page);
+  await page.evaluate(() => { (window as unknown as BrowserE2EGlobals).__ETERNAL_POSE_E2E_NOW__ = "2042-04-18T10:15:00Z"; });
+  await page.clock.runFor(60_000);
+  await page.getByRole("button", { name: catalog.accessibleNames.collapseDayRail }).click();
+  await expect(page.getByLabel(catalog.experience.tripTime)).toHaveText("10:15");
+  await expect(ownerRow(page, "dining-lunch")).toHaveAttribute("aria-current", "step");
+  await page.getByRole("button", { name: catalog.accessibleNames.expandDayRail }).click();
+  await dayButton(page, "Cove closing day").click();
+  await page.getByRole("button", { name: catalog.navigation.returnToCurrent, exact: true }).click();
+  expect(await original.evaluate(element => element.isConnected && element === document.querySelector(".oak-map-content"))).toBe(true);
+  await expect(map).toHaveAttribute("data-e2e-mount-count", mounts!);
 });
 
 test("synchronizes dates, live current state, list places, map places, and independent route owners", async ({ page }) => {
   await openTrip(page);
-  const map = page.getByTestId("itinerary-map");
-  const dayOne = page.getByRole("button", { name: /Day 1: Harbor field day, Fri, Apr 18/ });
-  const dayTwo = page.getByRole("button", { name: /Day 2: Cove closing day, Sat, Apr 19/ });
-  await expect(dayOne).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("button", { name: /(?:About|約) 10:00 Garden kitchen/ })).toHaveAttribute("aria-current", "step");
-
-  const supplyMapMarker = map.getByRole("button", { name: "Map place Supply hall" });
-  const supplyOwner = await supplyMapMarker.getAttribute("data-map-owner");
-  await page.getByRole("button", { name: /(?:Time not set|時間未定) Supply hall/ }).click();
-  await expect(map).toHaveAttribute("data-e2e-focus-kind", "place");
-  await expect(map).toHaveAttribute("data-e2e-focus-id", supplyOwner!);
-  await expect(supplyMapMarker).toHaveAttribute("data-map-tone", "selected");
-
-  await map.getByRole("button", { name: "Map place Lookout terrace" }).dispatchEvent("click");
-  await expect(page.getByRole("button", { name: /(?:About|約) 09:00 Lookout terrace/ })).toHaveAttribute("aria-pressed", "true");
-
-  await dayTwo.click();
-  await expect(dayTwo).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("button", { name: /09:00 Cove walk/ })).toBeVisible();
-  await page.getByRole("button", { name: "Return to the current itinerary item" }).first().click();
-  await expect(dayOne).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("button", { name: /(?:About|約) 10:00 Garden kitchen/ })).toHaveAttribute("aria-pressed", "true");
-
-  const routeOwners = await page.locator("[data-route-owner]").evaluateAll((elements) =>
-    elements.map((element) => element.getAttribute("data-route-owner")),
-  );
-  expect(routeOwners).toHaveLength(10);
-  expect(new Set(routeOwners).size).toBe(10);
-  await expect(page.locator('[data-route-owner="route-start-shuttle"]')).toHaveAttribute("data-display", "compact");
-  await expect(page.locator('[data-route-owner="route-ferry-lookout"]')).toHaveAttribute("data-display", "full");
-
-  const transit = page.locator('[data-route-id="route-shuttle-ferry"]');
-  const focusCountBeforeListSelection = Number(await map.getAttribute("data-e2e-focus-count"));
+  const map = mapSurface(page);
+  await expect(dayButton(page, "Harbor field day")).toHaveAttribute("aria-current", "true");
+  await expect(ownerRow(page, "dining-lunch")).toHaveAttribute("aria-current", "step");
+  const supply = map.locator('[data-map-owner="shopping-supplies"]');
+  await ownerButton(page, "shopping-supplies").click();
+  await expect(map).toHaveAttribute("data-e2e-camera-kind", "focus");
+  await expect.poll(async () => {
+    const intent = JSON.parse((await map.getAttribute("data-e2e-camera-intent"))!) as CameraIntent;
+    return intent.kind === "focus" ? JSON.stringify(intent.coordinate) : null;
+  }).toBe(await supply.getAttribute("data-map-coordinate"));
+  await expect(supply).toHaveAttribute("data-map-tone", "selected");
+  await map.locator('[data-map-owner="sightseeing-lookout"]').dispatchEvent("click");
+  await expect(ownerButton(page, "sightseeing-lookout")).toHaveAttribute("aria-pressed", "true");
+  await dayButton(page, "Cove closing day").click();
+  await expect(dayButton(page, "Cove closing day")).toHaveAttribute("aria-current", "true");
+  await expect(ownerButton(page, "day-two-cove")).toBeVisible();
+  await page.getByRole("button", { name: catalog.navigation.returnToCurrent, exact: true }).click();
+  await expect(dayButton(page, "Harbor field day")).toHaveAttribute("aria-current", "true");
+  await expect(ownerButton(page, "dining-lunch")).toHaveAttribute("aria-pressed", "true");
+  const routeIds = await page.locator(".oak-connector-row").evaluateAll(elements => elements.map(element => element.getAttribute("data-owner-id")));
+  expect(routeIds).toHaveLength(10);
+  expect(new Set(routeIds).size).toBe(10);
+  // Both short and long edges retain independent compact connector ownership.
+  await expect(ownerRow(page, "route-start-shuttle")).toHaveAttribute("data-role", "connector");
+  await expect(ownerRow(page, "route-ferry-lookout")).toHaveAttribute("data-role", "connector");
+  const transit = ownerButton(page, "route-shuttle-ferry");
+  const before = Number(await map.getAttribute("data-e2e-camera-request-count"));
   await transit.click();
-  await expect(transit).toHaveAttribute("aria-expanded", "true");
-  await expect(transit).toContainText("Transit details");
-  await expect(transit).not.toContainText("transit · 18 min");
-  const expandedTransitDetailsId = await transit.getAttribute("aria-controls");
-  expect(expandedTransitDetailsId).not.toBeNull();
-  await expect(
-    page.locator(`#${expandedTransitDetailsId!}`).getByText("Board synthetic blue line"),
-  ).toBeVisible();
-  await expect(map).toHaveAttribute("data-e2e-focus-kind", "route");
-  await expect(map).toHaveAttribute("data-e2e-focus-id", "route-shuttle-ferry");
-  expect(Number(await map.getAttribute("data-e2e-focus-count"))).toBe(
-    focusCountBeforeListSelection + 1,
-  );
-
-  const focusCountBeforeMapSelection = Number(await map.getAttribute("data-e2e-focus-count"));
-  await map.getByRole("button", { name: "Map route route-ferry-lookout" }).dispatchEvent("click");
-  await expect(map.getByRole("button", { name: "Map route route-ferry-lookout" })).toHaveAttribute("data-map-tone", "selected");
-  const selectedListRoute = page.locator('[data-route-id="route-ferry-lookout"]');
-  await expect(selectedListRoute).toHaveAttribute("aria-pressed", "true");
-  await expect(selectedListRoute).toHaveAttribute("data-selected", "true");
-  await expect(selectedListRoute).toBeFocused();
-  const focusCountAfterMapSelection = Number(await map.getAttribute("data-e2e-focus-count"));
-  expect(focusCountAfterMapSelection).toBe(focusCountBeforeMapSelection);
-  await page.getByRole("button", { name: "Return to lodging" }).focus();
-  await expect(page.getByRole("button", { name: "Return to lodging" })).toBeFocused();
-  await map.getByRole("button", { name: "Map route route-ferry-lookout" }).dispatchEvent("click");
-  await expect(selectedListRoute).toBeFocused();
-  expect(Number(await map.getAttribute("data-e2e-focus-count"))).toBe(focusCountAfterMapSelection);
-
-  const liveDirections = page.getByRole("link", { name: /Open live transit directions from Harbor shuttle stop to Ferry terminal/ });
-  const href = new URL((await liveDirections.getAttribute("href"))!);
+  await expect(transit).toHaveAttribute("aria-pressed", "true");
+  await expect(ownerRow(page, "route-shuttle-ferry").getByText("Board synthetic blue line")).toBeVisible();
+  await expect(map).toHaveAttribute("data-e2e-camera-kind", "fit");
+  const intent = JSON.parse((await map.getAttribute("data-e2e-camera-intent"))!) as CameraIntent;
+  expect(intent.kind === "fit" ? JSON.stringify(intent.paths[0]) : null).toBe(await map.locator('[data-map-route="route-shuttle-ferry"]').getAttribute("data-map-geometry"));
+  expect(Number(await map.getAttribute("data-e2e-camera-request-count"))).toBe(before + 1);
+  const count = Number(await map.getAttribute("data-e2e-camera-request-count"));
+  await map.locator('[data-map-route="route-ferry-lookout"]').dispatchEvent("click");
+  const selected = ownerButton(page, "route-ferry-lookout");
+  await expect(selected).toHaveAttribute("aria-pressed", "true");
+  await expect(selected).toBeFocused();
+  await expect(map.locator('[data-map-route="route-ferry-lookout"]')).toHaveAttribute("data-map-tone", "selected");
+  await page.getByRole("button", { name: catalog.navigation.returnToLodging, exact: true }).focus();
+  await map.locator('[data-map-route="route-ferry-lookout"]').dispatchEvent("click");
+  await expect(selected).toBeFocused();
+  expect(Number(await map.getAttribute("data-e2e-camera-request-count"))).toBe(count);
+  await transit.click();
+  await ownerRow(page, "route-shuttle-ferry").getByRole("button", { name: catalog.routes.external }).click();
+  const href = new URL((await page.evaluate(() => (window as unknown as BrowserE2EGlobals).__e2eNavigation))!);
   expect(href.origin).toBe("https://www.google.com");
   expect(href.pathname).toBe("/maps/dir/");
   expect(href.searchParams.get("api")).toBe("1");
@@ -713,221 +538,187 @@ test("synchronizes dates, live current state, list places, map places, and indep
 
 test("compares dining and snack candidates together on the persistent map with draft and commit semantics", async ({ page }) => {
   await openTrip(page);
-  const map = page.getByTestId("itinerary-map");
-  const compare = page.getByRole("button", {
-    name: /^(?:Compare Lunch choice(?: again)?|(?:重新)?比較 Lunch choice)$/,
-  });
-  await compare.click();
-  await expect(map.getByRole("button", { name: /Map place 5A · Garden kitchen/ })).toBeVisible();
-  const canalMarker = map.getByRole("button", { name: /Map place 5B · Canal counter/ });
-  await expect(canalMarker).toBeVisible();
-  await canalMarker.dispatchEvent("click");
-  const canalRadio = page.getByRole("radio", { name: /5B · Canal counter/ });
-  await expect(canalRadio).toBeChecked();
-  await expect(canalRadio).toBeFocused();
+  const map = mapSurface(page), identity = await map.elementHandle();
+  await ownerButton(page, "dining-lunch").click();
+  await ownerRow(page, "dining-lunch").getByRole("button", { name: catalog.candidate.reopen }).click();
+  const dialog = page.getByRole("dialog", { name: catalog.accessibleNames.candidateDialog });
+  await expect(map.getByRole("button", { name: /Map place .*Garden kitchen/ })).toBeAttached();
+  const canal = map.getByRole("button", { name: /Map place .*Canal counter/ });
+  await canal.dispatchEvent("click");
+  const option = dialog.getByRole("button", { name: /Canal counter/ });
+  await expect(option).toHaveAttribute("aria-pressed", "true");
+  await expect(option).toBeFocused();
   await page.keyboard.press("Tab");
   await page.keyboard.press("Shift+Tab");
-  await expect(canalRadio).toBeFocused();
-  expect(await canalRadio.evaluate((element) => {
-    const label = element.closest("label");
-    return label === null ? "none" : getComputedStyle(label).outlineStyle;
-  })).not.toBe("none");
+  await expect(option).toBeFocused();
+  expect(await option.evaluate(element => getComputedStyle(element).outlineStyle)).not.toBe("none");
   expect(await visibleInteractiveTargetFailures(page)).toEqual([]);
-  await page.getByRole("button", { name: /^(?:Confirm Canal counter|確認選擇 Canal counter)$/ }).click();
-  const candidateDecision = page.locator("[data-candidate-mode]");
-  await expect(candidateDecision.getByText(/^(?:Selected|已選) · Canal counter$/)).toBeVisible();
-  await expect(map.getByRole("button", { name: /Map place 5A · Garden kitchen/ })).toHaveCount(0);
-  await expect(map.getByRole("button", { name: /Map place 5B · Canal counter/ })).toHaveCount(0);
-
-  await page.getByRole("button", { name: /^(?:Compare Lunch choice again|重新比較 Lunch choice)$/ }).click();
-  await page.getByRole("radio", { name: /5A · Garden kitchen/ }).check();
-  await page.getByRole("button", { name: /^(?:Cancel candidate comparison|取消候選比較)$/ }).click();
-  await expect(candidateDecision.getByText(/^(?:Selected|已選) · Canal counter$/)).toBeVisible();
-
-  await page.getByRole("button", { name: /(?:About|約) 09:00 Lookout terrace/ }).click();
-  await page.getByRole("button", { name: /^(?:View Lookout terrace candidates|查看 Lookout terrace 候選)$/ }).click();
-  await expect(map.getByRole("button", { name: /Map place 4A · Fruit window/ })).toBeVisible();
-  await expect(map.getByRole("button", { name: /Map place 4B · Steam bun cart/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /(?:Confirm candidate selection|確認選擇)/ })).toHaveCount(0);
+  await dialog.getByRole("button", { name: catalog.candidate.cancel }).click();
+  await candidateDecision(page);
+  await expect(map.locator('[data-map-states~="candidate"]')).toHaveCount(0);
+  await ownerButton(page, "sightseeing-lookout").click();
+  await ownerRow(page, "sightseeing-lookout").getByRole("button", { name: catalog.candidate.reopen }).click();
+  await expect(map.getByRole("button", { name: /Map place .*Fruit window/ })).toBeAttached();
+  await expect(map.getByRole("button", { name: /Map place .*Steam bun cart/ })).toBeAttached();
+  await expect(dialog.getByRole("button", { name: catalog.candidate.confirm })).toHaveCount(0);
+  const browseOption = dialog.locator('[data-candidate-id="snack-bun"] .oak-candidate-option');
+  await expect(dialog.getByRole("button", { name: /Steam bun cart/ })).toHaveCount(0);
+  await expect(browseOption).not.toContainText(catalog.candidate.draft);
+  await map.getByRole("button", { name: /Map place .*Steam bun cart/ }).dispatchEvent("click");
+  await expect(browseOption).toBeFocused();
   expect(await visibleInteractiveTargetFailures(page)).toEqual([]);
+  expect(await identity.evaluate(element => element.isConnected && element === document.querySelector(".oak-map-content"))).toBe(true);
 });
 
-test("renders all semantics, lodging roles, tasks, dialogs, and trip-scoped progress reload and reset", async ({ page }) => {
+test("renders all semantics, lodging roles, tasks, reservations, and trip-scoped progress reload and reset", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByTestId("trip-home")).toBeVisible();
-  const pretrip = page.getByRole("checkbox", { name: "Prepare offline documents" });
-  await pretrip.check();
+  await page.getByRole("checkbox", { name: "Prepare offline documents" }).check();
   await page.reload();
   await expect(page.getByRole("checkbox", { name: "Prepare offline documents" })).toBeChecked();
-  await page.getByRole("button", { name: /(?:Enter|進入) Day 1 · Harbor field day/ }).click();
-  await expect(page.getByTestId("trip-experience")).toBeVisible();
-
-  for (const semantic of ["transport", "transfer", "lodging", "dining", "shopping", "sightseeing", "experience", "logistics", "custom"]) {
-    await expect(page.locator(`[data-semantic="${semantic}"]`).first()).toBeAttached();
-  }
-  await expect(page.getByText("Day start · Stay base")).toBeAttached();
-  await expect(page.getByText("Rest / drop off bags")).toBeAttached();
-  await expect(page.getByText("Day end · Stay base")).toBeAttached();
-  await expect(page.getByText("Friday, 18 April 2042")).toBeAttached();
-
-  await page.getByRole("button", { name: /(?:Time not set|時間未定) Supply hall/ }).click();
-  const shopping = page.getByRole("combobox", { name: /^(?:Pocket notebook shopping status|Pocket notebook 採買狀態)$/ });
-  await shopping.selectOption("purchased");
-  await expect(shopping).toHaveValue("purchased");
-  await page.reload();
-  await page.getByRole("button", { name: /(?:Enter|進入) Day 1 · Harbor field day/ }).click();
-  await page.getByRole("button", { name: /(?:Time not set|時間未定) Supply hall/ }).click();
-  await expect(page.getByRole("combobox", { name: /^(?:Pocket notebook shopping status|Pocket notebook 採買狀態)$/ })).toHaveValue("purchased");
-
-  const taskTrigger = page.getByRole("button", { name: /^(?:Open tasks for Harbor field day|開啟 Harbor field day 當日事項)$/ });
-  await taskTrigger.click();
-  const taskDialog = page.getByRole("dialog", { name: /^(?:Tasks for Harbor field day|Harbor field day 當日事項)$/ });
-  await expect(taskDialog).toBeVisible();
-  expect(await taskDialog.evaluate((element) =>
-    element instanceof HTMLDialogElement && element.open,
-  )).toBe(true);
+  const tasks = page.getByRole("checkbox", { name: "Refill water bottle", exact: true });
+  await tasks.check();
   await expect(page.getByText("Use the lobby fountain.")).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("checkbox", { name: "Refill water bottle", exact: true })).toBeChecked();
+  const reservations = page.getByRole("region", { name: catalog.home.reservations });
+  await expect(reservations.getByText("SYNTHETIC-SKY", { exact: true })).toBeVisible();
+  await expect(reservations.getByText(catalog.booking.pending, { exact: true })).toBeVisible();
+  await expect(reservations.getByText(catalog.booking.none, { exact: true })).toBeVisible();
+  await enterDay(page);
+  for (const id of ["lodging-start", "lodging-end"]) {
+    await expect(ownerRow(page, id)).toHaveAttribute("data-role", "base");
+    await ownerButton(page, id).click();
+    await expect(ownerRow(page, id).getByText(catalog.facts.base, { exact: true })).toBeVisible();
+  }
+  await ownerButton(page, "shopping-supplies").click();
+  const shoppingName = "Pocket notebook · " + catalog.facts.status;
+  await page.getByRole("combobox", { name: shoppingName }).selectOption("purchased");
+  await page.reload(); await enterDay(page);
+  await ownerButton(page, "shopping-supplies").click();
+  await expect(page.getByRole("combobox", { name: shoppingName })).toHaveValue("purchased");
+  await ownerButton(page, "experience-observatory").click();
+  await expect(ownerRow(page, "experience-observatory").getByText("SYNTHETIC-SKY", { exact: true }).first()).toBeVisible();
+  await expect(ownerRow(page, "experience-observatory").getByRole("link", { name: catalog.booking.open }).first()).toHaveAttribute("href", "https://example.com/synthetic-sky");
+  await ownerButton(page, "lodging-midday").click();
+  await expect(ownerRow(page, "lodging-midday").getByText(catalog.facts.return, { exact: true })).toBeVisible();
+  await page.getByRole("checkbox", { name: "Drop off purchases" }).check();
   expect(await visibleInteractiveTargetFailures(page)).toEqual([]);
-  await page.getByRole("button", { name: /^(?:Close day tasks|關閉當日事項)$/ }).click();
-  await expect(taskTrigger).toBeFocused();
-
-  const reservationTrigger = page.getByRole("button", { name: /^(?:Open reservation information|開啟訂位資訊)$/ });
-  await reservationTrigger.click();
-  const reservationDialog = page.getByRole("dialog", { name: /^(?:Reservation information|訂位資訊)$/ });
-  await expect(reservationDialog).toBeVisible();
-  expect(await reservationDialog.evaluate((element) =>
-    element instanceof HTMLDialogElement && element.open,
-  )).toBe(true);
-  await expect(page.getByText("SYNTHETIC-SKY")).toHaveCount(0);
-  expect(await visibleInteractiveTargetFailures(page)).toEqual([]);
-  await page.getByRole("button", { name: /^(?:Show Sky room admission reservation code|顯示 Sky room admission 訂位代碼)$/ }).click();
-  await expect(page.getByText("SYNTHETIC-SKY")).toBeVisible();
-  await page.getByRole("button", { name: /^(?:Close reservation information|關閉訂位資訊)$/ }).click();
-  await expect(reservationTrigger).toBeFocused();
-
-  expect(await visibleInteractiveTargetFailures(page)).toEqual([]);
-
-  await page.evaluate(() => {
-    localStorage.removeItem("eternal-pose:trip-progress:v1:trip-e2e-archipelago");
-  });
+  await page.evaluate(() => localStorage.removeItem("eternal-pose:trip-progress:v1:trip-e2e-archipelago"));
   await page.reload();
   await expect(page.getByRole("checkbox", { name: "Prepare offline documents" })).not.toBeChecked();
-  await page.getByRole("button", { name: /(?:Enter|進入) Day 1 · Harbor field day/ }).click();
-  await page.getByRole("button", { name: /(?:Time not set|時間未定) Supply hall/ }).click();
-  await expect(page.getByRole("combobox", { name: /^(?:Pocket notebook shopping status|Pocket notebook 採買狀態)$/ })).toHaveValue("pending");
+  await expect(page.getByRole("checkbox", { name: "Refill water bottle", exact: true })).not.toBeChecked();
+  await enterDay(page); await ownerButton(page, "shopping-supplies").click();
+  await expect(page.getByRole("combobox", { name: shoppingName })).toHaveValue("pending");
+});
+
+test("Home reservations jump to the owned itinerary entry", async ({ page }) => {
+  await page.goto("/");
+  const reservation = page.locator('[data-home-reservation-id="reservation-sky"]');
+  await reservation.getByRole("button", { name: /開啟當日行程/ }).click();
+  await expect(page.locator('[data-owner-id="experience-observatory"]')).toHaveAttribute("data-selected", "true");
+  await page.getByRole("button", { name: catalog.experience.home }).click();
+  const candidate = page.locator('[data-home-reservation-id="reservation-lunch"]');
+  await candidate.getByRole("button", { name: /開啟當日行程/ }).click();
+  await expect(page.locator('[data-owner-id="dining-lunch"]')).toHaveAttribute("data-selected", "true");
+});
+
+test("expanded itinerary retains a usable map band and only its legal bottom lane", async ({ page }) => {
+  await page.goto("/");
+  await enterDay(page);
+  await setSheetSnap(page, "expanded");
+  await expect.poll(() => page.evaluate(() => {
+    const sheet = document.querySelector<HTMLElement>(".oak-itinerary-sheet")!.getBoundingClientRect();
+    const upper = document.querySelector<HTMLElement>(".oak-upper-clearance")!.getBoundingClientRect();
+    const legal = document.querySelector<HTMLElement>(".oak-geometry-legal")!.getBoundingClientRect();
+    return { bottom: Math.round(innerHeight - sheet.bottom), legal: Math.round(legal.height), mapBand: Math.round(sheet.top - upper.bottom), sheetHeight: Math.round(sheet.height) };
+  })).toMatchObject({ bottom: 44, legal: 44 });
+  await expect.poll(() => page.locator(".oak-itinerary-sheet").evaluate(element => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(296);
+  const geometry = await page.evaluate(() => {
+    const sheet = document.querySelector<HTMLElement>(".oak-itinerary-sheet")!.getBoundingClientRect();
+    const upper = document.querySelector<HTMLElement>(".oak-upper-clearance")!.getBoundingClientRect();
+    return { mapBand: sheet.top - upper.bottom, sheetHeight: sheet.height };
+  });
+  expect(geometry.mapBand).toBeGreaterThanOrEqual((page.viewportSize()?.width ?? 0) >= 390 ? 100 : 0);
+  expect(geometry.sheetHeight).toBeGreaterThanOrEqual(296);
 });
 
 test("keeps every semantic renderer visible and exposes absolute cross-midnight owner names", async ({ page }) => {
   await openTrip(page);
-  await page.getByRole("button", { name: "Expand itinerary" }).click();
-  const rendererExpectations = new Map([
-    ["transport", "Board the blue local shuttle"],
-    ["transfer", "Pier One"],
-    ["lodging", "Stay base"],
-    ["dining", "Selected · Garden kitchen"],
-    ["shopping", "Pocket notebook"],
-    ["sightseeing", "North quay"],
-    ["experience", "Friday, 18 April 2042"],
-    ["logistics", "0 / 2 steps complete"],
-    ["custom", "field-notes"],
-  ]);
-  for (const [semantic, text] of rendererExpectations) {
-    const renderer = page.locator(`[data-semantic="${semantic}"]`).first();
-    await renderer.scrollIntoViewIfNeeded();
-    await expect(renderer).toBeVisible();
-    await expect(renderer).toContainText(text);
+  const absolute = (date: string) => new Intl.DateTimeFormat(locale, { dateStyle: "full", timeZone: "UTC" }).format(new Date(date + "T00:00:00Z"));
+  await expect(ownerButton(page, "experience-observatory")).toHaveAccessibleName(new RegExp(absolute("2042-04-18")));
+  await expect(ownerButton(page, "lodging-end")).toHaveAccessibleName(new RegExp(absolute("2042-04-18")));
+  await expect(ownerButton(page, "lodging-end")).toHaveAccessibleName(new RegExp(absolute("2042-04-19")));
+  await expect(ownerButton(page, "lodging-end")).toHaveAccessibleName(/00:15/);
+  await setSheetSnap(page, "expanded");
+  const facts = [
+    ["transport-shuttle", "Board the blue local shuttle"], ["transfer-ferry", "Pier One"],
+    ["lodging-start", catalog.facts.base], ["dining-lunch", "Harbor plates"],
+    ["shopping-supplies", "Pocket notebook"], ["sightseeing-lookout", "North quay"],
+    ["experience-observatory", catalog.routes.duration.replace("{duration}", "60")],
+    ["logistics-locker", "Show locker slip"], ["custom-field-notes", "field-notes"],
+  ];
+  for (const [id, fact] of facts) {
+    await ownerButton(page, id).click();
+    await expect(ownerButton(page, id)).toHaveAttribute("aria-pressed", "true");
+    await expect(ownerRow(page, id)).toContainText(fact);
+    await expect(ownerRow(page, id).locator("[data-details-owner]").first()).toBeVisible();
   }
-
-  const logisticsDisclosure = page.getByRole("button", {
-    name: "Show Locker pickup details",
-  });
-  await logisticsDisclosure.scrollIntoViewIfNeeded();
-  await logisticsDisclosure.click();
-  await expect(page.getByText("Show locker slip")).toBeVisible();
-  const customOwner = page.getByRole("button", { name: /(?:Time not set|時間未定) Exchange field notes/ });
-  await customOwner.scrollIntoViewIfNeeded();
-  await customOwner.click();
-  await expect(customOwner).toHaveAttribute("aria-pressed", "true");
-
-  await expect(page.getByRole("button", {
-    name: /14:00 Sky room session · Friday, 18 April 2042 · fixed time/,
-  })).toBeAttached();
-  await expect(page.getByRole("button", {
-    name: /(?:About|約) 23:30 Harbor House night return · Friday, 18 April 2042 · suggested time · ends Saturday, 19 April 2042 at 00:15/,
-  })).toBeAttached();
   expect(await visibleInteractiveTargetFailures(page)).toEqual([]);
 });
 
 test("handles location success, denied retry, stale callbacks, and explicit recenter without camera chasing", async ({ page }) => {
   await openTrip(page);
-  const map = page.getByTestId("itinerary-map");
-  await page.getByRole("button", { name: "Use my location" }).click();
-  const firstWatch = await page.evaluate(() => (window as unknown as BrowserE2EGlobals).__e2eGeo.latestId());
-  await page.evaluate(({ id }) => {
-    (window as unknown as BrowserE2EGlobals).__e2eGeo.success(id, 35.69, 139.77);
-  }, { id: firstWatch });
-  await expect(page.getByText("Location active")).toBeVisible();
+  const map = mapSurface(page);
+  const locate = () => page.getByRole("button", { name: catalog.location.locate, exact: true }).click();
+  await locate();
+  const first = await page.evaluate(() => (window as unknown as BrowserE2EGlobals).__e2eGeo.latestId());
+  await page.evaluate(id => (window as unknown as BrowserE2EGlobals).__e2eGeo.success(id, 35.69, 139.77), first);
+  await expect(page.getByText(catalog.location.active, { exact: true })).toBeVisible();
   await expect(map).toHaveAttribute("data-e2e-user-location", JSON.stringify({ lat: 35.69, lng: 139.77 }));
-  const firstFocusCount = Number(await map.getAttribute("data-e2e-focus-count"));
-
-  await page.evaluate(({ id }) => {
-    (window as unknown as BrowserE2EGlobals).__e2eGeo.success(id, 35.691, 139.771);
-  }, { id: firstWatch });
+  await expect.poll(async () => {
+    const intent = JSON.parse((await map.getAttribute("data-e2e-camera-intent"))!) as CameraIntent;
+    return intent.kind === "recenter-user" ? intent.coordinate : null;
+  }).toEqual({ lat: 35.69, lng: 139.77 });
+  const count = Number(await map.getAttribute("data-e2e-camera-request-count"));
+  await page.evaluate(id => (window as unknown as BrowserE2EGlobals).__e2eGeo.success(id, 35.691, 139.771), first);
   await expect(map).toHaveAttribute("data-e2e-user-location", JSON.stringify({ lat: 35.691, lng: 139.771 }));
-  expect(Number(await map.getAttribute("data-e2e-focus-count"))).toBe(firstFocusCount);
-  await page.getByRole("button", { name: "Recenter my location" }).click();
-  expect(Number(await map.getAttribute("data-e2e-focus-count"))).toBe(firstFocusCount + 1);
-
-  await page.getByRole("button", { name: "Stop location sharing" }).click();
-  await page.evaluate(({ id }) => {
-    (window as unknown as BrowserE2EGlobals).__e2eGeo.success(id, 1, 1);
-  }, { id: firstWatch });
-  await expect(page.getByText("Location off")).toBeVisible();
+  expect(Number(await map.getAttribute("data-e2e-camera-request-count"))).toBe(count);
+  await page.getByRole("button", { name: catalog.location.recenter }).click();
+  await expect.poll(async () => Number(await map.getAttribute("data-e2e-camera-request-count"))).toBe(count + 1);
+  const recentered = JSON.parse((await map.getAttribute("data-e2e-camera-intent"))!) as CameraIntent;
+  expect(recentered.kind === "recenter-user" ? recentered.coordinate : null).toEqual({ lat: 35.691, lng: 139.771 });
+  await page.getByRole("button", { name: catalog.location.stop }).click();
+  await page.evaluate(id => (window as unknown as BrowserE2EGlobals).__e2eGeo.success(id, 1, 1), first);
   await expect(map).toHaveAttribute("data-e2e-user-location", "null");
-
-  await page.getByRole("button", { name: "Use my location" }).click();
-  const deniedWatch = await page.evaluate(() => (window as unknown as BrowserE2EGlobals).__e2eGeo.latestId());
-  await page.evaluate(({ id }) => {
-    (window as unknown as BrowserE2EGlobals).__e2eGeo.error(id, 1);
-  }, { id: deniedWatch });
-  await expect(page.getByText("Location permission denied")).toBeVisible();
-  await page.getByRole("button", { name: "Use my location" }).click();
-  const retryWatch = await page.evaluate(() => (window as unknown as BrowserE2EGlobals).__e2eGeo.latestId());
-  expect(retryWatch).toBeGreaterThan(deniedWatch);
-  await page.evaluate(({ id }) => {
-    (window as unknown as BrowserE2EGlobals).__e2eGeo.success(id, 35.7, 139.78);
-  }, { id: retryWatch });
-  await expect(page.getByText("Location active")).toBeVisible();
+  await expect(page.getByRole("button", { name: catalog.location.locate, exact: true })).toBeVisible();
+  await locate();
+  const denied = await page.evaluate(() => (window as unknown as BrowserE2EGlobals).__e2eGeo.latestId());
+  await page.evaluate(id => (window as unknown as BrowserE2EGlobals).__e2eGeo.error(id, 1), denied);
+  await expect(page.getByText(catalog.location.denied, { exact: true })).toBeVisible();
+  await locate();
+  const retry = await page.evaluate(() => (window as unknown as BrowserE2EGlobals).__e2eGeo.latestId());
+  expect(retry).toBeGreaterThan(denied);
+  await page.evaluate(id => (window as unknown as BrowserE2EGlobals).__e2eGeo.success(id, 35.7, 139.78), retry);
+  await expect(page.getByText(catalog.location.active, { exact: true })).toBeVisible();
 });
 
 test("preserves keyboard names, forced-color selection, and reduced-motion behavior", async ({ page }) => {
   await page.emulateMedia({ forcedColors: "active", reducedMotion: "reduce" });
   await openTrip(page);
-  const experience = page.getByTestId("trip-experience");
-  await expect(experience).toHaveAttribute("data-motion", "reduced");
-  const selectedDate = page.getByRole("button", { name: /Day 1: Harbor field day, Fri, Apr 18/ });
-  await expect(selectedDate).toHaveAttribute("aria-pressed", "true");
-  const selectedStyle = await selectedDate.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return { borderStyle: style.borderStyle, color: style.color, background: style.backgroundColor };
-  });
-  expect(selectedStyle.borderStyle).not.toBe("none");
-  expect(selectedStyle.color).not.toBe(selectedStyle.background);
-
-  await expect(page.getByRole("button", { name: /(?:About|約) 07:00 Morning harbor shuttle/ })).toBeAttached();
-  await expect(page.getByRole("button", { name: /(?:Time not set|時間未定) Supply hall/ })).toBeAttached();
-  await expect(page.getByText("Friday, 18 April 2042")).toBeAttached();
-  const transit = page.locator('[data-route-id="route-shuttle-ferry"]');
-  await transit.focus();
-  await transit.press("Enter");
-  await expect(transit).toHaveAttribute("aria-expanded", "true");
-  const transitDetailsId = await transit.getAttribute("aria-controls");
-  expect(transitDetailsId).not.toBeNull();
-  await expect(page.locator(`#${transitDetailsId!}`)).toHaveAttribute("data-motion-duration", "0ms");
-
-  const handle = page.getByRole("button", { name: "Drag itinerary sheet" });
-  await handle.press("Home");
-  await expect(page.getByRole("region", { name: "Itinerary" })).toHaveAttribute("data-snap", "collapsed");
-  await handle.press("End");
-  await expect(page.getByRole("region", { name: "Itinerary" })).toHaveAttribute("data-snap", "expanded");
+  await expect(page.locator(".oak-experience")).toHaveAttribute("data-motion", "reduced");
+  const day = dayButton(page, "Harbor field day");
+  await expect(day).toHaveAttribute("aria-current", "true");
+  const style = await day.evaluate(element => { const css = getComputedStyle(element); return { border: css.borderStyle, color: css.color, background: css.backgroundColor }; });
+  expect(style.border).not.toBe("none");
+  expect(style.color).not.toBe(style.background);
+  await expect(ownerButton(page, "transport-shuttle")).toHaveAccessibleName(/07:00/);
+  await expect(ownerButton(page, "shopping-supplies")).toHaveAccessibleName(new RegExp(catalog.timing.unknown));
+  const route = ownerButton(page, "route-shuttle-ferry");
+  await route.focus(); await route.press("Enter");
+  await expect(route).toHaveAttribute("aria-pressed", "true");
+  await expect(ownerRow(page, "route-shuttle-ferry").getByText("Board synthetic blue line")).toBeVisible();
+  await page.getByRole("button", { name: catalog.accessibleNames.collapseDayRail }).click();
+  await expect(page.locator(".oak-day-header")).toHaveAttribute("data-transition-phase", "settled");
+  expect(await page.locator(".oak-day-rail-motion").evaluate(element => getComputedStyle(element).transitionDuration)).toMatch(/^(0s|0.001s)(, (0s|0.001s))*$/);
+  await setSheetSnap(page, "collapsed"); await setSheetSnap(page, "expanded");
 });

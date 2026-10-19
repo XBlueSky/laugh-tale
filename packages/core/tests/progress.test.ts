@@ -245,6 +245,7 @@ describe("day-scoped reset", () => {
     const trip: Trip = {
       id: "collision-trip",
       title: "Collision trip",
+      locale: "en",
       timezone: "Asia/Tokyo",
       startDate: "2026-08-23",
       endDate: "2026-08-24",

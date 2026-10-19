@@ -23,6 +23,8 @@ work. By participating you agree to follow our
 | --- | --- |
 | `packages/core` | `@laugh-tale-island/core` — framework-neutral trip behavior |
 | `packages/react` | `@laugh-tale-island/react` — React hooks and prop-getters |
+| `packages/adapters` | `@laugh-tale-island/adapters` — browser and server provider mechanics |
+| `packages/testing` | `@laugh-tale-island/testing` — test-only fakes, fixtures, and conformance contracts |
 | `plugins/eternal-pose` | The Eternal Pose plugin: shared skill, recipes, and the React starter |
 | `.cc-marketspec` | Marketplace presentation source (`catalog.yaml`, `entries/`) |
 | `scripts` | Release and staging automation |
@@ -33,17 +35,21 @@ Requirements: Node.js 22.13 or newer and npm.
 
 ```bash
 npm ci
-npm run stage:starter
+npm run stage:starter -- --setup-locale en
 LAUGH_TALE_STARTER_ROOT="$PWD/tmp/staged-starter" npm run check
 npm run test:starter:staged
 npm --prefix tmp/staged-starter exec playwright install chromium
 npm run test:e2e:staged
 ```
 
-`npm run stage:starter` builds the workspace packages, packs them into
-tarballs, and installs a copy of the starter in `tmp/staged-starter` against
+`npm run stage:starter -- --setup-locale en` builds the four workspace packages in DAG order, packs
+them into four tarballs, and installs a copy of the starter in `tmp/staged-starter` against
 those tarballs — so every check runs against your local, unpublished changes
 exactly the way a consumer would install them.
+
+The exact internal dependency DAG is `core` → (`react`, `adapters`) → `testing`.
+React and adapters each depend only on core; testing depends on all three. The
+four package manifests and internal edges share one exact release version.
 
 `npm run check` bundles plugin-contract validation, marketplace validation,
 package builds, unit tests, type checks, and linting. CI runs the same

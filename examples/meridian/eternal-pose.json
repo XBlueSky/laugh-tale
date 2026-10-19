@@ -1,0 +1,19 @@
+{
+  "enrichment": {
+    "provenanceHash": "5056599109b52dcbac8e3607148ba4e2f0de797e88acb45d2c429f7560422649",
+    "schemaVersion": 1
+  },
+  "generatorVersion": "2.0.0",
+  "packages": {
+    "@laugh-tale-island/adapters": "2.0.0",
+    "@laugh-tale-island/core": "2.0.0",
+    "@laugh-tale-island/react": "2.0.0",
+    "@laugh-tale-island/testing": "2.0.0"
+  },
+  "presentationContractVersion": 2,
+  "recipe": {
+    "id": "oak-washi",
+    "sourceVersion": "2.0.0"
+  },
+  "schemaVersion": 2
+}

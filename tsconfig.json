@@ -3,9 +3,18 @@
     "target": "ES2023",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "jsx": "react-jsx",
+    "resolveJsonModule": true,
     "strict": true,
     "noEmit": true,
     "types": ["node", "vitest/globals"]
   },
-  "include": ["tests/**/*.ts", "vitest.config.ts"]
+  "include": [
+    "tests/**/*.ts",
+    "tests/**/*.tsx",
+    "plugins/eternal-pose/recipes-v2/**/*.ts",
+    "plugins/eternal-pose/recipes-v2/**/*.tsx",
+    "eslint.config.js",
+    "vitest.config.ts"
+  ]
 }

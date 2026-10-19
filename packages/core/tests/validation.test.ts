@@ -3,10 +3,33 @@ import { describe, expect, it } from "vitest";
 import { completeTrip } from "./fixtures/complete-trip.js";
 import type { Trip } from "@laugh-tale-island/core";
 import { assertValidTrip, validateTrip } from "@laugh-tale-island/core";
+import { validateTrip as validateTripSource } from "../src/validation.js";
 
 const cloneTrip = (): Trip => structuredClone(completeTrip);
 
 describe("validateTrip", () => {
+  it("accepts authored route labels and shopping notes but rejects non-string values", () => {
+    const trip = cloneTrip();
+    Object.assign(trip.days[0], { routeLabel: "NIHONBASHI → TOKYO" });
+    const shopping = trip.days[0].nodes.find(node => node.kind === "shopping");
+    if (shopping?.kind !== "shopping") throw new Error("Missing shopping fixture");
+    Object.assign(shopping.payload.items[0], { note: "先領整理券" });
+    expect(validateTripSource(trip).errors).toEqual([]);
+    Object.assign(trip.days[0], { routeLabel: 42 });
+    Object.assign(shopping.payload.items[0], { note: 42 });
+    expect(validateTripSource(trip).errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: "days[0].routeLabel" }),
+      expect.objectContaining({ path: expect.stringMatching(/payload\.items\[0\]\.note$/) }),
+    ]));
+  });
+  it.each(["unknown", "flight", "rail", "bus"] as const)("accepts typed %s transfer without adding terminal facts", mode => {
+    const trip = cloneTrip();
+    const transfer = trip.days.flatMap(day => day.nodes).find(node => node.kind === "transfer")!;
+    if (transfer.kind !== "transfer") throw new Error("Missing transfer fixture");
+    transfer.payload = { mode };
+    expect(validateTrip(trip).errors).toEqual([]);
+    expect(transfer.payload).toEqual({ mode });
+  });
   it("accepts a complete provider-neutral trip", () => {
     expect(validateTrip(completeTrip)).toEqual({ errors: [], warnings: [] });
   });
@@ -95,7 +118,7 @@ describe("validateTrip", () => {
           nodes: [duplicateNode],
         });
       },
-      issue: { code: "DUPLICATE_ID", path: "days[1].nodes[0].id" },
+      issue: { code: "DUPLICATE_OWNER_ID", path: "days[1].nodes[0].id" },
     },
     {
       name: "globally duplicate candidate option ID",
@@ -108,7 +131,7 @@ describe("validateTrip", () => {
         });
       },
       issue: {
-        code: "DUPLICATE_ID",
+        code: "DUPLICATE_OWNER_ID",
         path: "candidateGroups[1].options[0].id",
       },
     },
@@ -135,31 +158,40 @@ describe("validateTrip", () => {
     {
       name: "latitude outside its range",
       mutate: (trip) => {
-        trip.days[0].nodes[0].place!.coordinates!.lat = 90.1;
+        trip.days[0].nodes[0].place!.identity = {
+          status: "resolved",
+          coordinates: { lat: 90.1, lng: 20.01 },
+        };
       },
       issue: {
         code: "INVALID_COORDINATE",
-        path: "days[0].nodes[0].place.coordinates.lat",
+        path: "days[0].nodes[0].place.identity.coordinates.lat",
       },
     },
     {
       name: "non-finite longitude",
       mutate: (trip) => {
-        trip.days[0].nodes[0].place!.coordinates!.lng = Number.NaN;
+        trip.days[0].nodes[0].place!.identity = {
+          status: "resolved",
+          coordinates: { lat: 10.01, lng: Number.NaN },
+        };
       },
       issue: {
         code: "INVALID_COORDINATE",
-        path: "days[0].nodes[0].place.coordinates.lng",
+        path: "days[0].nodes[0].place.identity.coordinates.lng",
       },
     },
     {
-      name: "blank provider Place ID",
+      name: "blank provider reference ID",
       mutate: (trip) => {
-        trip.days[0].nodes[0].place!.provider = { name: "google", placeId: "  " };
+        trip.days[0].nodes[0].place!.identity = {
+          status: "resolved",
+          providerReference: { provider: "google", id: "  " },
+        };
       },
       issue: {
-        code: "BLANK_PROVIDER_PLACE_ID",
-        path: "days[0].nodes[0].place.provider.placeId",
+        code: "INVALID_PROVIDER_REFERENCE",
+        path: "days[0].nodes[0].place.identity.providerReference",
       },
     },
     {
@@ -275,7 +307,7 @@ describe("validateTrip", () => {
       },
     },
     {
-      name: "custom node without a declared capability",
+      name: "custom task node without a compatible capability",
       mutate: (trip) => {
         const custom = trip.days[0].nodes[8];
         if (custom.kind === "custom") {
@@ -283,7 +315,7 @@ describe("validateTrip", () => {
         }
       },
       issue: {
-        code: "CUSTOM_CAPABILITIES_REQUIRED",
+        code: "INCOMPATIBLE_PRESENTATION_ROLE",
         path: "days[0].nodes[8].payload.capabilities",
       },
     },
@@ -321,23 +353,81 @@ describe("validateTrip", () => {
     expect(trip.id).toBe("  trip-complete  ");
   });
 
-  it("warns when a place is unresolved without treating it as invalid", () => {
+  it("accepts an explicit unresolved place without warnings", () => {
     const trip = cloneTrip();
     trip.days[0].nodes[0].place = {
       name: "Unresolved synthetic stop",
       certainty: "unverified",
+      identity: { status: "unresolved", reason: "not-reviewed" },
     };
 
     expect(validateTrip(trip)).toEqual({
       errors: [],
-      warnings: [
-        {
-          code: "UNRESOLVED_PLACE",
-          path: "days[0].nodes[0].place",
-          message: "Place has neither coordinates nor a provider Place ID.",
-        },
-      ],
+      warnings: [],
     });
+  });
+
+  it.each([
+    ["primary", { place: true }, false],
+    ["primary", { booking: true }, true],
+    ["journey", { booking: true }, false],
+    ["journey", { place: true }, false],
+    ["journey", { completion: true }, true],
+    ["task", { shopping: true }, false],
+    ["task", { completion: true }, false],
+    ["task", { place: true }, true],
+  ] as const)("enforces custom %s capability compatibility", (presentationRole, capabilities, incompatible) => {
+    const trip = cloneTrip();
+    const custom = trip.days[0].nodes[8];
+    if (custom.kind !== "custom") throw new Error("fixture custom node moved");
+    custom.payload.presentationRole = presentationRole;
+    custom.payload.capabilities = capabilities;
+
+    const errors = validateTrip(trip).errors;
+    expect(errors.some(({ code }) => code === "INCOMPATIBLE_PRESENTATION_ROLE")).toBe(incompatible);
+  });
+
+  it.each([
+    ["missing", undefined, "INVALID_PRESENTATION_ROLE"],
+    ["invalid", "base", "INVALID_PRESENTATION_ROLE"],
+  ] as const)("reports an isolated %s custom presentation role", (_label, presentationRole, code) => {
+    const trip = cloneTrip();
+    const custom = trip.days[0].nodes[8];
+    if (custom.kind !== "custom") throw new Error("fixture custom node moved");
+    (custom.payload as { presentationRole?: string }).presentationRole = presentationRole;
+
+    expect(validateTrip(trip).errors).toContainEqual(expect.objectContaining({
+      code, path: "days[0].nodes[8].payload.presentationRole",
+    }));
+    expect(validateTrip(trip).errors).not.toContainEqual(expect.objectContaining({
+      code: "INCOMPATIBLE_PRESENTATION_ROLE",
+    }));
+  });
+
+  it("allows compatible custom roles with additional capabilities", () => {
+    const trip = cloneTrip();
+    const custom = trip.days[0].nodes[8];
+    if (custom.kind !== "custom") throw new Error("fixture custom node moved");
+    custom.payload.presentationRole = "journey";
+    custom.payload.capabilities = { booking: true, place: true, completion: true, shopping: true };
+
+    expect(validateTrip(trip).errors).not.toContainEqual(expect.objectContaining({
+      code: "INCOMPATIBLE_PRESENTATION_ROLE",
+    }));
+  });
+
+  it("uses one owner namespace across nodes, routes, and candidate options", () => {
+    const trip = cloneTrip();
+    const nodeId = trip.days[0].nodes[0]?.id;
+    trip.routes[0].id = nodeId;
+    trip.candidateGroups[0].options[0].id = nodeId;
+
+    expect(validateTrip(trip).errors).toContainEqual(expect.objectContaining({
+      code: "DUPLICATE_OWNER_ID", path: "routes[0].id",
+    }));
+    expect(validateTrip(trip).errors).toContainEqual(expect.objectContaining({
+      code: "DUPLICATE_OWNER_ID", path: "candidateGroups[0].options[0].id",
+    }));
   });
 
   it("warns when a fixed experience lacks a confirmed booking", () => {

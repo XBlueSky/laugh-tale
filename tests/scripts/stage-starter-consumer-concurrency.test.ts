@@ -24,6 +24,41 @@ const { reclaimOrphanedStagingArtifacts } = (await import(
   }) => Promise<unknown>;
 };
 
+test("a paused project file-set writer cannot publish a mixed Create snapshot", async () => {
+  const { stageStarterConsumer } = await import(pathToFileURL(join(repoRoot, "scripts/stage-starter-consumer.mjs")).href) as {
+    stageStarterConsumer: (request: { outDir: string; setupLocale: string; install: boolean }, operations: { beforeCandidateRename: (context: { candidate: string }) => Promise<void> }) => Promise<unknown>;
+  };
+  const { replaceProjectFiles } = await import(pathToFileURL(join(repoRoot, "plugins/eternal-pose/lib/atomic-publication.mjs")).href) as {
+    replaceProjectFiles: (request: { projectDir: string; replacements: Map<string, Buffer>; allowedPaths: Set<string>; validate: () => Promise<void> }, operations: { beforeMutation: (context: { phase: string }) => Promise<void> }) => Promise<void>;
+  };
+  const outDir = join(repoRoot, "tmp/staged-oak-paused-writer");
+  ownedPaths.push(outDir);
+  let resume!: () => void;
+  const held = new Promise<void>(resolve => { resume = resolve; });
+  let writer: Promise<unknown> | undefined;
+  let candidatePath = "";
+  try {
+    await expect(stageStarterConsumer({ outDir, setupLocale: "zh-Hant-TW", install: false }, {
+      async beforeCandidateRename({ candidate }: { candidate: string }) {
+        candidatePath = candidate;
+        ownedPaths.push(dirname(candidate));
+        let notify!: () => void;
+        const paused = new Promise<void>(resolve => { notify = resolve; });
+        const names = ["eternal-pose.json", "src/trip-content/place-resolutions.json"];
+        writer = replaceProjectFiles({ projectDir: candidate, replacements: new Map(names.map(name => [name, readFileSync(join(candidate, name))])), allowedPaths: new Set(names), validate: async () => {} }, {
+          async beforeMutation({ phase }: { phase: string }) { if (phase === "file-set-validate") { notify(); await held; } },
+        });
+        await paused;
+      },
+    })).rejects.toThrow(/transaction in progress/);
+    expect(existsSync(outDir)).toBe(false);
+    expect(existsSync(join(candidatePath, "eternal-pose.json"))).toBe(true);
+  } finally {
+    resume();
+    await writer;
+  }
+}, 120_000);
+
 interface CommandEvent {
   at: number;
   command: string;
@@ -35,7 +70,7 @@ interface CommandEvent {
 interface ChildResult {
   stagedRoot: string;
   tarballs: string[];
-  check: "passed";
+  applicationCheck: "skipped";
   commandEvents: CommandEvent[];
 }
 
@@ -305,7 +340,7 @@ function intervalsOverlap(left: CommandInterval, right: CommandInterval): boolea
 }
 
 describe("stage-starter-consumer cross-process packaging", () => {
-  test("installs and checks two consumers while retaining distinct complete tarballs", async () => {
+  test("installs two consumers with globally serialized package commands and distinct complete tarballs", async () => {
     const suffix = `${process.pid}-${Date.now()}`;
     const runRoot = join(repoRoot, "tmp", "staged-concurrent", suffix);
     const firstOutDir = join(repoRoot, "tmp", `staged-concurrent-a-${suffix}`);
@@ -313,8 +348,8 @@ describe("stage-starter-consumer cross-process packaging", () => {
     ownedPaths.push(firstOutDir, runRoot);
 
     const settled = await Promise.allSettled([
-      runStageChild(firstOutDir),
-      runStageChild(secondOutDir),
+      runStageChild(firstOutDir, { env: { STAGE_CHILD_SKIP_APP_CHECK: "1" } }),
+      runStageChild(secondOutDir, { env: { STAGE_CHILD_SKIP_APP_CHECK: "1" } }),
     ]);
     const failures = settled.filter(
       (result): result is PromiseRejectedResult => result.status === "rejected",
@@ -330,14 +365,19 @@ describe("stage-starter-consumer cross-process packaging", () => {
     const [first, second] = settled.map(
       (result) => (result as PromiseFulfilledResult<ChildResult>).value,
     );
-    expect(first.check).toBe("passed");
-    expect(second.check).toBe("passed");
+    expect(first.applicationCheck).toBe("skipped");
+    expect(second.applicationCheck).toBe("skipped");
+    expect(first).not.toHaveProperty("check");
+    expect(second).not.toHaveProperty("check");
     expect(first.stagedRoot).toBe(firstOutDir);
     expect(second.stagedRoot).toBe(secondOutDir);
 
     const sharedWorkspaceCommand = (event: CommandEvent): boolean =>
       event.command === "npm" &&
-      (event.commandArguments.join(" ") === "run build" ||
+      ((event.commandArguments.length === 3 &&
+        event.commandArguments[0] === "run" &&
+        event.commandArguments[1] === "build" &&
+        event.commandArguments[2] === "--ignore-scripts") ||
         event.commandArguments[0] === "pack");
     const installCommand = (event: CommandEvent): boolean =>
       event.command === "npm" && event.commandArguments[0] === "install";
@@ -345,8 +385,10 @@ describe("stage-starter-consumer cross-process packaging", () => {
     const secondShared = commandIntervals(second, sharedWorkspaceCommand);
     const firstInstall = commandIntervals(first, installCommand);
     const secondInstall = commandIntervals(second, installCommand);
-    expect(firstShared).toHaveLength(4);
-    expect(secondShared).toHaveLength(4);
+    expect(firstShared).toHaveLength(8);
+    expect(secondShared).toHaveLength(8);
+    expect(first.commandEvents.filter(sharedWorkspaceCommand)).toHaveLength(16);
+    expect(second.commandEvents.filter(sharedWorkspaceCommand)).toHaveLength(16);
     expect(firstInstall).toHaveLength(1);
     expect(secondInstall).toHaveLength(1);
     for (const left of firstShared) {
@@ -365,6 +407,18 @@ describe("stage-starter-consumer cross-process packaging", () => {
     const secondPackRoot = dirname(second.tarballs[0]);
     ownedPaths.push(firstPackRoot, secondPackRoot);
     expect(firstPackRoot).not.toBe(secondPackRoot);
+    expect(first.tarballs).toHaveLength(4);
+    expect(second.tarballs).toHaveLength(4);
+    expect(new Set([...first.tarballs, ...second.tarballs]).size).toBe(8);
+    const expectedBasenames = ["core", "react", "adapters", "testing"].map(
+      (name) => `laugh-tale-island-${name}-2.0.0.tgz`,
+    );
+    expect(first.tarballs.map((tarball) => tarball.split("/").at(-1))).toEqual(
+      expectedBasenames,
+    );
+    expect(second.tarballs.map((tarball) => tarball.split("/").at(-1))).toEqual(
+      expectedBasenames,
+    );
 
     for (const tarball of [...first.tarballs, ...second.tarballs]) {
       expect(existsSync(tarball)).toBe(true);

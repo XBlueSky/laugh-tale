@@ -1,4 +1,24 @@
 import { Temporal } from "@js-temporal/polyfill";
+/** Authored day order with manual, local calendar day, upcoming, then final fallback. */
+export function selectEffectiveDay(trip, instant, manualDayId = null) {
+    const manual = trip.days.find((day) => day.id === manualDayId);
+    if (manual !== undefined)
+        return manual;
+    const today = Temporal.Instant.from(instant).toZonedDateTimeISO(trip.timezone).toPlainDate();
+    return trip.days.find((day) => Temporal.PlainDate.compare(day.date, today) === 0)
+        ?? trip.days.find((day) => Temporal.PlainDate.compare(day.date, today) > 0)
+        ?? trip.days.at(-1)
+        ?? null;
+}
+/** String-instant boundary for consumers without their own Temporal runtime. */
+export function selectLiveState(trip, instant, options = {}) {
+    return findLiveState(resolveSchedule(trip), Temporal.Instant.from(instant).toZonedDateTimeISO(trip.timezone), options);
+}
+/** Incomplete temporal owners precede the first remaining authored owner. */
+export function selectAutomaticOwnerId(trip, instant, ignoredNodeIds) {
+    const live = selectLiveState(trip, instant, { ignoredNodeIds });
+    return live.currentId ?? live.nextId ?? trip.days.flatMap((day) => day.nodes).find((node) => !ignoredNodeIds.has(node.id))?.id ?? null;
+}
 const EXACT_LOCAL_TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 function assertResolvableTiming(node) {
     for (const [field, value] of [

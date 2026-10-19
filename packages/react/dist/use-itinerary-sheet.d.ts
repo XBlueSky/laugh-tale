@@ -3,7 +3,7 @@ import { type SheetGeometry, type SheetSnap } from "@laugh-tale-island/core";
 export interface UseItinerarySheetOptions {
     /** Controlled snap; the hook never stores its own. */
     snap: SheetSnap;
-    geometry: SheetGeometry;
+    geometry: SheetGeometry | null;
     onSnapChange: (snap: SheetSnap) => void;
     /** When true, transitions are always suppressed, not only while dragging. */
     reducedMotion?: boolean;
@@ -18,6 +18,9 @@ export interface SheetHandleProps {
     onLostPointerCapture: (event: SheetPointerEvent) => void;
     onKeyDown: (event: SheetKeyboardEvent) => void;
     "aria-keyshortcuts": string;
+    "aria-valuenow": number;
+    "aria-valuemin": number;
+    "aria-valuemax": number;
 }
 export interface SheetProps {
     ref: RefCallback<HTMLElement>;
@@ -29,19 +32,19 @@ export interface ItinerarySheetController {
     snap: SheetSnap;
     dragging: boolean;
     /** Live target height in pixels: the drag frame while dragging, otherwise the snap height. */
-    height: number;
-    ceiling: number;
+    height: number | null;
+    ceiling: number | null;
     setSnap: (snap: SheetSnap) => void;
     step: (direction: 1 | -1) => void;
     getSheetProps: () => SheetProps;
-    getHandleProps: (userProps?: Partial<SheetHandleProps> & Record<string, unknown>) => SheetHandleProps & Record<string, unknown>;
+    getHandleProps: (userProps?: Partial<SheetHandleProps> & Record<string, unknown>) => Partial<SheetHandleProps> & Record<string, unknown>;
 }
 /**
  * Interruptible bottom-sheet behavior for a controlled snap: pointer-captured
- * dragging measured from the rendered surface, velocity/distance snapping,
- * keyboard stepping, and drag-time transition suppression. Rendering,
- * wording, and styling stay with the consumer; a consumer handler that calls
- * `preventDefault()` suppresses the package behavior for that event.
+ * dragging measured from the rendered surface, frame-coalesced position
+ * snapping, keyboard stepping, and drag-time transition suppression.
+ * Rendering, wording, and styling stay with the consumer; a consumer handler
+ * that calls `preventDefault()` suppresses the package behavior for that event.
  */
 export declare function useItinerarySheet(options: UseItinerarySheetOptions): ItinerarySheetController;
 export {};

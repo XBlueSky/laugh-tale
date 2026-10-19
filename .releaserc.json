@@ -8,16 +8,16 @@
     [
       "@semantic-release/exec",
       {
-        "//": "The root package is a private workspace container, so @semantic-release/npm only bumps its version and never publishes. prepare: lockstep-bump @laugh-tale-island/core and @laugh-tale-island/react (react pins the exact core version it was tested against) and resync the lockfile — the workspace link satisfies react's core pin, so no registry fetch of the not-yet-published version happens. publish: build both packages, then publish core before react (react peers on core). Starter pins and eternal-pose versions are bumped deliberately per plugin release, never here.",
+        "//": "The root package is a private workspace container, so @semantic-release/npm only bumps its version and never publishes. prepare: lockstep-bump all four package manifests and exact internal dependency edges, then resync the lockfile. publish: build once in DAG order, then publish core before React and adapters, followed by testing. React and adapters are peers in publication order: both depend on core, not on each other. Starter pins and eternal-pose versions are bumped deliberately per plugin release, never here.",
         "prepareCmd": "node scripts/set-release-versions.mjs ${nextRelease.version} && npm install --package-lock-only --no-audit --no-fund --registry=https://registry.npmjs.org",
-        "publishCmd": "npm run build:packages && npm publish -w packages/core --provenance --access public && npm publish -w packages/react --provenance --access public"
+        "publishCmd": "npm run build --workspace @laugh-tale-island/core --ignore-scripts && npm run build --workspace @laugh-tale-island/react --ignore-scripts && npm run build --workspace @laugh-tale-island/adapters --ignore-scripts && npm run build --workspace @laugh-tale-island/testing --ignore-scripts && npm publish -w packages/core --provenance --access public && npm publish -w packages/react --provenance --access public && npm publish -w packages/adapters --provenance --access public && npm publish -w packages/testing --provenance --access public"
       }
     ],
     "@semantic-release/github",
     [
       "@semantic-release/git",
       {
-        "assets": ["package.json", "package-lock.json", "packages/core/package.json", "packages/react/package.json", "CHANGELOG.md"],
+        "assets": ["package.json", "package-lock.json", "packages/core/package.json", "packages/react/package.json", "packages/adapters/package.json", "packages/testing/package.json", "CHANGELOG.md"],
         "message": "chore(release): bump version to ${nextRelease.version}\n\n[skip ci]"
       }
     ]

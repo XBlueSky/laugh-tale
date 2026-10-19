@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "lib": ["ES2022", "DOM"], "module": "ESNext", "moduleResolution": "Bundler",
+    "strict": true, "isolatedModules": true, "declaration": true, "noEmit": true,
+    "types": ["vitest/globals", "google.maps", "geojson"],
+    "baseUrl": ".",
+    "paths": {
+      "@laugh-tale-island/core": ["../core/src/index.ts"],
+      "@laugh-tale-island/core/browser": ["../core/src/browser/index.ts"],
+      "@laugh-tale-island/core/enrichment": ["../core/src/enrichment/index.ts"],
+      "@laugh-tale-island/adapters/google/node": ["src/google/node/index.ts"]
+    }
+  },
+  "include": ["src", "tests", "vitest.config.ts"]
+}

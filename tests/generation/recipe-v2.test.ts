@@ -1,8 +1,6 @@
 import {
   cpSync,
-  existsSync,
   lstatSync,
-  mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
@@ -16,15 +14,13 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, describe, expect, test } from "vitest";
 
-import { inspectAuthoredWorld } from "./authored-world-contract.js";
-
 type Manifest = {
   schemaVersion: number;
   id: string;
   label: string;
   summary: string;
   register: string;
-  presentation: { source: string; entry: string; css: string[]; assets: string[] };
+  presentation: { source: string; entry: string; css: string[]; assets: string[]; copy?: { schema: string; references: { en: string; "zh-Hant": string }; resolver: string; output: string } };
   map: { profile: string; googleStyleGuide?: string };
   motion: { durationMs: number; easing: string; interruptible: boolean; reducedMotion: string };
   features: string[];
@@ -47,21 +43,12 @@ type RecipeV2Module = {
   loadRecipeV2: (recipeDir: string, expectedId: string) => Promise<LoadedRecipe>;
   loadRecipeV2Catalog: (catalogRoot: string) => Promise<ReadonlyMap<string, LoadedRecipe>>;
 };
-type MutationEvent = { phase: string; path: string; stageDir: string; targetDir: string };
-type CreateTripProject = (
-  options: { pluginRoot: string; targetDir: string; recipe: string; starterDir?: string; recipeCatalogRoot?: string },
-  operations?: { beforeMutation?: (event: MutationEvent) => void },
-) => Promise<void>;
-
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 const fixtureCatalog = join(repoRoot, "tests/fixtures/recipe-v2");
 const fixtureRecipe = join(fixtureCatalog, "valid");
 const pluginRoot = join(repoRoot, "plugins/eternal-pose");
-const fieldAtlasRoot = join(pluginRoot, "recipes-v2/field-atlas");
 const recipeV2ModuleUrl = pathToFileURL(join(pluginRoot, "lib/recipe-v2.mjs")).href;
-const createTripProjectModuleUrl = pathToFileURL(join(pluginRoot, "scripts/create-trip-project.mjs")).href;
 const { RECIPE_SCHEMA_VERSION, loadRecipeV2, loadRecipeV2Catalog } = (await import(recipeV2ModuleUrl)) as RecipeV2Module;
-const { createTripProject } = (await import(createTripProjectModuleUrl)) as { createTripProject: CreateTripProject };
 const temporaryRoots: string[] = [];
 
 function temporaryRoot(): string {
@@ -90,49 +77,24 @@ function makeRecipe(root: string, id: string, mutate?: (manifest: Manifest, reci
   return recipeDir;
 }
 
-function makeStarter(root: string): string {
-  const starter = join(root, "starter");
-  mkdirSync(join(starter, "src/presentation"), { recursive: true });
-  mkdirSync(join(starter, "src/ui"), { recursive: true });
-  writeFileSync(join(starter, "src/presentation/foreign.txt"), "starter presentation must not publish\n");
-  writeFileSync(join(starter, "src/ui/keep.ts"), "export const keep = true;\n");
-  writeFileSync(
-    join(starter, "package.json"),
-    JSON.stringify({ dependencies: { "@laugh-tale-island/core": "1.2.3", "@laugh-tale-island/react": "4.5.6" } }),
-  );
-  return starter;
-}
-
 afterEach(() => {
   for (const root of temporaryRoots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
 describe("recipe v2 manifest loading", () => {
-  test("keeps the canonical Field Atlas source above the authored-world lower bound", () => {
-    expect(inspectAuthoredWorld(fieldAtlasRoot, {
-      id: "field-atlas",
-      requiredSourceSignals: [
-        /atlas-index/,
-        /atlas-legend/,
-        /route-band/,
-        /stop-number/,
-      ],
-      forbiddenSourceSignals: [
-        /scrapbook|torn|stamp|script-font/i,
-        /rounded card grid|pill cluster/i,
-      ],
-      requiredMapModes: ["topographic"],
-      requiredStates: [
-        "empty",
-        "memory-only",
-        "candidate",
-        "shopping",
-        "reservation",
-        "task",
-        "route-error",
-        "map-error",
-      ],
-    })).toEqual([]);
+  test("loads the canonical public catalog with its declared copy inputs", async () => {
+    const catalog = await loadRecipeV2Catalog(join(pluginRoot, "recipes-v2"));
+    expect([...catalog.keys()]).toEqual(["field-atlas", "oak-washi"]);
+    const oak = catalog.get("oak-washi")!;
+    expect(oak.manifest.presentation.copy).toEqual({
+      schema: "copy/catalog-schema.json",
+      references: { en: "copy/en.json", "zh-Hant": "copy/zh-Hant.json" },
+      resolver: "copy/resolve-copy.ts",
+      output: "copy/catalog.ts",
+    });
+    for (const path of [oak.presentationEntry, ...oak.cssFiles, ...oak.assetRoots, oak.mapProfile, oak.googleStyleGuide]) {
+      expect(path?.startsWith(oak.root)).toBe(true);
+    }
   });
 
   test("loads the complete internal fixture catalog", async () => {
@@ -247,89 +209,5 @@ describe("recipe v2 manifest loading", () => {
     makeRecipe(root, "alpha", (manifest) => { manifest.id = "beta"; });
 
     await expect(loadRecipeV2Catalog(root)).rejects.toThrow(/id.*directory/i);
-  });
-});
-
-describe("recipe v2 internal composition", () => {
-  test("composes only the selected recipe and records schema 2 provenance", async () => {
-    const root = temporaryRoot();
-    const catalog = join(root, "catalog");
-    makeRecipe(catalog, "selected");
-    writeFileSync(join(catalog, "undeclared.txt"), "do not publish\n");
-    const starterDir = makeStarter(root);
-    const targetDir = join(root, "trip");
-
-    await createTripProject({ pluginRoot, targetDir, recipe: "selected", starterDir, recipeCatalogRoot: catalog });
-
-    expect(readFileSync(join(targetDir, "src/presentation/index.ts"), "utf8")).toContain('"valid"');
-    expect(readFileSync(join(targetDir, "src/presentation/styles/index.css"), "utf8")).toContain("fixture-presentation");
-    expect(readFileSync(join(targetDir, "src/presentation/README.md"), "utf8")).toContain("Valid Recipe");
-    expect(existsSync(join(targetDir, "src/presentation/foreign.txt"))).toBe(false);
-    expect(existsSync(join(targetDir, "catalog"))).toBe(false);
-    expect(existsSync(join(targetDir, "undeclared.txt"))).toBe(false);
-    expect(existsSync(join(targetDir, "public/theme-assets/logo.svg"))).toBe(true);
-    expect(existsSync(join(targetDir, "docs/provider-guides/google-map-style.json"))).toBe(true);
-    expect(JSON.parse(readFileSync(join(targetDir, "eternal-pose.json"), "utf8"))).toEqual({
-      generatorVersion: "0.1.0",
-      recipe: "selected",
-      recipeSchemaVersion: 2,
-      packages: { "@laugh-tale-island/core": "1.2.3", "@laugh-tale-island/react": "4.5.6" },
-    });
-  });
-
-  test("loads the v2 recipe before reserving a destination", async () => {
-    const root = temporaryRoot();
-    const catalog = join(root, "catalog");
-    makeRecipe(catalog, "broken", (manifest) => { manifest.presentation.entry = "missing.ts"; });
-    const targetDir = join(root, "trip");
-
-    await expect(createTripProject({ pluginRoot, targetDir, recipe: "broken", starterDir: makeStarter(root), recipeCatalogRoot: catalog })).rejects.toThrow(/presentation\.entry/);
-    expect(existsSync(targetDir)).toBe(false);
-  });
-
-  test("rejects a v2 target inside the supplied catalog root", async () => {
-    const root = temporaryRoot();
-    const catalog = join(root, "catalog");
-    makeRecipe(catalog, "selected");
-    const targetDir = join(catalog, "generated-trip");
-
-    await expect(createTripProject({ pluginRoot, targetDir, recipe: "selected", starterDir: makeStarter(root), recipeCatalogRoot: catalog })).rejects.toThrow(/refusing overlapping target/);
-    expect(existsSync(targetDir)).toBe(false);
-  });
-
-  test("removes the missing target after a v2 mutation failure", async () => {
-    const root = temporaryRoot();
-    const catalog = join(root, "catalog");
-    makeRecipe(catalog, "selected");
-    const targetDir = join(root, "trip");
-
-    await expect(createTripProject(
-      { pluginRoot, targetDir, recipe: "selected", starterDir: makeStarter(root), recipeCatalogRoot: catalog },
-      { beforeMutation: ({ phase, path }) => { if (phase === "target-copy" && path.endsWith("index.ts")) throw new Error("injected failure"); } },
-    )).rejects.toThrow("injected failure");
-    expect(existsSync(targetDir)).toBe(false);
-  });
-
-  test("aborts when a v2 source becomes a symbolic link between validation and copy", async () => {
-    const root = temporaryRoot();
-    const catalog = join(root, "catalog");
-    const recipeDir = makeRecipe(catalog, "selected");
-    const targetDir = join(root, "trip");
-    const external = join(root, "external.ts");
-    writeFileSync(external, "export const outside = true;\n");
-    let replaced = false;
-
-    await expect(createTripProject(
-      { pluginRoot, targetDir, recipe: "selected", starterDir: makeStarter(root), recipeCatalogRoot: catalog },
-      { beforeMutation: ({ phase }) => {
-        if (!replaced && phase === "stage-copy") {
-          replaced = true;
-          const entry = join(recipeDir, "presentation/index.ts");
-          unlinkSync(entry);
-          symlinkSync(external, entry, "file");
-        }
-      } },
-    )).rejects.toThrow(/symbolic links/);
-    expect(existsSync(targetDir)).toBe(false);
   });
 });

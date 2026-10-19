@@ -8,9 +8,13 @@ const validationEnvDir = process.env.ETERNAL_POSE_VALIDATION_ENV_DIR;
 
 export default defineConfig({
   plugins: [react()],
+  resolve: { dedupe: ["react", "react-dom", "maplibre-gl"] },
   ...(validationCacheDir === undefined ? {} : { cacheDir: validationCacheDir }),
   ...(validationEnvDir === undefined ? {} : { envDir: validationEnvDir }),
   build: {
+    // Unicode-range fonts must remain separately demand-loaded, even when a
+    // rare-character partition is smaller than Vite's default inline limit.
+    assetsInlineLimit: filePath => filePath.endsWith(".woff2") ? false : undefined,
     outDir: validationOutDir ?? "dist",
     emptyOutDir: true,
     rollupOptions: {

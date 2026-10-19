@@ -1,6 +1,6 @@
 # Laugh Tale
 
-Laugh Tale is an agent-native toolkit that generates map-first, mobile-first travel sites from real itinerary material, with a single generated flagship as its quality truth.
+Laugh Tale is an agent-native toolkit that generates map-first, mobile-first travel sites from itinerary material. Its public flagship uses explicitly synthetic data to exercise the shared experience contract.
 
 ## Language
 
@@ -13,11 +13,11 @@ The toolkit and marketplace as a whole: packages, plugin, flagship, and site.
 The Claude Code and Codex plugin. One skill plus the starter and recipes it applies.
 
 **Flagship**:
-The generated Tokyo site kept in the repository as the quality truth and end-to-end target.
+The generated `examples/meridian` site kept in the repository as the end-to-end target. Its future dates, places, coordinates, and travel details are fictional test data, not a person's itinerary or verified provider results.
 _Avoid_: demo, golden path site, reference site, example
 
 **Benchmark**:
-The hand-built `tokyo-trip-map` site that the flagship is measured against. Read-only; behaviour may be extracted from it, trip content may not.
+An explicitly documented set of behaviour and presentation criteria used to assess generated sites. Private source sites and personal trip records are not part of the public benchmark.
 _Avoid_: reference implementation, source, original
 
 **Generated site**:
@@ -25,7 +25,7 @@ A site produced by Eternal Pose. Independent of the plugin at runtime; depends o
 _Avoid_: output, consumer, project
 
 **Starter**:
-The flagship with its trip content removed. The copy source for every generated site.
+The shared presentation and runtime with trip content removed. The copy source for every generated site.
 _Avoid_: template, boilerplate, scaffold
 
 **Recipe**:
@@ -98,7 +98,7 @@ _Avoid_: state, user data, session
 ### Quality process
 
 **North star**:
-The single acceptance: a generated flagship placed beside the benchmark must not read as lower quality.
+The acceptance goal: a generated flagship meets the documented behaviour and presentation criteria. Automated fixture results do not establish external visual parity or manual device approval.
 _Avoid_: goal, KPI, definition of done
 
 **Experience contract**:
@@ -106,7 +106,7 @@ The provider-neutral end-to-end test suite every generated site must pass.
 _Avoid_: e2e tests, contract tests, smoke tests
 
 **Parity report**:
-The row-by-row comparison of a generated flagship against the benchmark, using exactly five statuses: verified, partially verified, not exercised by input, blocked by configuration, failed.
+A row-by-row assessment against explicitly documented criteria, using exactly five statuses: verified, partially verified, not exercised by input, blocked by configuration, failed. Each result states the input and verification scope.
 _Avoid_: audit (an Eternal Pose intent), review, scorecard
 
 **Sign-off**:

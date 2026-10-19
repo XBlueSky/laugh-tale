@@ -10,6 +10,8 @@
 [![CI](https://github.com/XBlueSky/laugh-tale/actions/workflows/ci.yml/badge.svg)](https://github.com/XBlueSky/laugh-tale/actions/workflows/ci.yml)
 [![npm: @laugh-tale-island/core](https://img.shields.io/npm/v/%40laugh-tale-island%2Fcore?label=%40laugh-tale-island%2Fcore)](https://www.npmjs.com/package/@laugh-tale-island/core)
 [![npm: @laugh-tale-island/react](https://img.shields.io/npm/v/%40laugh-tale-island%2Freact?label=%40laugh-tale-island%2Freact)](https://www.npmjs.com/package/@laugh-tale-island/react)
+[![npm: @laugh-tale-island/adapters](https://img.shields.io/npm/v/%40laugh-tale-island%2Fadapters?label=%40laugh-tale-island%2Fadapters)](https://www.npmjs.com/package/@laugh-tale-island/adapters)
+[![npm: @laugh-tale-island/testing](https://img.shields.io/npm/v/%40laugh-tale-island%2Ftesting?label=%40laugh-tale-island%2Ftesting)](https://www.npmjs.com/package/@laugh-tale-island/testing)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node.js >= 22.13](https://img.shields.io/badge/node-%3E%3D22.13-brightgreen.svg)](package.json)
 
@@ -19,19 +21,19 @@ Its first shared skill, **Eternal Pose**, can turn prose, CSV, Markdown, documen
 
 ## Laugh Tale and Eternal Pose
 
-Laugh Tale is the open-source toolkit and marketplace. Eternal Pose is its Claude Code and Codex plugin. It supplies one shared skill and an independent React starter with three compile-time design recipes:
+Laugh Tale is the open-source toolkit and marketplace. Eternal Pose is its Claude Code and Codex plugin. Version 2 supplies one shared skill and an independent React starter with one canonical compile-time recipe:
 
-- **Quiet Wood** — warm, restrained, and softly tactile
-- **Sticker Brutalist** — high-contrast editorial labels and crisp borders
-- **Native Minimal** — neutral, platform-minded clarity
+- **Oak & Washi** — warm paper, oak accents, self-hosted Huninn typography, and coordinated map/list motion. Older recipes remain internal development material, not alternative V2 defaults.
 
 The common contract is a real persistent map, a synchronized mobile itinerary, independent route edges, candidate comparison on the main map, safe drag behavior, and provider-neutral trip data. Generated information architecture, home pages, type renderers, and visual systems remain yours to change.
 
 ## Three ways to use Laugh Tale
 
 1. **Generate or evolve a complete site with Eternal Pose.** Install the plugin and describe your trip in natural language; you get an independent React repository you own outright.
-2. **Build a custom React site on the packages.** `@laugh-tale-island/core` (framework-neutral trip behavior) and `@laugh-tale-island/react` (behavior hooks and prop-getters) are designed for direct installation — see `packages/core/README.md` and `packages/react/README.md`. Neither ships a visual system; your site owns every visible element.
-3. **Contribute to this repository.** See “Develop and contribute” below. Releases run on three SemVer lines — the Eternal Pose plugin, `@laugh-tale-island/core`, and `@laugh-tale-island/react` — and `RELEASING.md` gates every external action behind explicit approval.
+2. **Build a custom React site on the packages.** `@laugh-tale-island/core` provides framework-neutral trip behavior, `@laugh-tale-island/react` provides behavior hooks and prop-getters, `@laugh-tale-island/adapters` provides explicit provider mechanics, and `@laugh-tale-island/testing` provides test-only fakes, fixtures, and conformance contracts. None ships a visual system; your site owns every visible element.
+3. **Contribute to this repository.** See “Develop and contribute” below. The four npm packages ship on one exact-version lockstep line, separate from the Eternal Pose plugin line, and `RELEASING.md` gates every external action behind explicit approval.
+
+The package DAG is `core` → (`react`, `adapters`) → `testing`. Core publicly exposes `.`, `./browser`, and `./enrichment`; adapters exposes `./google` and `./google/node`; React and testing each expose only `.`. Browser and server credentials stay separate and are always injected explicitly. No package performs hidden runtime place search or credential discovery, and provider diagnostics remain structured non-display data. Published test fakes carry a readonly `testOnly` marker.
 
 ## Install
 
@@ -66,6 +68,16 @@ Use natural language, such as “turn these itinerary notes into a map-first mob
 
 ## Privacy and publication
 
+The checked-in `examples/meridian` project is generated from the fictional
+`examples/meridian-input/trip-input.json`. Its dates, coordinates and booking
+references are synthetic test material, not travel advice or real reservations.
+Personal itineraries, private deployment records and their development history
+are not part of this public source snapshot.
+
+Before V2 packages are published, use `npm run stage:example` followed by
+`npm run test:example:staged` and `npm run test:example:e2e`. The staged copy uses
+four local tarballs; checked-in generated source retains exact registry pins.
+
 Work stays local and private by default. Eternal Pose does not invent coordinates, reservations, routes, or other facts, and it does not create a remote, make a repository public, push, publish, or deploy without explicit approval for that action. Google Maps JavaScript, Places, Routes, and Transit support are separately configured; generated sites remain useful through external Maps URLs when provider data is unavailable.
 
 ## Develop and contribute
@@ -74,14 +86,14 @@ Requirements: Node.js 22 or newer and npm.
 
 ```bash
 npm ci
-npm run stage:starter
+npm run stage:starter -- --setup-locale en
 LAUGH_TALE_STARTER_ROOT="$PWD/tmp/staged-starter" npm run check
 npm run test:starter:staged
 npm --prefix tmp/staged-starter exec playwright install chromium
 npm run test:e2e:staged
 ```
 
-Starter checks run against a staged copy in `tmp/staged-starter` whose dependencies install from locally packed tarballs, so every check exercises your local, unpublished changes the way a consumer would install them; `npm run stage:starter` builds and refreshes it.
+Starter checks run against a staged copy in `tmp/staged-starter` whose dependencies install from four locally packed tarballs, so every check exercises your local, unpublished changes the way a consumer would install them; `npm run stage:starter -- --setup-locale en` builds and refreshes it in dependency order. Use an explicit setup locale, or supply authored input with `--trip /absolute/trip-input.json`.
 
 Marketplace presentation source lives in `.cc-marketspec/catalog.yaml` and `.cc-marketspec/entries/`. `npm run check:marketplace` validates without writing; `npm run build:marketplace` produces the ignored `.cc-marketspec/dist/manifest.json` only when a consumer needs it. Contributions should preserve the map-first/mobile-first experience contract, keep provider calls fake in tests, and include focused regression coverage.
 

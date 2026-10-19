@@ -14,7 +14,7 @@ function node(id: string): TripNode {
     optionality: "core",
     place: {
       name: `${id.toUpperCase()} place`,
-      coordinates: { lat: 35, lng: 139 },
+      identity: { status: "resolved", coordinates: { lat: 35, lng: 139 } },
       certainty: "confirmed",
     },
     payload: {},
@@ -58,6 +58,7 @@ function effectiveNodes(ids: string[], day: TripDay = sourceDay): EffectiveNode[
     node: day.nodes.find((candidate) => candidate.id === id)!,
     sourceNodeId: id,
     completed: false,
+    skipped: false,
   }));
 }
 
@@ -85,6 +86,22 @@ function edge(
 }
 
 describe("buildRoutePresentations", () => {
+  it.each(["walking", "flight", "unknown"] as const)("preserves genuine %s external navigation only under its authored endpoint rule", (mode) => {
+    const authored = edge("direct", "a", "b", mode);
+    const original = buildRoutePresentations({ ...sourceDay, routes: [authored] }, effectiveNodes(["a", "b"]));
+    expect(original[0]).toMatchObject({ edge: { navigation: authored.navigation }, navigable: true });
+    const changed = effectiveNodes(["a", "b"]);
+    changed[0] = { ...changed[0], node: { ...changed[0].node, place: { name: "Selected", certainty: "candidate", identity: { status: "resolved", providerReference: { provider: "foreign", id: "selected" } } } } };
+    const recomposed = buildRoutePresentations({ ...sourceDay, routes: [authored] }, changed);
+    expect(recomposed[0]?.edge.source).toBe("recomposed");
+    if (mode === "unknown") {
+      expect(recomposed[0]).toMatchObject({ edge: { navigation: authored.navigation }, navigable: true });
+    } else {
+      expect(recomposed[0]?.edge).not.toHaveProperty("navigation");
+      expect(recomposed[0]?.navigable).toBe(false);
+    }
+  });
+
   it("collapses walks of at most five minutes without removing navigation or ownership", () => {
     const presentations = buildRoutePresentations(
       { ...sourceDay, routes: sourceRoutes },
@@ -117,13 +134,13 @@ describe("buildRoutePresentations", () => {
         mode: "walking",
         source: "recomposed",
         certainty: "unverified",
-        navigation: { origin: "A place", destination: "C place" },
       },
       display: "full",
       navigable: true,
     });
     expect(presentation?.edge).not.toHaveProperty("durationMinutes");
     expect(presentation?.edge).not.toHaveProperty("summary");
+    expect(presentation?.edge).not.toHaveProperty("navigation");
   });
 
   it("does not claim navigation when neither the edge nor its endpoints can identify places", () => {
@@ -189,14 +206,14 @@ describe("buildRoutePresentations", () => {
         mode: "transit",
         source: "recomposed",
         certainty: "unverified",
-        navigation: { origin: "A place", destination: "D place" },
       },
       navigable: true,
     });
     expect(presentation?.edge).not.toHaveProperty("summary");
+    expect(presentation?.edge).not.toHaveProperty("navigation");
   });
 
-  it("uses the first substantive mode and disables navigation for heterogeneous recomposition", () => {
+  it("uses unknown mode and disables navigation for heterogeneous recomposition", () => {
     type RuntimeProviderEdge = RouteEdge & {
       providerPlan: string;
       departureTime: string;
@@ -232,8 +249,7 @@ describe("buildRoutePresentations", () => {
     expect(presentation).toMatchObject({
       edge: {
         id: "route:a--e",
-        mode: "transit",
-        summary: "Mixed modes: transit → driving",
+        mode: "unknown",
         source: "recomposed",
         certainty: "unverified",
       },

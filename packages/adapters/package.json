@@ -1,0 +1,64 @@
+{
+  "name": "@laugh-tale-island/adapters",
+  "version": "1.1.0",
+  "description": "Provider adapters for Laugh Tale travel applications.",
+  "license": "MIT",
+  "author": "XBlueSky",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/XBlueSky/laugh-tale.git",
+    "directory": "packages/adapters"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    "./maplibre": {
+      "types": "./dist/maplibre/index.d.ts",
+      "default": "./dist/maplibre/index.js"
+    },
+    "./google": {
+      "types": "./dist/google/index.d.ts",
+      "default": "./dist/google/index.js"
+    },
+    "./google/node": {
+      "types": "./dist/google/node/index.d.ts",
+      "default": "./dist/google/node/index.js"
+    }
+  },
+  "scripts": {
+    "prebuild": "npm run build --workspace @laugh-tale-island/core",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@laugh-tale-island/core": "1.1.0"
+  },
+  "peerDependencies": {
+    "@googlemaps/js-api-loader": ">=2.1.1 <3",
+    "maplibre-gl": ">=6.10.0 <7"
+  },
+  "peerDependenciesMeta": {
+    "maplibre-gl": {
+      "optional": true
+    },
+    "@googlemaps/js-api-loader": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@googlemaps/js-api-loader": "2.1.1",
+    "@types/geojson": "7946.0.16",
+    "@types/google.maps": "3.65.5",
+    "maplibre-gl": "6.10.0"
+  }
+}

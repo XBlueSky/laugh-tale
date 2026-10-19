@@ -1,0 +1,45 @@
+@import "./fonts.css";
+@import "./tokens.css";
+@import "./layers.css";
+@import "./layout.css";
+@import "./components.css";
+@import "./states.css";
+@import "./editorial.css";
+@import "./motion.css";
+@import "./accessibility.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  color: var(--oak-text-primary);
+  background: var(--oak-canvas);
+  font-family: var(--oak-font-ui);
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+a,
+select {
+  color: inherit;
+}

@@ -10,9 +10,9 @@ Keep trip core and ordinary renderers independent of any provider SDK.
 - Define `NavigationAdapter` to create a consumer navigation URL from application data.
 - Keep SDK classes, DOM nodes, provider event objects, and undocumented provider state out of trip core, persisted content, and renderer contracts.
 
-## v1 capability matrix
+## v2 capability matrix
 
-| Capability | v1 status | Boundary |
+| Capability | v2 status | Boundary |
 | --- | --- | --- |
 | Google Maps JavaScript API | Required for the real primary map | Show missing configuration honestly; never fake readiness. |
 | Google Routes API | Optional | Support walking, driving, and transit where available; retain manual summaries and navigation on failure. |
@@ -20,7 +20,13 @@ Keep trip core and ordinary renderers independent of any provider SDK.
 | Google Maps consumer URLs | Always available | Use for external origin/destination/mode navigation without an API key. |
 | Browser Geolocation | Optional and user initiated | Do not persist or add a user's location to trip content. |
 
-Do not add Geocoding, Roads, or another API merely because it is enabled. Provider-neutral interfaces preserve future options; do not implement or claim MapLibre, Mapbox, or other provider support in v1.
+Do not add Geocoding, Roads, or another API merely because it is enabled. Provider-neutral interfaces preserve future options; do not claim unimplemented provider support.
+
+## Separate browser and server configuration
+
+`VITE_GOOGLE_MAPS_API_KEY` is the referrer-restricted browser Maps key. `ETERNAL_POSE_GOOGLE_PLACES_API_KEY` is the server credential read by `enrich-trip-project.mjs search`; never prefix it with `VITE_`, copy it to client code, print it, or place it in trip input. Server search requires explicit authorization/configuration and installed packages. Without that configuration, preserve unresolved owners and report the unavailable observation.
+
+Follow the exact search/review/selection/accept commands in `workflow.md`. Search produces a separate review artifact; human selections bind to its canonical hash. `enrich-trip-project.mjs accept` alone changes the accepted ledger and matching manifest provenance hash. A successful fake-adapter suite, candidate archive attestation, or runtime candidate click is not a live provider observation or accepted ledger.
 
 ## Data minimization and credentials
 

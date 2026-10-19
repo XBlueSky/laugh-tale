@@ -1,3 +1,5 @@
+import { Temporal } from "@js-temporal/polyfill";
+const TIMEZONE_VALIDATION_INSTANT = new Date("2000-01-01T00:00:00Z");
 function addIssue(target, code, path, message) {
     target.push({ code, path, message });
 }
@@ -14,6 +16,17 @@ function validateIdentifier(id, path, namespace, errors) {
         return;
     }
     namespace.add(id);
+}
+function validateItineraryOwnerIdentifier(id, path, owners, errors) {
+    if (!isNonBlank(id)) {
+        addIssue(errors, "BLANK_ID", path, "ID must contain a non-whitespace character.");
+        return;
+    }
+    if (owners.has(id)) {
+        addIssue(errors, "DUPLICATE_OWNER_ID", path, `Owner ID ${JSON.stringify(id)} is already in use.`);
+        return;
+    }
+    owners.add(id);
 }
 function validateIdReference(id, path, errors) {
     if (isNonBlank(id)) {
@@ -84,25 +97,93 @@ function validateBooking(booking, path, errors) {
         addIssue(errors, "INVALID_ARRIVAL_BUFFER", `${path}.arrivalBufferMinutes`, "Arrival buffer must be a non-negative integer number of minutes.");
     }
 }
-function validatePlace(place, path, errors, warnings) {
+function validateLocale(value, errors) {
+    if (typeof value !== "string" || !isNonBlank(value)) {
+        addIssue(errors, "INVALID_LOCALE", "locale", "Locale must be a valid BCP 47 language tag.");
+        return;
+    }
+    try {
+        const canonical = Intl.getCanonicalLocales([value]);
+        if (canonical.length !== 1 || canonical[0] !== value) {
+            addIssue(errors, "NONCANONICAL_LOCALE", "locale", "Locale must use its canonical BCP 47 form.");
+        }
+    }
+    catch {
+        addIssue(errors, "INVALID_LOCALE", "locale", "Locale must be a valid BCP 47 language tag.");
+    }
+}
+function validateTimezone(value, errors) {
+    if (typeof value !== "string" ||
+        !isNonBlank(value) ||
+        /^[+-]\d{2}(?::?\d{2})?$/.test(value.trim())) {
+        addIssue(errors, "INVALID_TIMEZONE", "timezone", "Timezone must be a valid IANA time zone.");
+        return;
+    }
+    try {
+        new Intl.DateTimeFormat("en", { timeZone: value }).format(TIMEZONE_VALIDATION_INSTANT);
+        Temporal.Instant.from("2000-01-01T00:00:00Z").toZonedDateTimeISO(value);
+    }
+    catch {
+        addIssue(errors, "INVALID_TIMEZONE", "timezone", "Timezone must be a valid IANA time zone.");
+    }
+}
+function validateCoordinates(value, path, errors) {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+        addIssue(errors, "INVALID_COORDINATE", path, "Coordinates must contain finite latitude and longitude.");
+        return false;
+    }
+    const coordinates = value;
+    let valid = true;
+    if (!Number.isFinite(coordinates.lat) || coordinates.lat < -90 || coordinates.lat > 90) {
+        addIssue(errors, "INVALID_COORDINATE", `${path}.lat`, "Latitude must be finite and between -90 and 90.");
+        valid = false;
+    }
+    if (!Number.isFinite(coordinates.lng) || coordinates.lng < -180 || coordinates.lng > 180) {
+        addIssue(errors, "INVALID_COORDINATE", `${path}.lng`, "Longitude must be finite and between -180 and 180.");
+        valid = false;
+    }
+    return valid;
+}
+function validatePlace(place, path, errors) {
     if (place === undefined) {
         return;
     }
-    const { coordinates } = place;
-    if (coordinates !== undefined) {
-        if (!Number.isFinite(coordinates.lat) || coordinates.lat < -90 || coordinates.lat > 90) {
-            addIssue(errors, "INVALID_COORDINATE", `${path}.coordinates.lat`, "Latitude must be finite and between -90 and 90.");
+    const identity = place.identity;
+    if (typeof identity !== "object" || identity === null) {
+        addIssue(errors, "INVALID_PLACE_IDENTITY", `${path}.identity`, "Place identity must be resolved or unresolved.");
+        return;
+    }
+    const record = identity;
+    if (record.status === "unresolved") {
+        const allowedReasons = new Set(["not-reviewed", "no-accepted-candidate", "ambiguous"]);
+        const onlyUnresolvedFields = Object.keys(record).every((key) => key === "status" || key === "reason");
+        if (!onlyUnresolvedFields || typeof record.reason !== "string" || !allowedReasons.has(record.reason)) {
+            addIssue(errors, "INVALID_PLACE_IDENTITY", `${path}.identity`, "Unresolved place identity may contain only a valid reason.");
         }
-        if (!Number.isFinite(coordinates.lng) || coordinates.lng < -180 || coordinates.lng > 180) {
-            addIssue(errors, "INVALID_COORDINATE", `${path}.coordinates.lng`, "Longitude must be finite and between -180 and 180.");
+        return;
+    }
+    if (record.status !== "resolved") {
+        addIssue(errors, "INVALID_PLACE_IDENTITY", `${path}.identity`, "Place identity must be resolved or unresolved.");
+        return;
+    }
+    const hasCoordinates = record.coordinates !== undefined;
+    const coordinatesValid = hasCoordinates
+        ? validateCoordinates(record.coordinates, `${path}.identity.coordinates`, errors)
+        : false;
+    const providerReference = record.providerReference;
+    let providerValid = false;
+    if (providerReference !== undefined) {
+        if (typeof providerReference === "object" && providerReference !== null) {
+            const { provider, id } = providerReference;
+            providerValid =
+                typeof provider === "string" && isNonBlank(provider) && typeof id === "string" && isNonBlank(id);
+        }
+        if (!providerValid) {
+            addIssue(errors, "INVALID_PROVIDER_REFERENCE", `${path}.identity.providerReference`, "Provider reference requires nonblank provider and ID.");
         }
     }
-    const placeId = place.provider?.placeId;
-    if (placeId !== undefined && !isNonBlank(placeId)) {
-        addIssue(errors, "BLANK_PROVIDER_PLACE_ID", `${path}.provider.placeId`, "Provider Place ID must be omitted or nonblank.");
-    }
-    if (coordinates === undefined && (placeId === undefined || !isNonBlank(placeId))) {
-        addIssue(warnings, "UNRESOLVED_PLACE", path, "Place has neither coordinates nor a provider Place ID.");
+    if (!coordinatesValid && !providerValid) {
+        addIssue(errors, "INVALID_PLACE_IDENTITY", `${path}.identity`, "Resolved place identity requires valid coordinates or a provider reference.");
     }
 }
 function validateChecklist(checklist, path, ids, errors) {
@@ -110,10 +191,17 @@ function validateChecklist(checklist, path, ids, errors) {
         validateIdentifier(item.id, `${path}[${index}].id`, ids, errors);
     });
 }
-function hasDeclaredCapability(node) {
-    return Object.values(node.payload.capabilities).some((enabled) => enabled === true);
+function hasRequiredRoleCapability(node) {
+    const { capabilities, presentationRole } = node.payload;
+    return presentationRole === "primary"
+        ? capabilities.place === true
+        : presentationRole === "journey"
+            ? capabilities.place === true || capabilities.booking === true
+            : presentationRole === "task"
+                ? capabilities.completion === true || capabilities.shopping === true
+                : false;
 }
-function validateCandidateGroup(group, index, candidateGroupIds, candidateOptionIds, nodeDayById, errors, warnings) {
+function validateCandidateGroup(group, index, candidateGroupIds, candidateOptionIds, itineraryOwners, nodeDayById, errors) {
     const path = `candidateGroups[${index}]`;
     validateIdentifier(group.id, `${path}.id`, candidateGroupIds, errors);
     validateIdReference(group.parentNodeId, `${path}.parentNodeId`, errors);
@@ -127,10 +215,11 @@ function validateCandidateGroup(group, index, candidateGroupIds, candidateOption
     group.options.forEach((option, optionIndex) => {
         const optionPath = `${path}.options[${optionIndex}]`;
         validateIdentifier(option.id, `${optionPath}.id`, candidateOptionIds, errors);
+        validateItineraryOwnerIdentifier(option.id, `${optionPath}.id`, itineraryOwners, errors);
         if (isNonBlank(option.id)) {
             localOptionIds.add(option.id);
         }
-        validatePlace(option.place, `${optionPath}.place`, errors, warnings);
+        validatePlace(option.place, `${optionPath}.place`, errors);
         validateBooking(option.booking, `${optionPath}.booking`, errors);
     });
     if (group.mode === "browse" && group.defaultOptionId !== undefined) {
@@ -148,7 +237,7 @@ export function validateTrip(trip) {
     const tripIds = new Set();
     const dayIds = new Set();
     const nodeIds = new Set();
-    const routeIds = new Set();
+    const itineraryOwners = new Set();
     const candidateGroupIds = new Set();
     const candidateOptionIds = new Set();
     const reservationIds = new Set();
@@ -157,20 +246,19 @@ export function validateTrip(trip) {
     const shoppingItemIds = new Set();
     const nodeDayById = new Map();
     validateIdentifier(trip.id, "id", tripIds, errors);
+    validateLocale(trip.locale, errors);
     const validStartDate = validateDate(trip.startDate, "startDate", errors);
     const validEndDate = validateDate(trip.endDate, "endDate", errors);
     if (validStartDate && validEndDate && trip.startDate > trip.endDate) {
         addIssue(errors, "INVALID_DATE_RANGE", "startDate", "Trip start date must not follow end date.");
     }
-    try {
-        new Intl.DateTimeFormat("en", { timeZone: trip.timezone }).format();
-    }
-    catch {
-        addIssue(errors, "INVALID_TIMEZONE", "timezone", "Timezone must be a valid IANA time zone.");
-    }
+    validateTimezone(trip.timezone, errors);
     trip.days.forEach((day, dayIndex) => {
         const dayPath = `days[${dayIndex}]`;
         validateIdentifier(day.id, `${dayPath}.id`, dayIds, errors);
+        if (day.routeLabel !== undefined && typeof day.routeLabel !== "string") {
+            addIssue(errors, "INVALID_ROUTE_LABEL", `${dayPath}.routeLabel`, "Route label must be a string.");
+        }
         const validDayDate = validateDate(day.date, `${dayPath}.date`, errors);
         if (validDayDate &&
             validStartDate &&
@@ -182,6 +270,7 @@ export function validateTrip(trip) {
             const nodePath = `${dayPath}.nodes[${nodeIndex}]`;
             const hadNodeId = nodeIds.has(node.id);
             validateIdentifier(node.id, `${nodePath}.id`, nodeIds, errors);
+            validateItineraryOwnerIdentifier(node.id, `${nodePath}.id`, itineraryOwners, errors);
             if (isNonBlank(node.id) && !hadNodeId) {
                 nodeDayById.set(node.id, day.id);
             }
@@ -190,7 +279,7 @@ export function validateTrip(trip) {
                 addIssue(errors, "NODE_DAY_MISMATCH", `${nodePath}.dayId`, "Node dayId must exactly match its containing day ID.");
             }
             validateTiming(node.timing, `${nodePath}.timing`, errors);
-            validatePlace(node.place, `${nodePath}.place`, errors, warnings);
+            validatePlace(node.place, `${nodePath}.place`, errors);
             validateBooking(node.booking, `${nodePath}.booking`, errors);
             if (node.kind === "experience" &&
                 node.timing.certainty === "fixed" &&
@@ -201,8 +290,16 @@ export function validateTrip(trip) {
                 if (!isNonBlank(node.payload.customKind)) {
                     addIssue(errors, "BLANK_CUSTOM_KIND", `${nodePath}.payload.customKind`, "Custom kind must be nonblank.");
                 }
-                if (!hasDeclaredCapability(node)) {
-                    addIssue(errors, "CUSTOM_CAPABILITIES_REQUIRED", `${nodePath}.payload.capabilities`, "Custom nodes must explicitly enable at least one capability.");
+                if (node.payload.presentationRole !== "primary" &&
+                    node.payload.presentationRole !== "journey" &&
+                    node.payload.presentationRole !== "task") {
+                    addIssue(errors, "INVALID_PRESENTATION_ROLE", `${nodePath}.payload.presentationRole`, "Custom presentationRole must be primary, journey, or task.");
+                }
+                if ((node.payload.presentationRole === "primary" ||
+                    node.payload.presentationRole === "journey" ||
+                    node.payload.presentationRole === "task") &&
+                    !hasRequiredRoleCapability(node)) {
+                    addIssue(errors, "INCOMPATIBLE_PRESENTATION_ROLE", `${nodePath}.payload.capabilities`, "Custom presentationRole requires a compatible capability.");
                 }
             }
             if (node.kind === "lodging" || node.kind === "logistics") {
@@ -211,13 +308,16 @@ export function validateTrip(trip) {
             if (node.kind === "shopping") {
                 node.payload.items.forEach((item, itemIndex) => {
                     validateIdentifier(item.id, `${nodePath}.payload.items[${itemIndex}].id`, shoppingItemIds, errors);
+                    if (item.note !== undefined && typeof item.note !== "string") {
+                        addIssue(errors, "INVALID_SHOPPING_NOTE", `${nodePath}.payload.items[${itemIndex}].note`, "Shopping note must be a string.");
+                    }
                 });
             }
         });
     });
     trip.routes.forEach((route, routeIndex) => {
         const routePath = `routes[${routeIndex}]`;
-        validateIdentifier(route.id, `${routePath}.id`, routeIds, errors);
+        validateItineraryOwnerIdentifier(route.id, `${routePath}.id`, itineraryOwners, errors);
         validateIdReference(route.dayId, `${routePath}.dayId`, errors);
         if (!dayIds.has(route.dayId)) {
             addIssue(errors, "UNKNOWN_DAY", `${routePath}.dayId`, "Route dayId must resolve to a day.");
@@ -241,7 +341,7 @@ export function validateTrip(trip) {
     });
     const candidateGroupsByParent = new Map();
     trip.candidateGroups.forEach((group, groupIndex) => {
-        validateCandidateGroup(group, groupIndex, candidateGroupIds, candidateOptionIds, nodeDayById, errors, warnings);
+        validateCandidateGroup(group, groupIndex, candidateGroupIds, candidateOptionIds, itineraryOwners, nodeDayById, errors);
         const groups = candidateGroupsByParent.get(group.parentNodeId) ?? [];
         groups.push(group);
         candidateGroupsByParent.set(group.parentNodeId, groups);

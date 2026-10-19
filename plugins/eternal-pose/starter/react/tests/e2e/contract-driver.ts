@@ -1,42 +1,62 @@
-import { expect, type Locator, type Page } from "@playwright/test";
-
-import {
-  decodeMapPlaceOwnerId,
-  nodeMapOwnerId,
-} from "@laugh-tale-island/core";
-
-interface E2EGeolocationControl {
-  latestId(): number;
-  success(id: number, latitude: number, longitude: number): void;
+import { expect, type Page } from "@playwright/test";
+import type { CameraIntent } from "@laugh-tale-island/core";
+import { catalog } from "../../src/presentation/copy/catalog";
+export { catalog };
+interface E2EGeolocationControl { latestId(): number; success(id: number, latitude: number, longitude: number): void }
+interface ContractBrowserGlobals { __e2eGeo: E2EGeolocationControl }
+export const mapSurface = (page: Page) => page.getByRole("region", { name: catalog.accessibleNames.map, exact: true });
+export const sheetSurface = (page: Page) => page.getByRole("region", { name: catalog.accessibleNames.itinerarySheet, exact: true });
+export const sheetHandle = (page: Page) => page.getByRole("separator", { name: catalog.accessibleNames.itinerarySheet });
+export const ownerRow = (page: Page, id: string) => page.locator('.oak-timeline [data-owner-id="' + id + '"]');
+export const ownerButton = (page: Page, id: string) => ownerRow(page, id).locator(".oak-row-selection, .oak-route-selection").first();
+export const dayButton = (page: Page, title: string) => page.getByRole("navigation", { name: catalog.accessibleNames.dayRail }).getByRole("button", { name: new RegExp(title) });
+export async function enterDay(page: Page, ordinal = 1): Promise<void> {
+  await page.getByRole("button", { name: catalog.home.openDay + " · " + catalog.experience.dayOfTrip.replace("{ordinal}", String(ordinal)), exact: true }).click();
+  await expect(mapSurface(page)).toHaveAttribute("data-e2e-map-surface", "true");
 }
-
-interface ContractBrowserGlobals {
-  __e2eGeo: E2EGeolocationControl;
+export async function openTrip(page: Page): Promise<void> {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Synthetic Archipelago Field Trip" })).toBeVisible();
+  await enterDay(page);
+  await expect(mapSurface(page).locator("[data-map-route]").first()).toBeAttached();
 }
-
-const action = (name: string): string => `[data-contract-action="${name}"]`;
-const owner = (kind: string): string => `[data-contract-owner="${kind}"]`;
-const surface = (name: string): string => `[data-contract-surface="${name}"]`;
-
-async function locatorWithOwnerId(
-  owners: Locator,
-  ownerId: string,
-): Promise<Locator> {
-  await expect
-    .poll(() => owners.evaluateAll(
-      (elements, expectedId) =>
-        elements.findIndex((element) => element.getAttribute("data-owner-id") === expectedId),
-      ownerId,
-    ))
-    .toBeGreaterThanOrEqual(0);
-  const index = await owners.evaluateAll(
-    (elements, expectedId) =>
-      elements.findIndex((element) => element.getAttribute("data-owner-id") === expectedId),
-    ownerId,
-  );
-  return owners.nth(index);
+export async function setSheetSnap(page: Page, snap: "collapsed" | "half" | "expanded"): Promise<void> {
+  await sheetHandle(page).focus();
+  await sheetHandle(page).press(snap === "expanded" ? "End" : "Home");
+  if (snap === "half") await sheetHandle(page).press("ArrowUp");
+  await expect(sheetSurface(page)).toHaveAttribute("data-sheet-snap", snap);
 }
-
+export async function retryUnavailableRoute(page: Page): Promise<void> {
+  const row = ownerRow(page, "route-shopping-hotel");
+  await expect(row.locator("[data-route-state]")).toHaveAttribute("data-route-state", "unavailable");
+  await ownerButton(page, "route-shopping-hotel").click();
+  await row.getByRole("button", { name: catalog.provider.retry, exact: true }).click();
+  await expect(row.locator("[data-route-state]")).toHaveAttribute("data-route-state", "ready");
+}
+export async function candidateDecision(page: Page): Promise<void> {
+  await ownerButton(page, "dining-lunch").click();
+  const reopen = ownerRow(page, "dining-lunch").getByRole("button", { name: catalog.candidate.reopen, exact: true });
+  await reopen.click();
+  const dialog = page.getByRole("dialog", { name: catalog.accessibleNames.candidateDialog });
+  const canal = dialog.getByRole("button", { name: /Canal counter/ });
+  await canal.click();
+  await expect(canal).toHaveAttribute("aria-pressed", "true");
+  await dialog.getByRole("button", { name: catalog.candidate.cancel, exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(reopen).toBeFocused();
+  await expect(ownerButton(page, "dining-lunch")).toContainText("Garden kitchen");
+  await reopen.click();
+  await dialog.getByRole("button", { name: /Canal counter/ }).click();
+  await dialog.getByRole("button", { name: catalog.candidate.confirm, exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(ownerButton(page, "dining-lunch")).toContainText("Canal counter");
+  await reopen.click();
+  await dialog.getByRole("button", { name: /Garden kitchen/ }).click();
+  await dialog.getByRole("button", { name: catalog.candidate.cancel, exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(ownerButton(page, "dining-lunch")).toContainText("Canal counter");
+  await expect(reopen).toBeFocused();
+}
 export async function installContractGeolocation(page: Page): Promise<void> {
   await page.addInitScript(() => {
     let nextId = 0;
@@ -76,188 +96,42 @@ export async function installContractGeolocation(page: Page): Promise<void> {
   });
 }
 
-async function openFirstDay(page: Page): Promise<void> {
-  const reducedMotion = await page.evaluate(
-    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-  );
-  expect(reducedMotion).toBe(true);
-  await page.goto("/");
-  const home = page.locator(surface("home"));
-  await expect(home).toBeVisible();
-  await home.locator(action("enter-day")).first().click();
-  await expect(page.locator(surface("experience"))).toBeVisible();
-}
-
-async function switchDays(page: Page): Promise<void> {
-  const days = page.locator(owner("day"));
-  await expect.poll(() => days.count()).toBeGreaterThan(1);
-  await days.nth(1).click();
-  await expect(days.nth(1)).toHaveAttribute("aria-pressed", "true");
-  await days.first().click();
-  await expect(days.first()).toHaveAttribute("aria-pressed", "true");
-}
-
-async function exerciseListMapFocus(page: Page): Promise<void> {
-  const map = page.locator(surface("map"));
-  const listOwners = page.locator(owner("node"));
-  const firstListOwner = listOwners.first();
-  const firstOwnerId = await firstListOwner.getAttribute("data-owner-id");
-  expect(firstOwnerId).not.toBeNull();
-  await firstListOwner.click();
-  await expect(map).toHaveAttribute("data-e2e-focus-kind", "place");
-  await expect(map).toHaveAttribute("data-e2e-focus-id", nodeMapOwnerId(firstOwnerId!));
-
-  const mapOwners = map.locator("[data-map-owner]");
-  await expect(mapOwners.first()).toBeVisible();
-  const mapOwner = mapOwners.nth(Math.min(1, (await mapOwners.count()) - 1));
-  const mapOwnerId = await mapOwner.getAttribute("data-map-owner");
-  expect(mapOwnerId).not.toBeNull();
-  const decodedOwner = decodeMapPlaceOwnerId(mapOwnerId!);
-  if (decodedOwner?.kind !== "node") {
-    throw new Error("presentation contract map owner must resolve to a node");
-  }
-  await mapOwner.click();
-  const matchingListOwner = await locatorWithOwnerId(listOwners, decodedOwner.id);
-  await expect(matchingListOwner).toHaveAttribute("aria-pressed", "true");
-  await expect(matchingListOwner).toBeFocused();
-}
-
-async function retryUnavailableRoute(page: Page): Promise<void> {
-  const unavailable = page.locator(`${owner("route")}[data-state="error"]`).first();
-  await expect(unavailable).toBeVisible();
-  const routeId = await unavailable.getAttribute("data-owner-id");
-  expect(routeId).not.toBeNull();
-  await unavailable.locator(action("retry-route")).click();
-  const routeOwners = page.locator(owner("route"));
-  const ready = await locatorWithOwnerId(routeOwners, routeId!);
-  await expect(ready).toHaveAttribute("data-state", "ready");
-}
-
-async function selectSingleCandidateOwner(page: Page): Promise<Locator> {
-  const nodes = page.locator(owner("node"));
-  for (let index = 0; index < await nodes.count(); index += 1) {
-    await nodes.nth(index).click();
-    const decision = page.locator(`${surface("candidate")}[data-candidate-mode="single"]`);
-    if (await decision.count()) return decision;
-  }
-  throw new Error("presentation contract requires a single-choice candidate owner");
-}
-
-async function exerciseCandidateDecision(page: Page): Promise<void> {
-  const decision = await selectSingleCandidateOwner(page);
-  const trigger = decision.locator(action("candidate-toggle"));
-  await trigger.click();
-  await expect(decision).toHaveAttribute("data-expanded", "true");
-  const options = decision.locator(owner("candidate-option"));
-  await expect.poll(() => options.count()).toBeGreaterThan(1);
-  await options.nth(1).check();
-  await expect(options.nth(1)).toBeChecked();
-  await decision.locator(action("candidate-cancel")).click();
-  await expect(decision).toHaveAttribute("data-expanded", "false");
-
-  await trigger.click();
-  await options.first().check();
-  const committedOptionId = await options.first().getAttribute("data-owner-id");
-  expect(committedOptionId).not.toBeNull();
-  await decision.locator(action("candidate-commit")).click();
-  await expect(decision).toHaveAttribute("data-expanded", "false");
-  await expect(decision).toHaveAttribute("data-committed-owner-id", committedOptionId!);
-}
-
-async function exerciseLocation(page: Page): Promise<void> {
-  const map = page.locator(surface("map"));
-  await page.locator(action("location-start")).click();
-  const watchId = await page.evaluate(
-    () => (window as unknown as ContractBrowserGlobals).__e2eGeo.latestId(),
-  );
-  await page.evaluate(
-    ({ id }) =>
-      (window as unknown as ContractBrowserGlobals).__e2eGeo.success(id, 35.69, 139.77),
-    { id: watchId },
-  );
-  await expect(page.locator('[data-contract-status="location"]')).toHaveAttribute(
-    "data-state",
-    "active",
-  );
-  await expect(map).toHaveAttribute(
-    "data-e2e-user-location",
-    JSON.stringify({ lat: 35.69, lng: 139.77 }),
-  );
-
-  await page.evaluate(
-    ({ id }) =>
-      (window as unknown as ContractBrowserGlobals).__e2eGeo.success(id, 35.691, 139.771),
-    { id: watchId },
-  );
-  await expect(map).toHaveAttribute(
-    "data-e2e-user-location",
-    JSON.stringify({ lat: 35.691, lng: 139.771 }),
-  );
-  const focusCount = Number(await map.getAttribute("data-e2e-focus-count"));
-  await page.locator(action("location-recenter")).click();
-  await expect
-    .poll(async () => Number(await map.getAttribute("data-e2e-focus-count")))
-    .toBe(focusCount + 1);
-  await page.locator(action("location-stop")).click();
-  await expect(page.locator('[data-contract-status="location"]')).toHaveAttribute(
-    "data-state",
-    "idle",
-  );
-  await expect(map).toHaveAttribute("data-e2e-user-location", "null");
-}
-
-async function exerciseReservationDialog(page: Page): Promise<void> {
-  const surfaceOwner = page.locator(surface("reservations"));
-  await surfaceOwner.locator(action("open-reservations")).click();
-  const dialog = page.locator('[data-contract-dialog="reservations"]');
-  await expect(dialog).toBeVisible();
-  const reveal = dialog.locator(action("reveal-reservation")).first();
-  const reservationId = await reveal.getAttribute("data-owner-id");
-  expect(reservationId).not.toBeNull();
-  await reveal.click();
-  const references = dialog.locator(owner("reservation-reference"));
-  const reference = await locatorWithOwnerId(references, reservationId!);
-  await expect(reference).toHaveAttribute("data-state", "revealed");
-  await expect(reference).toBeVisible();
-  await dialog.locator(action("close-reservations")).click();
-  await expect(dialog).not.toBeVisible();
-}
-
-async function exerciseTaskDialog(page: Page): Promise<void> {
-  const surfaceOwner = page.locator(surface("day-tasks"));
-  await surfaceOwner.locator(action("open-tasks")).click();
-  const dialog = page.locator('[data-contract-dialog="tasks"]');
-  await expect(dialog).toBeVisible();
-  const task = dialog.locator(owner("task")).first();
-  const wasChecked = await task.isChecked();
-  await task.click();
-  if (wasChecked) await expect(task).not.toBeChecked();
-  else await expect(task).toBeChecked();
-  await dialog.locator(action("close-tasks")).click();
-  await expect(dialog).not.toBeVisible();
-}
-
-async function exerciseSheetSnaps(page: Page): Promise<void> {
-  const sheetSnapStressCycles = 5;
-  const sheet = page.locator(surface("itinerary-sheet"));
-  for (let cycle = 0; cycle < sheetSnapStressCycles; cycle += 1) {
-    for (const snap of ["collapsed", "half", "expanded"] as const) {
-      await page.locator(`[data-snap-target="${snap}"]`).click();
-      await expect(sheet).toHaveAttribute("data-snap", snap);
-    }
-  }
-}
 
 export async function runPresentationContract(page: Page): Promise<void> {
-  await openFirstDay(page);
+  await openTrip(page);
   await retryUnavailableRoute(page);
-  await switchDays(page);
-  await exerciseListMapFocus(page);
-  await exerciseCandidateDecision(page);
-  await exerciseLocation(page);
-  await exerciseReservationDialog(page);
-  await exerciseTaskDialog(page);
-  await exerciseSheetSnaps(page);
-  await page.locator(action("return-home")).click();
-  await expect(page.locator(surface("home"))).toBeVisible();
+  await dayButton(page, "Cove closing day").click();
+  await expect(dayButton(page, "Cove closing day")).toHaveAttribute("aria-current", "true");
+  await dayButton(page, "Harbor field day").click();
+  await expect(dayButton(page, "Harbor field day")).toHaveAttribute("aria-current", "true");
+  const map = mapSurface(page);
+  await ownerButton(page, "shopping-supplies").click();
+  const marker = map.locator('[data-map-owner="shopping-supplies"]');
+  await expect(map).toHaveAttribute("data-e2e-camera-kind", "focus");
+  const intent = JSON.parse((await map.getAttribute("data-e2e-camera-intent"))!) as CameraIntent;
+  expect(intent.kind === "focus" ? JSON.stringify(intent.coordinate) : null).toBe(await marker.getAttribute("data-map-coordinate"));
+  await map.locator('[data-map-owner="sightseeing-lookout"]').dispatchEvent("click");
+  await expect(ownerButton(page, "sightseeing-lookout")).toHaveAttribute("aria-pressed", "true");
+  await expect(ownerButton(page, "sightseeing-lookout")).toBeFocused();
+  await candidateDecision(page);
+  await page.getByRole("button", { name: catalog.location.locate, exact: true }).click();
+  const id = await page.evaluate(() => (window as unknown as ContractBrowserGlobals).__e2eGeo.latestId());
+  await page.evaluate(id => (window as unknown as ContractBrowserGlobals).__e2eGeo.success(id, 35.69, 139.77), id);
+  await expect(map).toHaveAttribute("data-e2e-user-location", JSON.stringify({ lat: 35.69, lng: 139.77 }));
+  await page.evaluate(id => (window as unknown as ContractBrowserGlobals).__e2eGeo.success(id, 35.691, 139.771), id);
+  await expect(map).toHaveAttribute("data-e2e-user-location", JSON.stringify({ lat: 35.691, lng: 139.771 }));
+  const count = Number(await map.getAttribute("data-e2e-camera-request-count"));
+  await page.getByRole("button", { name: catalog.location.recenter, exact: true }).click();
+  await expect.poll(async () => Number(await map.getAttribute("data-e2e-camera-request-count"))).toBe(count + 1);
+  await page.getByRole("button", { name: catalog.location.stop, exact: true }).click();
+  await expect(map).toHaveAttribute("data-e2e-user-location", "null");
+  for (let cycle = 0; cycle < 5; cycle++) for (const snap of ["collapsed", "half", "expanded"] as const) await setSheetSnap(page, snap);
+  await page.getByRole("button", { name: catalog.experience.home, exact: true }).click();
+  const reservations = page.getByRole("region", { name: catalog.home.reservations });
+  await expect(reservations.getByText("SYNTHETIC-SKY", { exact: true })).toBeVisible();
+  const task = page.getByRole("checkbox", { name: "Refill water bottle", exact: true });
+  const checked = await task.isChecked();
+  await task.setChecked(!checked);
+  await expect(task).toBeChecked({ checked: !checked });
+  await expect(page.getByRole("heading", { name: "Synthetic Archipelago Field Trip" })).toBeVisible();
 }

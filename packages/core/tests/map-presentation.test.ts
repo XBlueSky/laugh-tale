@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildMapPresentation,
+  buildDaySemanticProjection,
   candidateMapOwnerId,
   decodeMapPlaceOwnerId,
   nodeMapOwnerId,
@@ -34,8 +35,8 @@ function placeNode(
       : {
           place: {
             name: options.title ?? id,
-            coordinates: options.coordinates,
             certainty: "confirmed" as const,
+            identity: { status: "resolved" as const, coordinates: options.coordinates },
           },
         }),
     payload: {},
@@ -47,6 +48,7 @@ function effective(node: TripNode, options: Partial<EffectiveNode> = {}): Effect
     node,
     sourceNodeId: node.id,
     completed: false,
+    skipped: false,
     ...options,
   };
 }
@@ -61,8 +63,8 @@ const candidateGroup: CandidateGroup = {
       title: "Dinner A",
       place: {
         name: "Dinner A",
-        coordinates: { lat: 25.04, lng: 121.52 },
         certainty: "candidate",
+        identity: { status: "resolved", coordinates: { lat: 25.04, lng: 121.52 } },
       },
     },
     {
@@ -70,11 +72,19 @@ const candidateGroup: CandidateGroup = {
       title: "Dinner B",
       place: {
         name: "Dinner B",
-        coordinates: { lat: 25.05, lng: 121.53 },
         certainty: "candidate",
+        identity: { status: "resolved", coordinates: { lat: 25.05, lng: 121.53 } },
       },
     },
-    { id: "dinner-unresolved", title: "Dinner Unresolved" },
+    {
+      id: "dinner-unresolved",
+      title: "Dinner Unresolved",
+      place: {
+        name: "Dinner Unresolved",
+        certainty: "candidate",
+        identity: { status: "unresolved", reason: "not-reviewed" },
+      },
+    },
   ],
 };
 
@@ -142,6 +152,59 @@ function fixtureDay(): EffectiveDay {
 }
 
 describe("buildMapPresentation", () => {
+  it("never emits malformed runtime route geometry", () => {
+    const edge: RouteEdge = {
+      id: "unsafe", dayId: "day-one", fromNodeId: "museum", toNodeId: "garden",
+      mode: "walking", source: "provider", certainty: "suggested",
+    };
+    const sparse = new Array<{ lat: number; lng: number }>(2);
+    sparse[0] = { lat: 25.01, lng: 121.51 };
+    const malformed: unknown[] = [[], [{ lat: 25.01, lng: 121.51 }], [{ lat: Number.NaN, lng: 121.51 }, { lat: 25.02, lng: 121.5 }], [{ lat: 95, lng: 121.51 }, { lat: 25.02, lng: 121.5 }], sparse, "geometry"];
+    for (const geometry of malformed) {
+      expect(() => buildMapPresentation(fixtureDay(), {
+        routes: [edge],
+        routeResults: { unsafe: { status: "ready", durationMinutes: 1, steps: [], geometry } as unknown as import("@laugh-tale-island/core").RouteProviderResult },
+      })).not.toThrow();
+      expect(buildMapPresentation(fixtureDay(), {
+        routes: [edge],
+        routeResults: { unsafe: { status: "ready", durationMinutes: 1, steps: [], geometry } as unknown as import("@laugh-tale-island/core").RouteProviderResult },
+      }).routes).toEqual([]);
+    }
+  });
+
+  it.each([null, 42, "ready", []])("ignores a malformed direct route-result record: %p", (result) => {
+    const edge: RouteEdge = {
+      id: "unsafe-record", dayId: "day-one", fromNodeId: "museum", toNodeId: "garden",
+      mode: "walking", source: "provider", certainty: "suggested",
+    };
+    const context = {
+      routes: [edge],
+      routeResults: { "unsafe-record": result },
+    } as unknown as MapPresentationContext;
+    expect(() => buildMapPresentation(fixtureDay(), context)).not.toThrow();
+    expect(buildMapPresentation(fixtureDay(), context).routes).toEqual([]);
+  });
+
+  it("filters markerMode none semantic owners before marker descriptors could reach a factory", () => {
+    const day = fixtureDay();
+    const journey: TripNode = {
+      id: "journey", dayId: "day-one", kind: "transport", title: "Train",
+      timing: { certainty: "suggested" }, optionality: "core", payload: { mode: "transit" },
+      place: { name: "Station", certainty: "suggested", identity: { status: "resolved", coordinates: { lat: 25.06, lng: 121.53 } } },
+    };
+    day.day.nodes.splice(1, 0, journey);
+    day.nodes.splice(1, 0, effective(journey));
+    const projection = buildDaySemanticProjection({
+      day, routes: [], candidateGroups: [], currentNodeId: null, nextNodeId: null,
+      viewingOwnerId: null, selectedOwnerId: null, supportedNavigationProviders: [],
+    });
+    expect(projection.entries.some((entry) => entry.kind === "node" && entry.markerMode === "none")).toBe(true);
+    expect(projection.mapOwners).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ markerMode: "none" }),
+    ]));
+    expect(projection.mapOwners.map(owner => owner.ownerId)).toEqual(["museum", "garden", "hotel", "dinner"]);
+    expect(projection.entries.filter(entry => entry.kind === "node").map(entry => entry.ownerId).slice(0, 3)).toEqual(["museum", "journey", "garden"]);
+  });
   it("rejects malformed partial route contexts instead of dropping route data", () => {
     const partialContexts = [
       { routeResults: {} },
@@ -205,6 +268,20 @@ describe("buildMapPresentation", () => {
       ),
     ).toBe(false);
     expect(presentation.places.filter(({ tone }) => tone === "candidate")).toHaveLength(0);
+  });
+
+  it("keeps skipped owners visible with their skipped semantic tone", () => {
+    const day = fixtureDay();
+    const garden = day.nodes.find(({ sourceNodeId }) => sourceNodeId === "garden");
+    if (garden === undefined) throw new Error("fixture garden is missing");
+    garden.skipped = true;
+
+    expect(buildMapPresentation(day).places).toContainEqual({
+      ownerId: nodeMapOwnerId("garden"),
+      label: "Garden",
+      coordinates: { lat: 25.02, lng: 121.5 },
+      tone: "skipped",
+    });
   });
 
   it("replaces the expanded parent with every locatable option and selects only the active draft", () => {
@@ -287,13 +364,13 @@ describe("buildMapPresentation", () => {
         "walk-to-garden": {
           status: "ready",
           durationMinutes: 8,
-          path: [
+          geometry: [
             { lat: 25.01, lng: 121.51 },
             { lat: 25.02, lng: 121.5 },
           ],
           steps: ["Walk north"],
         },
-        "drive-to-hotel": { status: "unavailable", reason: "No route" },
+        "drive-to-hotel": { status: "unavailable", reason: "not-found", retryable: false },
       },
     });
 
@@ -315,14 +392,6 @@ describe("buildMapPresentation", () => {
         source: "provider",
         certainty: "suggested",
         mode: "walking",
-      },
-      {
-        edgeId: "drive-to-hotel",
-        path: [],
-        tone: "unavailable",
-        source: "recomposed",
-        certainty: "unverified",
-        mode: "driving",
       },
     ]);
   });
@@ -352,8 +421,8 @@ describe("buildMapPresentation", () => {
           title: "Shared candidate",
           place: {
             name: "Shared candidate",
-            coordinates: { lat: 25.08, lng: 121.56 },
             certainty: "candidate",
+            identity: { status: "resolved", coordinates: { lat: 25.08, lng: 121.56 } },
           },
         },
       ],
@@ -377,7 +446,7 @@ describe("buildMapPresentation", () => {
         shared: {
           status: "ready",
           durationMinutes: 2,
-          path: [
+          geometry: [
             { lat: 25.06, lng: 121.54 },
             { lat: 25.08, lng: 121.56 },
           ],

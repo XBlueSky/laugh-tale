@@ -1,0 +1,66 @@
+{
+  "name": "@laugh-tale-island/testing",
+  "version": "1.1.0",
+  "description": "Deterministic test doubles, fixtures, setups, and provider conformance contracts for Laugh Tale v2.",
+  "license": "MIT",
+  "author": "XBlueSky",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/XBlueSky/laugh-tale.git",
+    "directory": "packages/testing"
+  },
+  "homepage": "https://github.com/XBlueSky/laugh-tale#readme",
+  "bugs": {
+    "url": "https://github.com/XBlueSky/laugh-tale/issues"
+  },
+  "keywords": [
+    "travel",
+    "itinerary",
+    "testing",
+    "fixtures",
+    "conformance"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "prebuild": "npm run build --workspace @laugh-tale-island/core && npm run build --workspace @laugh-tale-island/react && npm run build --workspace @laugh-tale-island/adapters",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "peerDependencies": {
+    "react": ">=19.2.0 <20",
+    "react-dom": ">=19.2.0 <20",
+    "vitest": ">=4.1.0 <5"
+  },
+  "dependencies": {
+    "@laugh-tale-island/adapters": "1.1.0",
+    "@laugh-tale-island/core": "1.1.0",
+    "@laugh-tale-island/react": "1.1.0"
+  },
+  "devDependencies": {
+    "@testing-library/user-event": "14.6.6",
+    "jsdom": "30.0.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "vitest": "4.1.11"
+  }
+}

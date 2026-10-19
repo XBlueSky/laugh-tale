@@ -13,8 +13,20 @@ function sanitizePlace(place) {
     if (place === undefined || typeof place.name !== "string" || place.name.trim().length === 0) {
         return undefined;
     }
-    const coordinates = place.coordinates;
-    const safeCoordinates = coordinates !== undefined &&
+    const identity = place.identity;
+    if (typeof identity !== "object" || identity === null)
+        return undefined;
+    if (identity.status === "unresolved") {
+        return {
+            name: place.name,
+            certainty: isFactCertainty(place.certainty) ? place.certainty : "unverified",
+            identity: { status: "unresolved", reason: identity.reason },
+        };
+    }
+    if (identity.status !== "resolved")
+        return undefined;
+    const coordinates = identity.coordinates;
+    const safeCoordinates = typeof coordinates === "object" && coordinates !== null && !Array.isArray(coordinates) &&
         Number.isFinite(coordinates.lat) &&
         coordinates.lat >= -90 &&
         coordinates.lat <= 90 &&
@@ -23,20 +35,25 @@ function sanitizePlace(place) {
         coordinates.lng <= 180
         ? { lat: coordinates.lat, lng: coordinates.lng }
         : undefined;
-    const provider = place.provider;
-    const safeProvider = provider?.name === "google" &&
-        (provider.placeId === undefined ||
-            (typeof provider.placeId === "string" && provider.placeId.trim().length > 0))
-        ? {
-            name: "google",
-            ...(provider.placeId === undefined ? {} : { placeId: provider.placeId }),
-        }
+    const providerReference = identity.providerReference;
+    const safeProviderReference = typeof providerReference === "object" && providerReference !== null &&
+        typeof providerReference.provider === "string" &&
+        providerReference.provider.trim().length > 0 &&
+        typeof providerReference.id === "string" &&
+        providerReference.id.trim().length > 0
+        ? { provider: providerReference.provider, id: providerReference.id }
         : undefined;
+    if (safeCoordinates === undefined && safeProviderReference === undefined) {
+        return undefined;
+    }
     return {
         name: place.name,
-        ...(safeCoordinates === undefined ? {} : { coordinates: safeCoordinates }),
-        ...(safeProvider === undefined ? {} : { provider: safeProvider }),
         certainty: isFactCertainty(place.certainty) ? place.certainty : "unverified",
+        identity: {
+            status: "resolved",
+            ...(safeCoordinates === undefined ? {} : { coordinates: safeCoordinates }),
+            ...(safeProviderReference === undefined ? {} : { providerReference: safeProviderReference }),
+        },
     };
 }
 function isHttpsUrl(value) {
@@ -82,13 +99,14 @@ function candidateForNode(node, candidateGroups, selectedCandidateIds) {
     const defaultOption = group.options.find((candidate) => candidate.id === group.defaultOptionId);
     return storedOption ?? defaultOption;
 }
-function resolveNode(node, candidateGroups, progress) {
+function resolveNode(node, candidateGroups, progress, skipped) {
     const selected = candidateForNode(node, candidateGroups, progress.selectedCandidateIds);
     if (selected === undefined) {
         return {
             node,
             sourceNodeId: node.id,
             completed: progress.completedIds.includes(nodeCompletionKey(node.id)),
+            skipped,
         };
     }
     const selectedPlace = sanitizePlace(selected.place) ?? sanitizePlace(node.place);
@@ -102,6 +120,7 @@ function resolveNode(node, candidateGroups, progress) {
         },
         sourceNodeId: node.id,
         completed: progress.completedIds.includes(nodeCompletionKey(node.id)),
+        skipped,
         selectedCandidateId: selected.id,
     };
 }
@@ -109,10 +128,8 @@ export function resolveEffectiveItinerary(trip, progress, options = {}) {
     const skippedNodeIds = new Set(progress.skippedNodeIds);
     const days = trip.days.map((day) => ({
         day,
-        nodes: day.nodes
-            .filter((node) => !(node.optionality === "optional" && skippedNodeIds.has(node.id)))
-            .map((node) => resolveNode(node, trip.candidateGroups, progress)),
+        nodes: day.nodes.map((node) => resolveNode(node, trip.candidateGroups, progress, node.optionality === "optional" && skippedNodeIds.has(node.id))),
     }));
-    const routes = deduplicateRouteOwners(days.flatMap(({ day, nodes }) => resolveRouteEdges(day, trip.routes, nodes, options)), options);
+    const routes = deduplicateRouteOwners(days.flatMap(({ day, nodes }) => resolveRouteEdges(day, trip.routes, nodes.filter(({ skipped }) => !skipped), options)), options);
     return { tripId: trip.id, days, routes };
 }

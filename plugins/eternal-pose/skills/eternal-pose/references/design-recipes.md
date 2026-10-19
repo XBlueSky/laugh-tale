@@ -4,27 +4,23 @@ Treat a recipe as an agent-facing design brief selected at generation or restyli
 
 ## Built-in catalog
 
-The source catalog contains exactly three complete compile-time recipes:
+The v2 source catalog contains one complete compile-time recipe:
 
 | ID | Default use | Register | Source |
 | --- | --- | --- | --- |
-| `quiet-wood` | Default when no visual direction is supplied | Warm, restrained product utility | `../../../recipes/quiet-wood/` |
-| `sticker-brutalist` | Bold flat fills, full ink borders, and hard offset shadows | High-recognition product utility | `../../../recipes/sticker-brutalist/` |
-| `native-minimal` | System-adjacent hierarchy and sparse decoration | Familiar mobile product utility | `../../../recipes/native-minimal/` |
+| `oak-washi` | Sole/default recipe at 2.0.0 | Oak ink, washi surfaces, editorial travel utility | `../../../recipes-v2/oak-washi/` |
 
-Each directory contains `recipe.json`, a complete standalone `recipe.css`, and an agent-facing `README.md`. Quiet Wood is byte-identical to the starter's `src/ui/styles/recipe.css`. A generated site receives only the selected CSS file; it does not receive this catalog or a runtime selector.
+Generation materializes the selected presentation and exactly one locale catalog into owned source. It does not ship recipe-only reference catalogs or a runtime theme selector. `trip.locale` controls authored Trip copy; empty starters require `--setup-locale`. See `workflow.md` for `--copy-catalog` requirements.
 
 ## Select or create a direction
 
-- Use `quiet-wood` only when the user gives no visual direction. Favor warm material cues, quiet hierarchy, low noise, and a practical travel-dashboard register.
-- Use `sticker-brutalist` when the user wants bold outlines, hard shadows, bright sticker-like groupings, and high-recognition icons without copying reference-site assets.
-- Use `native-minimal` when the user wants mobile-native hierarchy, quiet surfaces, and minimal decoration.
+- Use `oak-washi` when creating a site; `--recipe oak-washi` is optional because it is the default.
 - Follow a user-supplied brand, screenshot, URL, or natural-language direction when authorized. A user may replace, combine, or rewrite recipes.
 - Copy only the selected recipe into a generated site. Do not ship the whole recipe library or create a runtime theme selector unless requested.
 
 ## Replace, mix, or rewrite safely
 
-Treat all three recipes as useful first drafts, never as fixed templates. A user's AI may replace one, mix deliberate parts of two, or rewrite the visual system and information architecture from a supplied brand, screenshot, URL, or natural-language direction.
+Treat the generated presentation as a first draft. A user's AI may rewrite the visual system and information architecture from a supplied brand, screenshot, URL, or natural-language direction while preserving the experience contract.
 
 Before editing an existing site:
 
@@ -40,7 +36,7 @@ Specify the product register and principles; primitive, semantic, and component 
 
 Define behavior at 320, 390, and 430 CSS-pixel widths, short heights, and safe-area insets. Define forced-colors, contrast, touch targets, focus, interruption, and reduced-motion outcomes rather than decoration alone.
 
-Use the shared token names consumed by `starter/react/src/ui/styles/base.css`. Recipe CSS may restyle stable Task 7–9 semantic selectors, but it must not own runtime safe-area values, map padding, header clearance, or resolved sheet height. Verify small text on canvas, surface, semantic surfaces, and selected surfaces at WCAG AA 4.5:1 or better.
+Inspect the generated presentation's token and component contracts before changing styles. Preserve measured safe-area values, map padding, header clearance, and resolved sheet height. Verify small text on canvas, surface, semantic surfaces, and selected surfaces at WCAG AA 4.5:1 or better. Finish Restyle with Validate and Verify.
 
 ## Preserve mutable IA/UI
 

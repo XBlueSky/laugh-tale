@@ -1,9 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { Buffer } from "node:buffer";
+import { createHash, randomUUID } from "node:crypto";
+import { constants as fsConstants } from "node:fs";
 import {
   cp,
   lstat,
   mkdir,
+  open,
   readFile,
   readdir,
   rename,
@@ -17,6 +20,12 @@ import { setTimeout as wait } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { createTripProject } from "../plugins/eternal-pose/scripts/create-trip-project.mjs";
+import { readProjectFileSet, recoverProjectFileTransaction } from "../plugins/eternal-pose/lib/atomic-publication.mjs";
+import { projectSnapshot } from "../plugins/eternal-pose/scripts/validate-trip-project.mjs";
+import { parseTripProjectManifest, assertManifestMatchesLedger } from "../plugins/eternal-pose/lib/project-manifest-v2.mjs";
+import { parseTripProjectInputV2 } from "../plugins/eternal-pose/lib/trip-project-input-v2.mjs";
+import { parsePlaceResolutionLedger } from "../plugins/eternal-pose/lib/place-resolution-ledger.mjs";
+import { assertOakWashiPresentationIdentity } from "./sync-oak-washi-starter-presentation.mjs";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const pluginRoot = join(repoRoot, "plugins/eternal-pose");
@@ -28,9 +37,12 @@ const packBaseRoot = join(repositoryTmpRoot, "staged-packs");
 const packageLockRoot = join(repositoryTmpRoot, ".stage-starter-package.lock");
 const artifactLockRoot = join(repositoryTmpRoot, ".stage-starter-artifact.lock");
 const consumerMarkerName = ".laugh-tale-staged-consumer.json";
+const candidateAttestationName = ".laugh-tale-local-candidates.json";
 const auxiliaryMarkerName = ".laugh-tale-staging-owner.json";
 const lockOwnerName = "owner.json";
 const artifactMarkerVersion = 2;
+const PACKAGE_BUILD_ORDER = ["core", "react", "adapters", "testing"];
+const INTERNAL_PACKAGE_PREFIX = "@laugh-tale-island/";
 const REMOVE_TREE_OPTIONS = {
   recursive: true,
   force: true,
@@ -82,24 +94,154 @@ function sameIdentity(left, right) {
   return left?.dev === right?.dev && left?.ino === right?.ino;
 }
 
-async function readMarkerSnapshot(path) {
-  const stat = await statMaybe(path);
-  if (stat === undefined) return undefined;
-  if (stat.isSymbolicLink() || !stat.isFile()) {
-    throw new Error(`staging ownership marker must be a real file: ${path}`);
+function fileStateFor(stat) {
+  return {
+    ...identityFor(stat),
+    ctimeNs: String(stat.ctimeNs),
+    mtimeNs: String(stat.mtimeNs),
+    nlink: String(stat.nlink),
+    size: String(stat.size),
+  };
+}
+
+function sameFileState(left, right) {
+  return (
+    sameIdentity(left, right) &&
+    left?.ctimeNs === right?.ctimeNs &&
+    left?.mtimeNs === right?.mtimeNs &&
+    left?.nlink === right?.nlink &&
+    left?.size === right?.size
+  );
+}
+
+async function readHandleContents(handle, size, label) {
+  if (size > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error(`${label} is too large to inspect safely`);
   }
-  const source = await readFile(path, "utf8");
+  const contents = Buffer.alloc(Number(size));
+  let offset = 0;
+  while (offset < contents.byteLength) {
+    const { bytesRead } = await handle.read(
+      contents,
+      offset,
+      contents.byteLength - offset,
+      offset,
+    );
+    if (bytesRead === 0) break;
+    offset += bytesRead;
+  }
+  if (offset !== contents.byteLength) {
+    throw new Error(`${label} changed length while inspected`);
+  }
+  return contents;
+}
+
+async function openRealFileSnapshot(path, label, afterRead) {
+  let handle;
+  try {
+    handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+  } catch (error) {
+    if (error?.code === "ENOENT") return undefined;
+    if (error?.code === "ELOOP") {
+      throw new Error(`${label} must be a real file: ${path}`, { cause: error });
+    }
+    throw error;
+  }
+  try {
+    const initialStat = await handle.stat({ bigint: true });
+    if (!initialStat.isFile() || initialStat.isSymbolicLink()) {
+      throw new Error(`${label} must be a real file: ${path}`);
+    }
+    const contents = await readHandleContents(handle, initialStat.size, label);
+    await afterRead?.();
+    const currentStat = await handle.stat({ bigint: true });
+    const pathStat = await lstat(path, { bigint: true });
+    const state = fileStateFor(initialStat);
+    if (
+      !currentStat.isFile() ||
+      pathStat.isSymbolicLink() ||
+      !pathStat.isFile() ||
+      !sameFileState(state, fileStateFor(currentStat)) ||
+      !sameFileState(state, fileStateFor(pathStat))
+    ) {
+      throw new Error(`${label} identity or contents changed while inspected: ${path}`);
+    }
+    return {
+      contents,
+      handle,
+      identity: identityFor(initialStat),
+      state,
+    };
+  } catch (error) {
+    await handle.close();
+    throw error;
+  }
+}
+
+async function verifyOpenFileSnapshot(opened, path, label) {
+  const initialStat = await opened.handle.stat({ bigint: true });
+  const contents = await readHandleContents(opened.handle, initialStat.size, label);
+  const currentStat = await opened.handle.stat({ bigint: true });
+  let pathStat;
+  try {
+    pathStat = await lstat(path, { bigint: true });
+  } catch (error) {
+    throw new Error(`${label} path changed while inspected: ${path}`, { cause: error });
+  }
+  if (
+    !initialStat.isFile() ||
+    !currentStat.isFile() ||
+    pathStat.isSymbolicLink() ||
+    !pathStat.isFile() ||
+    !sameFileState(opened.state, fileStateFor(initialStat)) ||
+    !sameFileState(opened.state, fileStateFor(currentStat)) ||
+    !sameFileState(opened.state, fileStateFor(pathStat)) ||
+    !contents.equals(opened.contents)
+  ) {
+    throw new Error(`${label} identity or contents changed after validation: ${path}`);
+  }
+  return opened;
+}
+
+async function recaptureRenamedOpenFileSnapshot(opened, path, label) {
+  const initialStat = await opened.handle.stat({ bigint: true });
+  const contents = await readHandleContents(opened.handle, initialStat.size, label);
+  const currentStat = await opened.handle.stat({ bigint: true });
+  const pathStat = await lstat(path, { bigint: true });
+  const state = fileStateFor(initialStat);
+  if (
+    !initialStat.isFile() ||
+    !currentStat.isFile() ||
+    pathStat.isSymbolicLink() ||
+    !pathStat.isFile() ||
+    !sameIdentity(opened.identity, identityFor(initialStat)) ||
+    !sameFileState(state, fileStateFor(currentStat)) ||
+    !sameFileState(state, fileStateFor(pathStat)) ||
+    !contents.equals(opened.contents)
+  ) {
+    throw new Error(`${label} identity or contents changed across quarantine: ${path}`);
+  }
+  opened.state = state;
+  return opened;
+}
+
+function markerSnapshotFromOpenedFile(opened) {
+  const source = opened.contents.toString("utf8");
   let marker;
   try {
     marker = JSON.parse(source);
   } catch {
-    return { identity: identityFor(stat), marker: undefined, source };
+    marker = undefined;
   }
-  const currentStat = await lstat(path);
-  if (!sameIdentity(identityFor(stat), identityFor(currentStat))) {
-    throw new Error(`staging ownership marker identity changed while it was inspected: ${path}`);
-  }
-  return { identity: identityFor(stat), marker, source };
+  return { identity: opened.identity, marker, source, state: opened.state };
+}
+
+async function readMarkerSnapshot(path) {
+  const opened = await openRealFileSnapshot(path, "staging ownership marker");
+  if (opened === undefined) return undefined;
+  const snapshot = markerSnapshotFromOpenedFile(opened);
+  await opened.handle.close();
+  return snapshot;
 }
 
 async function assertRealPathComponents(path) {
@@ -261,7 +403,35 @@ function validPackMarker(marker, path) {
         file === basename(file) &&
         file.endsWith(".tgz"),
     ) &&
-    new Set(marker.files).size === marker.files.length
+    new Set(marker.files).size === marker.files.length &&
+    (marker.artifacts === undefined ||
+      (Array.isArray(marker.artifacts) &&
+        marker.artifacts.every(
+          (artifact) =>
+            artifact !== null &&
+            typeof artifact === "object" &&
+            typeof artifact.digest === "string" &&
+            artifact.digest.length > 0 &&
+            typeof artifact.filename === "string" &&
+            marker.files.includes(artifact.filename) &&
+            typeof artifact.identity?.dev === "string" &&
+            typeof artifact.identity?.ino === "string" &&
+            typeof artifact.integrity === "string" &&
+            artifact.integrity === `sha512-${artifact.digest}` &&
+            typeof artifact.name === "string" &&
+            artifact.name.startsWith(INTERNAL_PACKAGE_PREFIX) &&
+            Number.isSafeInteger(artifact.size) &&
+            artifact.size >= 0 &&
+            typeof artifact.version === "string" &&
+            artifact.version.length > 0,
+        ) &&
+        new Set(marker.artifacts.map((artifact) => artifact.filename)).size ===
+          marker.artifacts.length &&
+        new Set(
+          marker.artifacts.map(
+            (artifact) => `${artifact.identity.dev}:${artifact.identity.ino}`,
+          ),
+        ).size === marker.artifacts.length))
   );
 }
 
@@ -359,6 +529,12 @@ async function removeOwnedPackTree(path, expectedReference, expectedTarget) {
   ) {
     throw new Error(`refusing to remove pack tree without exact ownership: ${path}`);
   }
+  for (const artifact of marker.artifacts ?? []) {
+    await revalidateTarballArtifact(
+      { ...artifact, path: join(path, artifact.filename) },
+      path,
+    );
+  }
   const allowed = new Set([auxiliaryMarkerName, ...marker.files]);
   const entries = await readdir(path, { withFileTypes: true });
   if (
@@ -442,7 +618,13 @@ function run(command, commandArguments, cwd, testOperations) {
       `${command} ${commandArguments.join(" ")} failed (${result.status}):\n${result.stdout}\n${result.stderr}`,
     );
   }
-  return result.stdout;
+  const output =
+    testOperations?.transformCommandOutput?.({ ...observation, stdout: result.stdout }) ??
+    result.stdout;
+  if (typeof output !== "string") {
+    throw new Error("staging command-output transform must return a string");
+  }
+  return output;
 }
 
 function processIsAlive(pid) {
@@ -467,38 +649,280 @@ function validLockOwner(owner) {
   );
 }
 
-async function readLockOwner() {
-  let source;
-  try {
-    source = await readFile(join(packageLockRoot, lockOwnerName), "utf8");
-  } catch (error) {
-    if (error?.code === "ENOENT") return undefined;
-    throw error;
-  }
-  try {
-    return JSON.parse(source);
-  } catch (error) {
-    throw new Error("staging package lock has invalid ownership metadata", { cause: error });
-  }
+function lockChanged(message, cause) {
+  const error = new Error(message, { cause });
+  error.code = "ESTAGINGLOCKCHANGED";
+  return error;
 }
 
-async function retireStaleLock(owner, token) {
-  const currentOwner = await readLockOwner();
-  if (!validLockOwner(currentOwner) || currentOwner.token !== owner.token) return false;
-  const stalePath = join(repositoryTmpRoot, `.stage-starter-package.stale-${token}`);
+function sameMarkerSnapshot(left, right) {
+  return (
+    (left === undefined) === (right === undefined) &&
+    (left === undefined ||
+      (sameIdentity(left.identity, right?.identity) &&
+        sameFileState(left.state, right?.state) &&
+        left.source === right?.source))
+  );
+}
+
+async function captureLock(lockRoot, validOwner, label) {
+  let directoryStat;
   try {
-    await rename(packageLockRoot, stalePath);
+    directoryStat = await lstat(lockRoot);
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      throw lockChanged(`${label} disappeared while inspected`, error);
+    }
+    throw error;
+  }
+  if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory()) {
+    throw new Error(`${label} path is not a real directory`);
+  }
+  let ownerSnapshot;
+  try {
+    ownerSnapshot = await readMarkerSnapshot(join(lockRoot, lockOwnerName));
+  } catch (error) {
+    if (
+      error?.code === "ENOENT" ||
+      (error instanceof Error && error.message.includes("identity changed while it was inspected"))
+    ) {
+      throw lockChanged(`${label} owner changed while inspected`, error);
+    }
+    throw error;
+  }
+  if (ownerSnapshot !== undefined && !validOwner(ownerSnapshot.marker)) {
+    throw new Error(`${label} has invalid ownership metadata`);
+  }
+  let currentStat;
+  try {
+    currentStat = await lstat(lockRoot);
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      throw lockChanged(`${label} disappeared while inspected`, error);
+    }
+    throw error;
+  }
+  if (!sameIdentity(identityFor(directoryStat), identityFor(currentStat))) {
+    throw lockChanged(`${label} identity changed while it was inspected`);
+  }
+  return {
+    directoryIdentity: identityFor(directoryStat),
+    directoryMtimeMs: directoryStat.mtimeMs,
+    ownerSnapshot,
+  };
+}
+
+async function rollbackRenamedLock(lockRoot, removalPath, label, cause) {
+  if ((await statMaybe(lockRoot)) !== undefined) {
+    throw new AggregateError(
+      [cause],
+      `${label} changed during retirement; preserved unknown lock at ${removalPath}`,
+    );
+  }
+  try {
+    await rename(removalPath, lockRoot);
+  } catch (rollbackError) {
+    throw new AggregateError(
+      [cause, rollbackError],
+      `${label} changed during retirement and could not be restored from ${removalPath}`,
+      { cause: rollbackError },
+    );
+  }
+  throw cause;
+}
+
+function preserveLockQuarantine(error, label) {
+  const cause = error instanceof Error ? error : new Error(String(error));
+  const preserved = new Error(`${label} owner changed during retirement; preserved quarantine`, {
+    cause,
+  });
+  preserved.stagingPreserveLockQuarantine = true;
+  return preserved;
+}
+
+async function removeCapturedLock(
+  lockRoot,
+  captured,
+  removalPath,
+  label,
+  { testOperations, lockKind, reason },
+) {
+  try {
+    await rename(lockRoot, removalPath);
   } catch (error) {
     if (error?.code === "ENOENT") return false;
     throw error;
   }
-  const entries = await readdir(stalePath);
-  if (entries.length !== 1 || entries[0] !== lockOwnerName) {
-    throw new Error(`refusing to retire a stale staging lock with unknown contents: ${stalePath}`);
+  let openedOwner;
+  let ownerQuarantinePath;
+  try {
+    const removalStat = await lstat(removalPath);
+    if (
+      removalStat.isSymbolicLink() ||
+      !removalStat.isDirectory() ||
+      !sameIdentity(identityFor(removalStat), captured.directoryIdentity)
+    ) {
+      throw new Error(`${label} directory identity changed before retirement`);
+    }
+    const ownerPath = join(removalPath, lockOwnerName);
+    openedOwner = await openRealFileSnapshot(ownerPath, `${label} owner`);
+    const ownerSnapshot =
+      openedOwner === undefined ? undefined : markerSnapshotFromOpenedFile(openedOwner);
+    if (!sameMarkerSnapshot(captured.ownerSnapshot, ownerSnapshot)) {
+      throw new Error(`${label} owner identity changed before retirement`);
+    }
+    if (ownerSnapshot !== undefined) {
+      await testOperations?.afterLockOwnerValidated?.({
+        lockKind,
+        reason,
+        removalPath,
+        ownerPath: join(removalPath, lockOwnerName),
+      });
+      try {
+        await verifyOpenFileSnapshot(openedOwner, ownerPath, `${label} owner`);
+      } catch (error) {
+        throw preserveLockQuarantine(error, label);
+      }
+    }
+    const entries = await readdir(removalPath);
+    const expectedEntries = captured.ownerSnapshot === undefined ? [] : [lockOwnerName];
+    if (
+      entries.length !== expectedEntries.length ||
+      entries.some((entry) => !expectedEntries.includes(entry))
+    ) {
+      throw new Error(`${label} contains unknown files at retirement`);
+    }
+    if (openedOwner !== undefined) {
+      ownerQuarantinePath = join(
+        repositoryTmpRoot,
+        `.stage-starter-${lockKind}.owner-retired-${randomUUID()}`,
+      );
+      await rename(ownerPath, ownerQuarantinePath);
+      try {
+        await recaptureRenamedOpenFileSnapshot(
+          openedOwner,
+          ownerQuarantinePath,
+          `${label} owner`,
+        );
+      } catch (error) {
+        throw preserveLockQuarantine(error, label);
+      }
+      await openedOwner.handle.close();
+      openedOwner = undefined;
+      await unlink(ownerQuarantinePath);
+      ownerQuarantinePath = undefined;
+    }
+  } catch (error) {
+    if (openedOwner !== undefined) {
+      await openedOwner.handle.close().catch(() => {});
+    }
+    if (error?.stagingPreserveLockQuarantine) throw error;
+    await rollbackRenamedLock(lockRoot, removalPath, label, error);
   }
-  await unlink(join(stalePath, lockOwnerName));
-  await rmdir(stalePath);
+  await rmdir(removalPath);
   return true;
+}
+
+async function publishLockOwner(lockRoot, owner, token, lockKind, testOperations) {
+  // Let the existing wait/reclaim path apply its grace period to observed legacy
+  // empty directories. The rename below arbitrates competing new publications.
+  if ((await statMaybe(lockRoot)) !== undefined) return undefined;
+  const privateRoot = join(
+    repositoryTmpRoot,
+    `.stage-starter-${lockKind}.owner-${token}-${randomUUID()}.pending`,
+  );
+  const pendingOwnerPath = join(privateRoot, lockOwnerName);
+  const validOwner = lockKind === "package" ? validLockOwner : validArtifactLockOwner;
+  const label = `staging ${lockKind} lock`;
+  await mkdir(privateRoot);
+  const directoryIdentity = identityFor(await lstat(privateRoot));
+  let ownerSnapshot;
+  let published = false;
+  try {
+    await writeFile(pendingOwnerPath, `${JSON.stringify(owner)}\n`, { flag: "wx" });
+    ownerSnapshot = await readMarkerSnapshot(pendingOwnerPath);
+    const context = { lockKind, lockRoot, pendingOwnerPath };
+    await testOperations?.beforeLockOwnerPublish?.(context);
+    const prepared = await captureLock(privateRoot, validOwner, label);
+    assertPublishedLockCapture(prepared, directoryIdentity, ownerSnapshot, label);
+    const entries = await readdir(privateRoot);
+    if (entries.length !== 1 || entries[0] !== lockOwnerName) {
+      throw new Error(`${label} private directory contains unknown files`);
+    }
+    await testOperations?.beforeLockOwnerCommit?.(context);
+    // A cooperating owner publishes a nonempty directory in one operation.
+    // Directory rename cannot overwrite another live owner's nonempty lock.
+    try {
+      await rename(privateRoot, lockRoot);
+    } catch (error) {
+      if (error?.code !== "EEXIST" && error?.code !== "ENOTEMPTY") throw error;
+      await cleanupFailedCreatedLock(privateRoot, directoryIdentity, ownerSnapshot, token, lockKind);
+      return undefined;
+    }
+    published = true;
+    await testOperations?.afterLockOwnerPublish?.(context);
+    const captured = await captureLock(lockRoot, validOwner, label);
+    assertPublishedLockCapture(captured, directoryIdentity, ownerSnapshot, label);
+    return captured;
+  } catch (error) {
+    try {
+      await cleanupFailedCreatedLock(
+        published ? lockRoot : privateRoot, directoryIdentity, ownerSnapshot, token, lockKind,
+      );
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], `${label} acquisition and owned cleanup both failed`, {
+        cause: cleanupError,
+      });
+    }
+    throw error;
+  }
+}
+
+async function cleanupFailedCreatedLock(
+  lockRoot,
+  directoryIdentity,
+  ownerSnapshot,
+  token,
+  lockKind,
+) {
+  const currentStat = await statMaybe(lockRoot);
+  if (
+    currentStat === undefined ||
+    currentStat.isSymbolicLink() ||
+    !currentStat.isDirectory() ||
+    !sameIdentity(identityFor(currentStat), directoryIdentity)
+  ) {
+    return;
+  }
+  const label = `staging ${lockKind} lock`;
+  let captured;
+  try {
+    captured = await captureLock(
+      lockRoot, lockKind === "package" ? validLockOwner : validArtifactLockOwner, label,
+    );
+  } catch {
+    return;
+  }
+  if (
+    !sameIdentity(captured.directoryIdentity, directoryIdentity) ||
+    !sameMarkerSnapshot(captured.ownerSnapshot, ownerSnapshot)
+  ) return;
+  // Check before mutating; retirement verifies the renamed identity and restores
+  // the canonical path if a detected replacement raced that check.
+  await removeCapturedLock(
+    lockRoot, captured,
+    join(repositoryTmpRoot, `.stage-starter-${lockKind}.failed-${token}-${randomUUID()}`),
+    label, { lockKind, reason: "failed" },
+  );
+}
+
+function assertPublishedLockCapture(captured, directoryIdentity, ownerSnapshot, label) {
+  if (
+    !sameIdentity(captured.directoryIdentity, directoryIdentity) ||
+    !sameMarkerSnapshot(captured.ownerSnapshot, ownerSnapshot)
+  ) {
+    throw new Error(`${label} identity changed during owner publication`);
+  }
 }
 
 async function acquirePackageLock(testOperations) {
@@ -511,65 +935,73 @@ async function acquirePackageLock(testOperations) {
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() <= deadline) {
-    try {
-      await mkdir(packageLockRoot);
-      const owner = {
+    const published = await publishLockOwner(
+      packageLockRoot,
+      {
         kind: "laugh-tale-package-build-lock",
         version: 1,
         token,
         pid: process.pid,
         createdAt: Date.now(),
-      };
-      try {
-        await writeFile(join(packageLockRoot, lockOwnerName), `${JSON.stringify(owner)}\n`, {
-          flag: "wx",
-        });
-      } catch (error) {
-        await rmdir(packageLockRoot).catch(() => undefined);
-        throw error;
-      }
+      },
+      token,
+      "package",
+      testOperations,
+    );
+    if (published !== undefined) {
       return async () => {
-        const currentOwner = await readLockOwner();
-        if (!validLockOwner(currentOwner) || currentOwner.token !== token) {
-          throw new Error("staging package lock ownership changed before release");
-        }
-        const entries = await readdir(packageLockRoot);
-        if (entries.length !== 1 || entries[0] !== lockOwnerName) {
-          throw new Error("staging package lock contains unknown files at release");
-        }
-        await unlink(join(packageLockRoot, lockOwnerName));
-        await rmdir(packageLockRoot);
+        await removeCapturedLock(
+          packageLockRoot,
+          published,
+          join(repositoryTmpRoot, `.stage-starter-package.release-${token}`),
+          "staging package lock",
+          { testOperations, lockKind: "package", reason: "release" },
+        );
       };
-    } catch (error) {
-      if (error?.code !== "EEXIST") throw error;
     }
 
-    const lockStat = await statMaybe(packageLockRoot);
-    if (lockStat?.isSymbolicLink() || (lockStat !== undefined && !lockStat.isDirectory())) {
-      throw new Error("staging package lock path is not a real directory");
+    let captured;
+    try {
+      captured = await captureLock(
+        packageLockRoot,
+        validLockOwner,
+        "staging package lock",
+      );
+    } catch (error) {
+      if (error?.code === "ESTAGINGLOCKCHANGED") continue;
+      throw error;
     }
-    const owner = await readLockOwner();
-    if (owner !== undefined && !validLockOwner(owner)) {
-      throw new Error("staging package lock has invalid ownership metadata");
-    }
+    const owner = captured.ownerSnapshot?.marker;
     const ownerIsDead =
       validLockOwner(owner) &&
       !(testOperations?.isProcessAlive ?? processIsAlive)(owner.pid);
     if (ownerIsDead && Date.now() - owner.createdAt > deadOwnerGraceMs) {
-      if (await retireStaleLock(owner, token)) continue;
+      await testOperations?.beforePackageLockRetire?.();
+      if (
+        await removeCapturedLock(
+          packageLockRoot,
+          captured,
+          join(repositoryTmpRoot, `.stage-starter-package.stale-${token}`),
+          "staging package lock",
+          { testOperations, lockKind: "package", reason: "stale" },
+        )
+      ) {
+        continue;
+      }
     } else if (
       owner === undefined &&
-      lockStat !== undefined &&
-      Date.now() - lockStat.mtimeMs > staleMs &&
-      (await readdir(packageLockRoot)).length === 0
+      Date.now() - captured.directoryMtimeMs > staleMs
     ) {
-      const stalePath = join(repositoryTmpRoot, `.stage-starter-package.stale-${token}`);
-      try {
-        await rename(packageLockRoot, stalePath);
-        await rmdir(stalePath);
+      if (
+        await removeCapturedLock(
+          packageLockRoot,
+          captured,
+          join(repositoryTmpRoot, `.stage-starter-package.stale-${token}`),
+          "staging package lock",
+          { testOperations, lockKind: "package", reason: "stale" },
+        )
+      ) {
         continue;
-      } catch (error) {
-        if (error?.code !== "ENOENT") throw error;
       }
     }
     await wait(pollMs);
@@ -588,6 +1020,7 @@ async function withPackageLock(testOperations, operation) {
   }
 
   try {
+    await testOperations?.beforePackageLockRelease?.();
     await release();
   } catch (releaseError) {
     if (operationError !== undefined) {
@@ -616,76 +1049,21 @@ function validArtifactLockOwner(owner) {
 }
 
 async function captureArtifactLock() {
-  const directoryStat = await lstat(artifactLockRoot);
-  if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory()) {
-    throw new Error("staging artifact lock path is not a real directory");
-  }
-  const ownerSnapshot = await readMarkerSnapshot(join(artifactLockRoot, lockOwnerName));
-  if (ownerSnapshot !== undefined && !validArtifactLockOwner(ownerSnapshot.marker)) {
-    throw new Error("staging artifact lock has invalid ownership metadata");
-  }
-  const currentStat = await lstat(artifactLockRoot);
-  if (!sameIdentity(identityFor(directoryStat), identityFor(currentStat))) {
-    throw new Error("staging artifact lock identity changed while it was inspected");
-  }
-  return {
-    directoryIdentity: identityFor(directoryStat),
-    ownerSnapshot,
-  };
+  return captureLock(
+    artifactLockRoot,
+    validArtifactLockOwner,
+    "staging artifact lock",
+  );
 }
 
-async function rollbackRenamedArtifactLock(removalPath, cause) {
-  if ((await statMaybe(artifactLockRoot)) !== undefined) {
-    throw new AggregateError(
-      [cause],
-      `staging artifact lock changed during retirement; preserved unknown lock at ${removalPath}`,
-    );
-  }
-  try {
-    await rename(removalPath, artifactLockRoot);
-  } catch (rollbackError) {
-    throw new AggregateError(
-      [cause, rollbackError],
-      `staging artifact lock changed during retirement and could not be restored from ${removalPath}`,
-      { cause: rollbackError },
-    );
-  }
-  throw cause;
-}
-
-async function removeCapturedArtifactLock(captured, removalPath) {
-  await rename(artifactLockRoot, removalPath);
-  try {
-    const removalStat = await lstat(removalPath);
-    if (
-      removalStat.isSymbolicLink() ||
-      !removalStat.isDirectory() ||
-      !sameIdentity(identityFor(removalStat), captured.directoryIdentity)
-    ) {
-      throw new Error("staging artifact lock directory identity changed before retirement");
-    }
-    const ownerSnapshot = await readMarkerSnapshot(join(removalPath, lockOwnerName));
-    if (
-      (captured.ownerSnapshot === undefined) !== (ownerSnapshot === undefined) ||
-      (captured.ownerSnapshot !== undefined &&
-        (!sameIdentity(captured.ownerSnapshot.identity, ownerSnapshot?.identity) ||
-          captured.ownerSnapshot.source !== ownerSnapshot?.source))
-    ) {
-      throw new Error("staging artifact lock owner identity changed before retirement");
-    }
-    const entries = await readdir(removalPath);
-    const expectedEntries = captured.ownerSnapshot === undefined ? [] : [lockOwnerName];
-    if (
-      entries.length !== expectedEntries.length ||
-      entries.some((entry) => !expectedEntries.includes(entry))
-    ) {
-      throw new Error("staging artifact lock contains unknown files at retirement");
-    }
-  } catch (error) {
-    await rollbackRenamedArtifactLock(removalPath, error);
-  }
-  if (captured.ownerSnapshot !== undefined) await unlink(join(removalPath, lockOwnerName));
-  await rmdir(removalPath);
+async function removeCapturedArtifactLock(captured, removalPath, testOperations, reason) {
+  return removeCapturedLock(
+    artifactLockRoot,
+    captured,
+    removalPath,
+    "staging artifact lock",
+    { testOperations, lockKind: "artifact", reason },
+  );
 }
 
 async function acquireArtifactLock(testOperations) {
@@ -698,36 +1076,38 @@ async function acquireArtifactLock(testOperations) {
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() <= deadline) {
-    try {
-      await mkdir(artifactLockRoot);
-      const owner = {
+    const published = await publishLockOwner(
+      artifactLockRoot,
+      {
         kind: "laugh-tale-artifact-cleanup-lock",
         version: 1,
         token,
         pid: process.pid,
         createdAt: Date.now(),
+      },
+      token,
+      "artifact",
+      testOperations,
+    );
+    if (published !== undefined) {
+      return async () => {
+        await removeCapturedLock(
+          artifactLockRoot,
+          published,
+          join(repositoryTmpRoot, `.stage-starter-artifact.release-${token}`),
+          "staging artifact lock",
+          { testOperations, lockKind: "artifact", reason: "release" },
+        );
       };
-      try {
-        await writeFile(join(artifactLockRoot, lockOwnerName), `${JSON.stringify(owner)}\n`, {
-          flag: "wx",
-        });
-        const captured = await captureArtifactLock();
-        return async () => {
-          const removalPath = join(
-            repositoryTmpRoot,
-            `.stage-starter-artifact.release-${token}`,
-          );
-          await removeCapturedArtifactLock(captured, removalPath);
-        };
-      } catch (error) {
-        await rmdir(artifactLockRoot).catch(() => undefined);
-        throw error;
-      }
-    } catch (error) {
-      if (error?.code !== "EEXIST") throw error;
     }
 
-    const captured = await captureArtifactLock();
+    let captured;
+    try {
+      captured = await captureArtifactLock();
+    } catch (error) {
+      if (error?.code === "ESTAGINGLOCKCHANGED") continue;
+      throw error;
+    }
     const owner = captured.ownerSnapshot?.marker;
     const ownerIsDead =
       validArtifactLockOwner(owner) &&
@@ -737,18 +1117,18 @@ async function acquireArtifactLock(testOperations) {
         repositoryTmpRoot,
         `.stage-starter-artifact.stale-${token}`,
       );
-      await removeCapturedArtifactLock(captured, stalePath);
+      await removeCapturedArtifactLock(captured, stalePath, testOperations, "stale");
       continue;
     }
     if (
       owner === undefined &&
-      Date.now() - (await lstat(artifactLockRoot)).mtimeMs > staleMs
+      Date.now() - captured.directoryMtimeMs > staleMs
     ) {
       const stalePath = join(
         repositoryTmpRoot,
         `.stage-starter-artifact.stale-${token}`,
       );
-      await removeCapturedArtifactLock(captured, stalePath);
+      await removeCapturedArtifactLock(captured, stalePath, testOperations, "stale");
       continue;
     }
     await wait(pollMs);
@@ -803,20 +1183,64 @@ async function withArtifactLock(
 }
 
 async function packWorkspacePackages(packRoot, testOperations, onPacked) {
-  const tarballs = [];
-  const packageEntries = await readdir(join(repoRoot, "packages"), { withFileTypes: true });
-  const packageDirectories = packageEntries
-    .filter((candidate) => candidate.isDirectory())
-    .sort((left, right) => left.name.localeCompare(right.name));
-  for (const entry of packageDirectories) {
-    const packageDir = join(repoRoot, "packages", entry.name);
+  const artifacts = [];
+  const packedPaths = [];
+  const packageDescriptors = [];
+  const packagesRoot = join(repoRoot, "packages");
+  for (const entry of await readdir(packagesRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory() || PACKAGE_BUILD_ORDER.includes(entry.name)) continue;
+    let manifest;
     try {
-      JSON.parse(await readFile(join(packageDir, "package.json"), "utf8"));
+      manifest = JSON.parse(await readFile(join(packagesRoot, entry.name, "package.json"), "utf8"));
     } catch (error) {
       if (error?.code === "ENOENT") continue;
       throw error;
     }
-    run("npm", ["run", "build"], packageDir, testOperations);
+    if (typeof manifest?.name === "string" && manifest.name.startsWith(INTERNAL_PACKAGE_PREFIX)) {
+      throw new Error(`extra Laugh Tale package workspace: packages/${entry.name}`);
+    }
+  }
+  for (const directoryName of PACKAGE_BUILD_ORDER) {
+    const packageDir = join(repoRoot, "packages", directoryName);
+    const expectedName = `@laugh-tale-island/${directoryName}`;
+    let manifest;
+    try {
+      manifest = JSON.parse(await readFile(join(packageDir, "package.json"), "utf8"));
+    } catch (error) {
+      throw new Error(`cannot read the required workspace manifest for packages/${directoryName}`, {
+        cause: error,
+      });
+    }
+    if (
+      manifest === null ||
+      typeof manifest !== "object" ||
+      Array.isArray(manifest) ||
+      manifest.name !== expectedName
+    ) {
+      throw new Error(
+        `packages/${directoryName} must declare the expected package name "${expectedName}"`,
+      );
+    }
+    if (typeof manifest.version !== "string" || manifest.version.length === 0) {
+      throw new Error(`packages/${directoryName} must declare a package version`);
+    }
+    packageDescriptors.push({
+      directoryName,
+      expectedFilename: `laugh-tale-island-${directoryName}-${manifest.version}.tgz`,
+      expectedName,
+      expectedVersion: manifest.version,
+      packageDir,
+    });
+  }
+
+  for (const {
+    directoryName,
+    expectedFilename,
+    expectedName,
+    expectedVersion,
+    packageDir,
+  } of packageDescriptors) {
+    run("npm", ["run", "build", "--ignore-scripts"], packageDir, testOperations);
     const output = JSON.parse(
       run(
         "npm",
@@ -825,30 +1249,145 @@ async function packWorkspacePackages(packRoot, testOperations, onPacked) {
         testOperations,
       ),
     );
-    const filename = output[0]?.filename;
-    if (typeof filename !== "string") {
-      throw new Error(`npm pack reported no filename for packages/${entry.name}`);
+    const report = output[0];
+    const filename = report?.filename;
+    const expectedPath = join(packRoot, expectedFilename);
+    const expectedStat = await statMaybe(expectedPath);
+    if (
+      expectedStat !== undefined &&
+      expectedStat.isFile() &&
+      !expectedStat.isSymbolicLink()
+    ) {
+      packedPaths.push(expectedPath);
+      await onPacked?.([...packedPaths], [...artifacts]);
     }
-    tarballs.push(join(packRoot, filename));
-    await onPacked?.([...tarballs]);
+    if (
+      output.length !== 1 ||
+      report?.name !== expectedName ||
+      report?.version !== expectedVersion ||
+      typeof filename !== "string" ||
+      filename !== expectedFilename ||
+      typeof report?.integrity !== "string" ||
+      report.integrity.length === 0
+    ) {
+      throw new Error(`npm pack reported an invalid artifact for packages/${directoryName}`);
+    }
+    const artifact = await captureTarballArtifact({
+      expectedName,
+      expectedVersion,
+      filename,
+      integrity: report.integrity,
+      path: expectedPath,
+    });
+    if (
+      artifacts.some((candidate) => sameIdentity(candidate.identity, artifact.identity))
+    ) {
+      throw new Error("packed tarballs must have four distinct file identities");
+    }
+    artifacts.push(artifact);
+    await onPacked?.([...packedPaths], [...artifacts]);
   }
-  return tarballs;
+  return artifacts;
 }
 
-function packageNameForTarball(tarball) {
-  const filename = tarball.split(sep).at(-1) ?? "";
-  const bareName = filename.replace(/^laugh-tale-island-/, "").replace(/-\d+\.\d+\.\d+.*\.tgz$/, "");
-  return `@laugh-tale-island/${bareName}`;
+async function openTarballState(path, packageName, testOperations, phase) {
+  const opened = await openRealFileSnapshot(
+    path,
+    `packed tarball for ${packageName}`,
+    phase === "candidate"
+      ? () => testOperations?.afterTarballRead?.({ packageName, path, phase })
+      : undefined,
+  );
+  if (opened === undefined) {
+    throw new Error(`packed tarball for ${packageName} is missing`);
+  }
+  return {
+    ...opened,
+    digest: createHash("sha512").update(opened.contents).digest("base64"),
+    size: opened.contents.byteLength,
+  };
 }
 
-async function composeStarter({ stagedRoot, recipe, recipeCatalogRoot }) {
-  if (recipe !== undefined) {
+async function readTarballState(path, packageName, testOperations, phase) {
+  const opened = await openTarballState(
+    path,
+    packageName,
+    testOperations,
+    phase,
+  );
+  await opened.handle.close();
+  return { identity: opened.identity, digest: opened.digest, size: opened.size };
+}
+
+async function captureTarballArtifact({
+  expectedName,
+  expectedVersion,
+  filename,
+  integrity,
+  path,
+}) {
+  const state = await readTarballState(path, expectedName);
+  const computedIntegrity = `sha512-${state.digest}`;
+  if (integrity !== computedIntegrity) {
+    throw new Error(`npm pack integrity does not match the ${expectedName} tarball contents`);
+  }
+  return {
+    digest: state.digest,
+    filename,
+    identity: state.identity,
+    integrity,
+    name: expectedName,
+    path: resolve(path),
+    size: state.size,
+    version: expectedVersion,
+  };
+}
+
+async function revalidateTarballArtifact(artifact, packRoot, testOperations, phase) {
+  if (
+    resolve(artifact.path) !== artifact.path ||
+    dirname(artifact.path) !== resolve(packRoot) ||
+    basename(artifact.path) !== artifact.filename
+  ) {
+    throw new Error(`packed tarball for ${artifact.name} is outside its invocation pack root`);
+  }
+  const state = await readTarballState(
+    artifact.path,
+    artifact.name,
+    testOperations,
+    phase,
+  );
+  if (
+    !sameIdentity(state.identity, artifact.identity) ||
+    state.size !== artifact.size ||
+    state.digest !== artifact.digest ||
+    `sha512-${state.digest}` !== artifact.integrity
+  ) {
+    throw new Error(`packed tarball for ${artifact.name} no longer matches its pack-time identity and integrity`);
+  }
+}
+
+function serializableTarballArtifact(artifact) {
+  return {
+    digest: artifact.digest,
+    filename: artifact.filename,
+    identity: artifact.identity,
+    integrity: artifact.integrity,
+    name: artifact.name,
+    size: artifact.size,
+    version: artifact.version,
+  };
+}
+
+async function composeStarter({ stagedRoot, recipe, recipeCatalogRoot, tripPath, setupLocale, copyCatalogPath, resolutionsPath }) {
+  if ([recipe, tripPath, setupLocale, copyCatalogPath, resolutionsPath].some(value => value !== undefined)) {
     await createTripProject({
       pluginRoot,
       targetDir: stagedRoot,
       recipe,
       starterDir: starterRoot,
       recipeCatalogRoot: recipeCatalogRoot ?? defaultRecipeCatalogRoot,
+      tripPath, setupLocale, copyCatalogPath, resolutionsPath,
     });
     return;
   }
@@ -862,6 +1401,65 @@ async function composeStarter({ stagedRoot, recipe, recipeCatalogRoot }) {
       return !relativePath.split(sep).some((part) => EXCLUDED.has(part));
     },
   });
+}
+
+function dependencySection(manifest, sectionName) {
+  const section = manifest[sectionName];
+  if (section === undefined) return {};
+  if (section === null || typeof section !== "object" || Array.isArray(section)) {
+    throw new Error(`staged manifest ${sectionName} must be an object`);
+  }
+  return section;
+}
+
+function validateForbiddenInternalSections(manifest) {
+  if (manifest === null || typeof manifest !== "object" || Array.isArray(manifest)) {
+    throw new Error("staged manifest must contain a JSON object");
+  }
+  for (const sectionName of ["dependencies", "devDependencies"]) {
+    dependencySection(manifest, sectionName);
+  }
+  for (const sectionName of ["optionalDependencies", "peerDependencies"]) {
+    const section = dependencySection(manifest, sectionName);
+    const internalNames = Object.keys(section).filter((name) =>
+      name.startsWith(INTERNAL_PACKAGE_PREFIX),
+    );
+    if (internalNames.length > 0) {
+      throw new Error(
+        `staged manifest declares ${internalNames.join(", ")} in forbidden dependency section ${sectionName}`,
+      );
+    }
+  }
+}
+
+async function readAndValidateStagedManifest(stagedRoot) {
+  const manifestPath = join(stagedRoot, "package.json");
+  const files = await readProjectFileSet({ projectDir: stagedRoot, paths: ["package.json"] });
+  const manifest = JSON.parse(files.get("package.json").toString("utf8"));
+  validateForbiddenInternalSections(manifest);
+  return { manifest, manifestPath };
+}
+
+// This is the private installed-artifact seam. Public candidate readiness still
+// requires a Trip, and public local validation still requires registry pins.
+async function validateCreatedSource(candidate, request, baseline) {
+  const snapshot = await projectSnapshot(candidate);
+  const json = path => JSON.parse(snapshot.files.get(path)?.toString("utf8") ?? "null");
+  const manifest = parseTripProjectManifest(json("eternal-pose.json"));
+  const input = parseTripProjectInputV2(json("src/trip-content/trip-input.json"));
+  const ledger = parsePlaceResolutionLedger(json("src/trip-content/place-resolutions.json"), input);
+  assertManifestMatchesLedger(manifest, ledger);
+  const locale = input.trip?.locale ?? input.setupLocale;
+  await assertOakWashiPresentationIdentity(join(candidate, "src/presentation"), join(request.recipeCatalogRoot ?? defaultRecipeCatalogRoot, "oak-washi/presentation"), locale, request.copyCatalogPath);
+  const source = new Map([...snapshot.files].filter(([path]) => path !== "package.json" && path !== "package-lock.json" && !path.startsWith(".laugh-tale-")));
+  const pkg = json("package.json");
+  for (const name of PACKAGE_BUILD_ORDER) delete pkg[name === "testing" ? "devDependencies" : "dependencies"][`${INTERNAL_PACKAGE_PREFIX}${name}`];
+  const packageIdentity = JSON.stringify(pkg);
+  if (baseline && packageIdentity !== baseline.packageIdentity) throw new Error("created project package identity changed before publication");
+  if (baseline && (source.size !== baseline.source.size || [...source].some(([path, bytes]) => !baseline.source.get(path)?.equals(bytes)))) throw new Error("created project source identity changed before publication");
+  const after = await projectSnapshot(candidate);
+  if (after.hash !== snapshot.hash) throw new Error("created project snapshot changed during structural validation");
+  return { source, packageIdentity };
 }
 
 async function writeConsumerMarker(stagedRoot, target, invocation, pack, exclusive = true) {
@@ -980,9 +1578,11 @@ async function removeAuthorizedPrevious(previous, targetState) {
 
 async function publishCandidate({
   candidate,
+  finalizeCandidate,
   targetState,
   workRoot,
   markPublished,
+  validateCandidate,
   testOperations,
 }) {
   await ensureRealDirectoryBelowTmp(dirname(targetState.target));
@@ -1007,8 +1607,11 @@ async function publishCandidate({
       candidate,
       previous: currentState.state === "missing" ? undefined : previous,
     });
+    await validateCandidate();
     await assertRealPathComponents(candidate);
     await assertRealPathComponents(currentState.target);
+    await finalizeCandidate();
+    await validateCandidate();
     await rename(candidate, currentState.target);
     markPublished();
   } catch (error) {
@@ -1035,18 +1638,356 @@ async function publishCandidate({
   return { cleanupPending: [], cleanupWarnings: [], previousRemoved: true };
 }
 
-async function rewriteManifest(stagedRoot, tarballs) {
-  const manifestPath = join(stagedRoot, "package.json");
-  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-  const tarballByName = new Map(tarballs.map((tarball) => [packageNameForTarball(tarball), tarball]));
-  for (const dependencyName of Object.keys(manifest.dependencies ?? {})) {
-    if (!dependencyName.startsWith("@laugh-tale-island/")) continue;
-    const tarball = tarballByName.get(dependencyName);
-    if (tarball === undefined) throw new Error(`no packed tarball for ${dependencyName}`);
-    manifest.dependencies[dependencyName] = `file:${tarball}`;
+async function invocationTarballMap(artifacts, packRoot) {
+  if (artifacts.length !== PACKAGE_BUILD_ORDER.length) {
+    throw new Error("staging requires one packed tarball for every Laugh Tale package");
+  }
+  const tarballByName = new Map();
+  for (let index = 0; index < PACKAGE_BUILD_ORDER.length; index += 1) {
+    const expectedName = `@laugh-tale-island/${PACKAGE_BUILD_ORDER[index]}`;
+    const artifact = artifacts[index];
+    if (artifact?.name !== expectedName) {
+      throw new Error(`packed tarball for ${expectedName} is not owned by this invocation`);
+    }
+    await revalidateTarballArtifact(artifact, packRoot);
+    if (tarballByName.has(expectedName)) {
+      throw new Error(`duplicate packed tarball for ${expectedName}`);
+    }
+    if (
+      [...tarballByName.values()].some((candidate) =>
+        sameIdentity(candidate.identity, artifact.identity),
+      )
+    ) {
+      throw new Error("packed tarballs must have four distinct file identities");
+    }
+    tarballByName.set(expectedName, artifact);
+  }
+  return tarballByName;
+}
+
+function tarballStateMatchesArtifact(state, artifact) {
+  return (
+    sameIdentity(state.identity, artifact.identity) &&
+    state.size === artifact.size &&
+    state.digest === artifact.digest &&
+    `sha512-${state.digest}` === artifact.integrity
+  );
+}
+
+async function removeExactFrozenPending(snapshot) {
+  const state = await readTarballState(snapshot.pendingPath, snapshot.artifact.name);
+  if (
+    !sameIdentity(state.identity, snapshot.pendingIdentity) ||
+    state.size !== snapshot.artifact.size ||
+    state.digest !== snapshot.artifact.digest
+  ) {
+    throw new Error(
+      `refusing to remove a replaced frozen tarball for ${snapshot.artifact.name}`,
+    );
+  }
+  await unlink(snapshot.pendingPath);
+}
+
+async function freezeCandidateTarballs({
+  artifacts,
+  candidate,
+  invocation,
+  packMarker,
+  packRoot,
+  target,
+  testOperations,
+}) {
+  const frozen = [];
+  try {
+    for (let index = 0; index < PACKAGE_BUILD_ORDER.length; index += 1) {
+      const artifact = artifacts[index];
+      const expectedName = `@laugh-tale-island/${PACKAGE_BUILD_ORDER[index]}`;
+      if (
+        artifact?.name !== expectedName ||
+        resolve(artifact.path) !== artifact.path ||
+        dirname(artifact.path) !== resolve(packRoot) ||
+        basename(artifact.path) !== artifact.filename
+      ) {
+        throw new Error(`packed tarball for ${expectedName} is not owned by this invocation`);
+      }
+
+      const source = await openTarballState(
+        artifact.path,
+        artifact.name,
+        testOperations,
+        "candidate",
+      );
+      let contents;
+      try {
+        if (!tarballStateMatchesArtifact(source, artifact)) {
+          throw new Error(
+            `packed tarball for ${artifact.name} no longer matches its pack-time identity and integrity`,
+          );
+        }
+        contents = Buffer.from(source.contents);
+      } finally {
+        await source.handle.close();
+      }
+
+      const pendingPath = join(
+        packRoot,
+        `.${artifact.filename}.freeze-${invocation}-${randomUUID()}.pending`,
+      );
+      await writeFile(pendingPath, contents, { flag: "wx", mode: 0o600 });
+      const pendingState = await readTarballState(pendingPath, artifact.name);
+      if (
+        pendingState.size !== artifact.size ||
+        pendingState.digest !== artifact.digest ||
+        `sha512-${pendingState.digest}` !== artifact.integrity ||
+        sameIdentity(pendingState.identity, artifact.identity) ||
+        frozen.some(
+          (candidateSnapshot) =>
+            sameIdentity(candidateSnapshot.pendingIdentity, pendingState.identity) ||
+            sameIdentity(candidateSnapshot.artifact.identity, pendingState.identity),
+        ) ||
+        artifacts.some((candidateArtifact) =>
+          sameIdentity(candidateArtifact.identity, pendingState.identity),
+        )
+      ) {
+        throw new Error(
+          `frozen tarball for ${artifact.name} does not have a distinct pack-time-bound identity and integrity`,
+        );
+      }
+      const snapshot = {
+        artifact: { ...artifact, identity: pendingState.identity },
+        pendingIdentity: pendingState.identity,
+        pendingPath,
+      };
+      frozen.push(snapshot);
+
+      // This adversarial boundary is intentionally after a trusted copy exists. A writer
+      // retaining the old canonical fd can now affect only the inode we are about to retire.
+      await testOperations?.afterCandidateTarballValidated?.({
+        index,
+        packageName: artifact.name,
+        path: artifact.path,
+      });
+    }
+
+    await testOperations?.beforeFinalPackMarkerUpdate?.({
+      artifacts: frozen.map(({ artifact }) => artifact),
+      packRoot,
+    });
+
+    // Revalidate every private inode after all hooks, then replace the four canonical
+    // paths. Old canonical fds cannot reach the fresh inodes. This cooperative CLI
+    // does not isolate these paths from arbitrary same-user writes after validation.
+    for (const snapshot of frozen) {
+      const state = await readTarballState(
+        snapshot.pendingPath,
+        snapshot.artifact.name,
+      );
+      if (
+        !sameIdentity(state.identity, snapshot.pendingIdentity) ||
+        state.size !== snapshot.artifact.size ||
+        state.digest !== snapshot.artifact.digest ||
+        `sha512-${state.digest}` !== snapshot.artifact.integrity
+      ) {
+        throw new Error(
+          `frozen tarball for ${snapshot.artifact.name} changed before publication`,
+        );
+      }
+    }
+
+    for (const snapshot of frozen) {
+      await rename(snapshot.pendingPath, snapshot.artifact.path);
+      snapshot.pendingPath = undefined;
+      const currentStat = await lstat(snapshot.artifact.path);
+      if (
+        currentStat.isSymbolicLink() ||
+        !currentStat.isFile() ||
+        !sameIdentity(identityFor(currentStat), snapshot.pendingIdentity)
+      ) {
+        throw new Error(
+          `frozen tarball for ${snapshot.artifact.name} changed during publication`,
+        );
+      }
+    }
+
+    const finalArtifacts = frozen.map(({ artifact }) => artifact);
+    artifacts.splice(0, artifacts.length, ...finalArtifacts);
+    packMarker.artifacts = finalArtifacts.map(serializableTarballArtifact);
+    await updateAuxiliaryMarker(packRoot, packMarker);
+    const packReference = await capturePackReference(packRoot);
+    const candidateMarker = await writeConsumerMarker(
+      candidate,
+      target,
+      invocation,
+      packReference,
+      false,
+    );
+    return { candidateMarker, packReference };
+  } catch (error) {
+    const cleanupErrors = [];
+    for (const snapshot of frozen) {
+      if (snapshot.pendingPath === undefined) continue;
+      try {
+        await removeExactFrozenPending(snapshot);
+      } catch (cleanupError) {
+        cleanupErrors.push(cleanupError);
+      }
+    }
+    if (cleanupErrors.length > 0) {
+      throw new AggregateError(
+        [error, ...cleanupErrors],
+        "tarball freeze failed and exact pending cleanup failed",
+        { cause: error },
+      );
+    }
+    throw error;
+  }
+}
+
+async function rewriteManifest(stagedRoot, artifacts, packRoot) {
+  const { manifest, manifestPath } = await readAndValidateStagedManifest(stagedRoot);
+  const tarballByName = await invocationTarballMap(artifacts, packRoot);
+  for (const sectionName of ["dependencies", "devDependencies"]) {
+    const dependencies = dependencySection(manifest, sectionName);
+    for (const dependencyName of Object.keys(dependencies)) {
+      if (!dependencyName.startsWith("@laugh-tale-island/")) continue;
+      const artifact = tarballByName.get(dependencyName);
+      if (artifact === undefined) throw new Error(`no packed tarball for ${dependencyName}`);
+      dependencies[dependencyName] = `file:${artifact.path}`;
+    }
   }
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   await rm(join(stagedRoot, "package-lock.json"), { force: true });
+}
+
+function lockfileTarballSpecifier(root, artifactPath) {
+  return `file:${relative(root, artifactPath).split(sep).join("/")}`;
+}
+
+async function normalizeInstalledLockfiles(candidate, target, artifacts, packRoot) {
+  const tarballByName = await invocationTarballMap(artifacts, packRoot);
+  const lockfiles = [];
+  for (const relativePath of ["package-lock.json", "node_modules/.package-lock.json"]) {
+    const path = join(candidate, relativePath);
+    let lockfile;
+    try {
+      lockfile = JSON.parse(await readFile(path, "utf8"));
+    } catch (error) {
+      throw new Error(`cannot read installed ${relativePath}`, { cause: error });
+    }
+    if (
+      lockfile === null ||
+      typeof lockfile !== "object" ||
+      Array.isArray(lockfile) ||
+      lockfile.packages === null ||
+      typeof lockfile.packages !== "object" ||
+      Array.isArray(lockfile.packages)
+    ) {
+      throw new Error(`installed ${relativePath} has invalid package metadata`);
+    }
+    for (const [packageName, artifact] of tarballByName) {
+      const entry = lockfile.packages[`node_modules/${packageName}`];
+      if (
+        entry === null ||
+        typeof entry !== "object" ||
+        Array.isArray(entry) ||
+        entry.resolved !== lockfileTarballSpecifier(candidate, artifact.path)
+      ) {
+        throw new Error(`installed ${relativePath} is not bound to ${packageName}`);
+      }
+    }
+    lockfiles.push({ lockfile, path });
+  }
+
+  for (const { lockfile, path } of lockfiles) {
+    for (const [packageName, artifact] of tarballByName) {
+      lockfile.packages[`node_modules/${packageName}`].resolved =
+        lockfileTarballSpecifier(target, artifact.path);
+    }
+    await writeFile(path, `${JSON.stringify(lockfile, null, 2)}\n`);
+  }
+}
+
+async function validateCandidatePackageBindings(stagedRoot, artifacts, packRoot) {
+  const { manifest } = await readAndValidateStagedManifest(stagedRoot);
+  const tarballByName = await invocationTarballMap(artifacts, packRoot);
+  const expectedPlacement = {
+    "@laugh-tale-island/adapters": "dependencies",
+    "@laugh-tale-island/core": "dependencies",
+    "@laugh-tale-island/react": "dependencies",
+    "@laugh-tale-island/testing": "devDependencies",
+  };
+  for (const [packageName, expectedSection] of Object.entries(expectedPlacement)) {
+    const otherSection = expectedSection === "dependencies" ? "devDependencies" : "dependencies";
+    const expectedDependencies = dependencySection(manifest, expectedSection);
+    const otherDependencies = dependencySection(manifest, otherSection);
+    const artifact = tarballByName.get(packageName);
+    if (
+      artifact === undefined ||
+      expectedDependencies[packageName] !== `file:${artifact.path}` ||
+      Object.hasOwn(otherDependencies, packageName)
+    ) {
+      throw new Error(`staged manifest is not bound to the packed tarball for ${packageName}`);
+    }
+  }
+  for (const sectionName of ["dependencies", "devDependencies"]) {
+    for (const packageName of Object.keys(dependencySection(manifest, sectionName))) {
+      if (
+        packageName.startsWith(INTERNAL_PACKAGE_PREFIX) &&
+        !Object.hasOwn(expectedPlacement, packageName)
+      ) {
+        throw new Error(`staged manifest references an unowned tarball for ${packageName}`);
+      }
+    }
+  }
+}
+
+async function writeCandidateAttestation(candidate, artifacts, testOperations) {
+  const path = join(candidate, candidateAttestationName);
+  const packages = [];
+  for (let index = 0; index < PACKAGE_BUILD_ORDER.length; index += 1) {
+    const artifact = artifacts[index];
+    const expectedName = `@laugh-tale-island/${PACKAGE_BUILD_ORDER[index]}`;
+    if (artifact?.name !== expectedName || artifact.version !== "2.0.0") {
+      throw new Error(`invalid attested package ${expectedName}`);
+    }
+    const opened = await openRealFileSnapshot(artifact.path, `attested archive for ${expectedName}`);
+    if (!opened) throw new Error(`missing attested archive for ${expectedName}`);
+    try {
+      const bytes = opened.contents;
+      if (bytes.length !== artifact.size || `sha512-${createHash("sha512").update(bytes).digest("base64")}` !== artifact.integrity) {
+        throw new Error(`attested archive for ${expectedName} changed`);
+      }
+      packages.push({
+        name: expectedName,
+        version: "2.0.0",
+        archive: artifact.path,
+        bytes: bytes.length,
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+        integrity: artifact.integrity,
+      });
+    } finally {
+      await opened.handle.close();
+    }
+  }
+  const contents = `${JSON.stringify({ schemaVersion: 1, packages }, null, 2)}\n`;
+  const handle = await open(path, "wx", 0o600);
+  try {
+    await handle.writeFile(contents);
+    await testOperations?.afterAttestationWrite?.({ candidate, path });
+    await testOperations?.beforeAttestationFsync?.({ candidate, path });
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  const saved = await openRealFileSnapshot(path, "candidate attestation");
+  if (!saved) throw new Error("candidate attestation missing after write");
+  try {
+    if (saved.contents.toString("utf8") !== contents) throw new Error("candidate attestation changed after write");
+  } finally {
+    await saved.handle.close();
+  }
+  await testOperations?.afterAttestationValidated?.({ candidate, path });
+  return path;
 }
 
 function targetStateFromWorkMarker(marker) {
@@ -1344,9 +2285,14 @@ export async function reclaimOrphanedStagingArtifacts(testOperations = {}) {
 }
 
 export async function stageStarterConsumer(
-  { install = true, outDir, recipe, recipeCatalogRoot } = {},
+  { install = true, outDir, recipe, recipeCatalogRoot, tripPath, setupLocale, copyCatalogPath, resolutionsPath } = {},
   testOperations = {},
 ) {
+  const createRequest = { recipe, recipeCatalogRoot, tripPath, setupLocale, copyCatalogPath, resolutionsPath };
+  const usesCreate = [recipe, tripPath, setupLocale, copyCatalogPath, resolutionsPath].some(value => value !== undefined);
+  if (tripPath !== undefined && setupLocale !== undefined) throw new Error("trip and setup-locale are mutually exclusive");
+  if (resolutionsPath !== undefined && tripPath === undefined) throw new Error("resolutions require a trip");
+  for (const path of [outDir, tripPath, copyCatalogPath, resolutionsPath]) if (path !== undefined && !isAbsolute(path)) throw new Error("staging paths must be absolute");
   const requestedTarget = outDir === undefined ? defaultStagedRoot : resolve(outDir);
   const invocation = randomUUID();
   const workRoot = join(repositoryTmpRoot, `.stage-starter-work-${invocation}`);
@@ -1388,6 +2334,7 @@ export async function stageStarterConsumer(
           pid: process.pid,
           createdAt: Date.now(),
           files: [],
+          artifacts: [],
         };
         packReference = packReferenceFor(packMarker);
         await createAuxiliaryDirectory(workRoot, workMarker);
@@ -1395,25 +2342,36 @@ export async function stageStarterConsumer(
       },
       { phase: "work-initialization", releaseContext: { workRoot } },
     );
-    await composeStarter({ stagedRoot: candidate, recipe, recipeCatalogRoot });
+    await composeStarter({ stagedRoot: candidate, ...createRequest });
     candidateMarker = await writeConsumerMarker(
       candidate,
       targetState.target,
       invocation,
       packReference,
     );
+    await testOperations?.afterStarterComposed?.({ candidate });
+    try { await recoverProjectFileTransaction(candidate); }
+    catch (error) { error.stagingPreserveWork = true; throw error; }
+    const sourceIdentity = usesCreate ? await validateCreatedSource(candidate, createRequest) : undefined;
+    await readAndValidateStagedManifest(candidate);
 
     const packaged = await withPackageLock(testOperations, async () => {
       await ensureRealDirectoryBelowTmp(packBaseRoot);
       await createAuxiliaryDirectory(packRoot, packMarker);
       packCreated = true;
-      const tarballs = await packWorkspacePackages(packRoot, testOperations, async (packed) => {
-        packMarker.files = packed.map((tarball) => basename(tarball));
-        await updateAuxiliaryMarker(packRoot, packMarker);
-      });
-      return { packReference: await capturePackReference(packRoot), tarballs };
+      const artifacts = await packWorkspacePackages(
+        packRoot,
+        testOperations,
+        async (packed, capturedArtifacts) => {
+          packMarker.files = packed.map((tarball) => basename(tarball));
+          packMarker.artifacts = capturedArtifacts.map(serializableTarballArtifact);
+          await updateAuxiliaryMarker(packRoot, packMarker);
+        },
+      );
+      return { artifacts, packReference: await capturePackReference(packRoot) };
     });
-    const { tarballs } = packaged;
+    const { artifacts } = packaged;
+    const tarballs = artifacts.map((artifact) => artifact.path);
     packReference = packaged.packReference;
     candidateMarker = await writeConsumerMarker(
       candidate,
@@ -1423,9 +2381,10 @@ export async function stageStarterConsumer(
       false,
     );
 
-    await rewriteManifest(candidate, tarballs);
+    await rewriteManifest(candidate, artifacts, packRoot);
     if (install) {
       run("npm", ["install", "--no-audit", "--no-fund"], candidate, testOperations);
+      await normalizeInstalledLockfiles(candidate, targetState.target, artifacts, packRoot);
     }
     return await withArtifactLock(
       testOperations,
@@ -1435,6 +2394,24 @@ export async function stageStarterConsumer(
           targetState,
           workRoot,
           testOperations,
+          validateCandidate: async () => {
+            if (usesCreate) await validateCreatedSource(candidate, createRequest, sourceIdentity);
+            await validateCandidatePackageBindings(candidate, artifacts, packRoot);
+          },
+          finalizeCandidate: async () => {
+            const finalized = await freezeCandidateTarballs({
+              artifacts,
+              candidate,
+              invocation,
+              packMarker,
+              packRoot,
+              target: targetState.target,
+              testOperations,
+            });
+            packReference = finalized.packReference;
+            candidateMarker = finalized.candidateMarker;
+            await writeCandidateAttestation(candidate, artifacts, testOperations);
+          },
           markPublished: () => {
             published = true;
           },
@@ -1489,6 +2466,7 @@ export async function stageStarterConsumer(
         return {
           stagedRoot: targetState.target,
           tarballs,
+          attestationPath: join(targetState.target, candidateAttestationName),
           ...(cleanupPending.length === 0 ? {} : { cleanupPending }),
           ...(cleanupWarnings.length === 0 ? {} : { cleanupWarnings }),
         };
@@ -1510,6 +2488,9 @@ export async function stageStarterConsumer(
       },
     );
   } catch (error) {
+    // A live file-set writer owns entries inside the candidate. Preserve the
+    // complete work tree for its recovery rather than racing recursive cleanup.
+    if (error?.code === "transaction-in-progress") error.stagingPreserveWork = true;
     const cleanupErrors = [];
     if (!published && (packCreated || workCreated)) {
       try {
@@ -1522,13 +2503,28 @@ export async function stageStarterConsumer(
               await updateAuxiliaryMarker(workRoot, workMarker);
               return;
             }
+            const ownedCleanupErrors = [];
             if (packCreated) {
-              const cleanupReference = await capturePackReference(packRoot);
-              await removeOwnedPackTree(packRoot, cleanupReference, packMarker.target);
+              try {
+                const cleanupReference = await capturePackReference(packRoot);
+                await removeOwnedPackTree(packRoot, cleanupReference, packMarker.target);
+              } catch (cleanupError) {
+                ownedCleanupErrors.push(cleanupError);
+              }
             }
             if (workCreated) {
-              await removeOwnedWorkTree(workRoot, workMarker, candidateMarker);
-              workCreated = false;
+              try {
+                await removeOwnedWorkTree(workRoot, workMarker, candidateMarker);
+                workCreated = false;
+              } catch (cleanupError) {
+                ownedCleanupErrors.push(cleanupError);
+              }
+            }
+            if (ownedCleanupErrors.length > 0) {
+              throw new AggregateError(
+                ownedCleanupErrors,
+                "one or more owned staging trees require recovery",
+              );
             }
           },
           { phase: "failure-cleanup", releaseContext: { workRoot } },
@@ -1553,6 +2549,21 @@ function isMainModule() {
 }
 
 if (isMainModule()) {
-  const { stagedRoot: staged } = await stageStarterConsumer();
-  console.log(`staged-starter:${staged}`);
+  const usage = "node scripts/stage-starter-consumer.mjs [--out /absolute/staged-project] [--recipe oak-washi] [--trip /absolute/trip-input.json | --setup-locale zh-Hant-TW] [--copy-catalog /absolute/catalog.json] [--resolutions /absolute/place-resolutions.json] [--no-install]";
+  const args = process.argv.slice(2), options = {}, seen = new Set();
+  const flags = new Map([["--out", "outDir"], ["--recipe", "recipe"], ["--trip", "tripPath"], ["--setup-locale", "setupLocale"], ["--copy-catalog", "copyCatalogPath"], ["--resolutions", "resolutionsPath"]]);
+  try {
+    for (let i = 0; i < args.length; i++) {
+      const flag = args[i];
+      if (seen.has(flag)) throw new Error(usage);
+      seen.add(flag);
+      if (flag === "--no-install") { options.install = false; continue; }
+      const key = flags.get(flag), value = args[++i];
+      if (!key || !value || value.startsWith("--")) throw new Error(usage);
+      options[key] = value;
+    }
+    if (options.recipe !== undefined && options.recipe !== "oak-washi" || options.tripPath && options.setupLocale || options.resolutionsPath && !options.tripPath || [options.outDir, options.tripPath, options.copyCatalogPath, options.resolutionsPath].some(path => path !== undefined && !isAbsolute(path))) throw new Error(usage);
+    const { stagedRoot: staged } = await stageStarterConsumer({ ...options, recipe: options.recipe ?? "oak-washi" });
+    console.log(`staged-starter:${staged}`);
+  } catch (error) { console.error(error.message); process.exitCode = 1; }
 }

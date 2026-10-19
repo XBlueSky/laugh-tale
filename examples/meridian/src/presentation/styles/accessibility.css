@@ -1,0 +1,81 @@
+[data-touch-target="44"],
+button,
+a[href],
+select {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+:where(button, a[href], input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid var(--oak-focus);
+  outline-offset: 3px;
+}
+
+/* A keyboard-opened comparison receives focus on the dialog before the first
+   choice. Mark its entrance with one editorial rule, not a frame around every
+   already-selectable option; the option/button focus rings remain unchanged. */
+.oak-candidate-dialog:focus-visible {
+  outline: none;
+  border-top: 3px solid var(--oak-focus);
+  padding-top: 10px;
+}
+
+.oak-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .oak-candidate-dialog:focus-visible { border-top-color: Highlight; }
+  .oak-marker-drop,
+  .oak-marker-badge {
+    background: Canvas !important;
+    color: CanvasText;
+    border-color: CanvasText;
+  }
+
+  .oak-location-halo { background: Canvas; border: 1px solid GrayText; }
+  .oak-location-core { background: Highlight; border-color: Canvas; outline-color: CanvasText; forced-color-adjust: none; }
+
+  .oak-control,
+  .oak-native-select,
+  .oak-native-select select,
+  .oak-candidate-option,
+  [data-selected="true"],
+  [data-current="true"],
+  [data-completed="true"],
+  [data-skipped="true"],
+  [data-unresolved="true"] {
+    color: CanvasText;
+    border-color: CanvasText;
+    background: Canvas;
+    forced-color-adjust: auto;
+  }
+
+  [data-selected="true"],
+  [aria-pressed="true"] {
+    outline: 3px double Highlight;
+    outline-offset: -4px;
+  }
+}

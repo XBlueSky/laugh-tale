@@ -1,2 +1,5 @@
 export type { MapAdapter, MapEvents, NavigationAdapter, PlaceAdapter, RouteAdapter, } from "./adapters.js";
+export type { CameraIntent, CameraIntentBase, CameraSnapshot, CameraTransition, EdgeInsets, FitCameraIntent, FocusCameraIntent, MapViewportMetrics, OcclusionRect, RecenterUserCameraIntent, UsableRegion, } from "../map-camera.js";
+export type { MapAdapterV2, NavigationAdapterV2, NavigationRequestV2, PlaceAdapterV2, RouteAdapterV2, } from "./v2-adapters.js";
+export type { MapBasemapPalette, MapEventsV2, MapMountConfig, MapPresentationV2, MapRoutePaint, MapRoutePresentationV2, MapRouteStroke, MapRouteStyle, MapRouteSymbol, MapSolidRouteStyle, MapSymbolRouteStyle, MapVisualProfile, MarkerContentFactory, MarkerContentHandle, MarkerDescriptor, MarkerSemanticState, UserLocationContentFactory, UserLocationContentHandle, UserLocationDescriptor, } from "./v2-map.js";
 export { createLocalStorageProgressStore, type LocalStorageProgressStoreOptions, type ProgressReadResult, type ProgressStore, type ProgressStoreEvents, } from "./progress-store.js";

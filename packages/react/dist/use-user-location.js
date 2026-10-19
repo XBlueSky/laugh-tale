@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { USER_LOCATION_OWNER_ID } from "@laugh-tale-island/core";
+import { useCallback, useEffect, useInsertionEffect, useRef, useState } from "react";
 function browserGeolocation() {
     return typeof navigator === "undefined" ? undefined : navigator.geolocation;
 }
@@ -15,8 +14,8 @@ function coordinatesFrom(position) {
         ? { lat, lng }
         : undefined;
 }
-export function useUserLocation(adapter, geolocation = browserGeolocation()) {
-    const adapterRef = useRef(adapter);
+export function useUserLocation(onRecenter, geolocation = browserGeolocation()) {
+    const recenterRef = useRef(onRecenter);
     const mountedRef = useRef(false);
     const generationRef = useRef(0);
     const watchRef = useRef(null);
@@ -24,9 +23,7 @@ export function useUserLocation(adapter, geolocation = browserGeolocation()) {
     const pendingFirstFocusRef = useRef(null);
     const [status, setStatus] = useState("idle");
     const [location, setLocation] = useState(null);
-    useEffect(() => {
-        adapterRef.current = adapter;
-    }, [adapter]);
+    useInsertionEffect(() => { recenterRef.current = onRecenter; }, [onRecenter]);
     const clearActiveWatch = useCallback(() => {
         const active = watchRef.current;
         if (active !== null) {
@@ -44,23 +41,19 @@ export function useUserLocation(adapter, geolocation = browserGeolocation()) {
         };
     }, [clearActiveWatch]);
     useEffect(() => {
-        if (adapter === null || location === null || !mountedRef.current) {
+        if (location === null || !mountedRef.current) {
             return;
         }
-        adapter.setUserLocation(location);
         if (pendingFirstFocusRef.current === generationRef.current) {
-            adapter.focus({ kind: "place", id: USER_LOCATION_OWNER_ID });
             pendingFirstFocusRef.current = null;
+            recenterRef.current();
         }
-    }, [adapter, location]);
+    }, [location]);
     const start = useCallback(() => {
         clearActiveWatch();
         const generation = generationRef.current + 1;
         generationRef.current = generation;
         pendingFirstFocusRef.current = generation;
-        if (latestLocationRef.current !== null) {
-            adapterRef.current?.setUserLocation(null);
-        }
         latestLocationRef.current = null;
         setLocation(null);
         if (geolocation === undefined) {
@@ -82,7 +75,6 @@ export function useUserLocation(adapter, geolocation = browserGeolocation()) {
             pendingFirstFocusRef.current = null;
             latestLocationRef.current = null;
             setLocation(null);
-            adapterRef.current?.setUserLocation(null);
             setStatus(nextStatus);
         };
         try {
@@ -114,10 +106,7 @@ export function useUserLocation(adapter, geolocation = browserGeolocation()) {
     }, [clearActiveWatch, geolocation]);
     const recenter = useCallback(() => {
         if (latestLocationRef.current !== null) {
-            adapterRef.current?.focus({
-                kind: "place",
-                id: USER_LOCATION_OWNER_ID,
-            });
+            recenterRef.current();
         }
     }, []);
     const stop = useCallback(() => {
@@ -126,7 +115,6 @@ export function useUserLocation(adapter, geolocation = browserGeolocation()) {
         pendingFirstFocusRef.current = null;
         latestLocationRef.current = null;
         setLocation(null);
-        adapterRef.current?.setUserLocation(null);
         setStatus("idle");
     }, [clearActiveWatch]);
     return {
