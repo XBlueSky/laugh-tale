@@ -23,7 +23,7 @@
     "@laugh-tale-island/core": "1.0.0",
     "@laugh-tale-island/react": "1.0.0",
     "lucide-react": "1.52.0",
-    "motion": "13.1.1",
+    "motion": "14.4.0",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
