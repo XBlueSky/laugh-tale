@@ -57,7 +57,10 @@ jobs:
       - name: Release
         run: npx semantic-release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # A fine-grained PAT (Contents/Issues/Pull requests: write) from a repo admin:
+          # main's branch protection requires PRs, and the default GITHUB_TOKEN can't
+          # bypass it, so @semantic-release/git's push of the version-bump commit fails.
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
           # setup-node's registry-url writes a .npmrc with `_authToken=${NODE_AUTH_TOKEN}`
           # and points NPM_CONFIG_USERCONFIG at it; without NODE_AUTH_TOKEN that placeholder
           # resolves to a dummy value and npm publish 401s. NPM_TOKEN is what
