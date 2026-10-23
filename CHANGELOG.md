@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/XBlueSky/laugh-tale/compare/v1.0.0...v1.1.0) (2026-10-23)
+
+
+### Features
+
+* **themes:** add distinctive starter worlds ([#13](https://github.com/XBlueSky/laugh-tale/issues/13)) ([58de156](https://github.com/XBlueSky/laugh-tale/commit/58de15618b79d5e64a6b057ae7bff23c9ae5ef2f))
+
 # 1.0.0 (2026-08-27)
 
 
