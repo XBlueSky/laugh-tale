@@ -4,6 +4,10 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    # typescript-eslint peers typescript <6.1; revisit when it supports TS 7.
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     groups:
       dev-dependencies:
         applies-to: version-updates
@@ -18,6 +22,17 @@ updates:
     # train and the staging script, not by Dependabot.
     ignore:
       - dependency-name: "@laugh-tale-island/*"
+      # Majors blocked upstream: typescript-eslint peers typescript <6.1,
+      # eslint-plugin-react / eslint-plugin-jsx-a11y don't accept eslint 10,
+      # and @testing-library/jest-dom's types don't match vitest 5.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@eslint/js"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "vitest"
+        update-types: ["version-update:semver-major"]
     groups:
       starter-dependencies:
         applies-to: version-updates
