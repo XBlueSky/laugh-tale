@@ -129,7 +129,7 @@ describe.sequential("Laugh Tale marketplace presentation", () => {
         skills?: Array<{ name?: string; trigger?: string }>;
       }>;
     };
-    expect(manifest.schemaVersion).toBe("1.1");
+    expect(manifest.schemaVersion).toBe("1.2");
     expect(manifest.marketplace?.name).toBe("laugh-tale");
     expect(manifest.plugins).toHaveLength(1);
     expect(manifest.plugins?.[0]).toMatchObject({
