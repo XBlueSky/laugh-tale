@@ -37,6 +37,8 @@ beforeEach(() => {
   boundary.configure.mockReset();
   boundary.freeModeFixture = false;
   boundary.freeConfigure.mockReset().mockImplementation(async () => ({ createMap: (await import("../../tests/e2e/fixtures/e2e-trip")).createE2EMapAdapter }));
+  // Progress persists through Web Storage where the runtime provides it (Node 22 jsdom).
+  globalThis.localStorage?.clear();
   document.body.innerHTML = '<div id="root"></div>';
   vi.stubEnv("DEV", true);
   vi.stubEnv("VITE_E2E_FAKE_PROVIDER", "false");
