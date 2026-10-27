@@ -72,6 +72,9 @@ jobs:
           npm run test:starter:staged
           npm --prefix tmp/staged-starter exec playwright install --with-deps chromium
           npm run test:e2e:staged
+          # The Oak harness uses the root Playwright pin (its visual baselines were
+          # captured with that Chromium), which differs from the starter's.
+          npx playwright install --with-deps chromium
           npm run test:oak-washi:browser
 
   # Generate a synthetic example against locally packed, unpublished packages.
