@@ -78,7 +78,7 @@ describe("presentation contract harness", () => {
 
     expect(result.status, result.stdout + result.stderr).toBe(0);
     expect(result.stdout).not.toContain("presentation-contract.spec.ts");
-    expect(result.stdout).toContain("Total: 42 tests in 1 file");
+    expect(result.stdout).toContain("Total: 51 tests in 1 file");
   });
 
   test("collects the shared contract at every viewport for an identified internal recipe", () => {

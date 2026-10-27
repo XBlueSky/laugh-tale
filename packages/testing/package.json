@@ -1,6 +1,6 @@
 {
   "name": "@laugh-tale-island/testing",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "description": "Deterministic test doubles, fixtures, setups, and provider conformance contracts for Laugh Tale v2.",
   "license": "MIT",
   "author": "XBlueSky",
@@ -52,15 +52,15 @@
     "vitest": ">=4.1.0 <5"
   },
   "dependencies": {
-    "@laugh-tale-island/adapters": "1.1.0",
-    "@laugh-tale-island/core": "1.1.0",
-    "@laugh-tale-island/react": "1.1.0"
+    "@laugh-tale-island/adapters": "2.0.0",
+    "@laugh-tale-island/core": "2.0.0",
+    "@laugh-tale-island/react": "2.0.0"
   },
   "devDependencies": {
-    "@testing-library/user-event": "14.6.6",
+    "@testing-library/user-event": "14.6.8",
     "jsdom": "30.0.1",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "vitest": "4.1.11"
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "vitest": "4.1.12"
   }
 }

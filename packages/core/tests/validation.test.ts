@@ -19,7 +19,7 @@ describe("validateTrip", () => {
     Object.assign(shopping.payload.items[0], { note: 42 });
     expect(validateTripSource(trip).errors).toEqual(expect.arrayContaining([
       expect.objectContaining({ path: "days[0].routeLabel" }),
-      expect.objectContaining({ path: expect.stringMatching(/payload\.items\[0\]\.note$/) }),
+      expect.objectContaining({ path: expect.stringMatching(/payload\.items\[0\]\.note$/) as string }),
     ]));
   });
   it.each(["unknown", "flight", "rail", "bus"] as const)("accepts typed %s transfer without adding terminal facts", mode => {

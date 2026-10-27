@@ -863,7 +863,7 @@ it("does not advertise inert preview controls for a read-only browse group", asy
   option.tabIndex = -1;
   document.body.append(option);
   try {
-    act(() => hook.result.current.bindings.focus.dialogRef("b")(option));
+    act(() => { hook.result.current.bindings.focus.dialogRef("b")(option); });
     act(() => adapter.mount.mock.calls[0][1].events.onMarkerSelect("b"));
     await waitFor(() => expect(document.activeElement).toBe(option));
     expect(hook.result.current.model.candidates[0]).not.toHaveProperty("draftOptionId");

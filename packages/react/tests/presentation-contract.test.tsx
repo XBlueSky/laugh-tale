@@ -191,6 +191,7 @@ type ExpectedHomeReservationModel = {
   readonly title: string;
   readonly ownerId: string;
   readonly booking: BookingFactModel;
+  readonly destination?: { readonly dayId: string; readonly nodeId: string };
 };
 
 type ExpectedHomeCapabilities = {
@@ -619,6 +620,7 @@ type ExpectedTripDiagnosticEvent =
 
 type ExpectedTripActions = {
   openExperience(dayId?: string): void;
+  openReservation(reservationId: string): void;
   openHome(): void;
   selectDay(dayId: string): void;
   selectNode(nodeId: string): void;

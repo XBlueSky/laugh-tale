@@ -776,15 +776,15 @@ describe("Oak & Washi canonical foundation", () => {
     expect(packageJson).toMatchObject({
       devDependencies: {
         "@testing-library/jest-dom": "7.0.1",
-        "@testing-library/react": "16.3.2",
-        "@testing-library/user-event": "14.6.6",
-        "@types/react": "19.2.18",
-        "@types/react-dom": "19.2.5",
+        "@testing-library/react": "16.3.3",
+        "@testing-library/user-event": "14.6.8",
+        "@types/react": "19.3.0",
+        "@types/react-dom": "19.3.0",
         jsdom: "30.0.1",
-        "lucide-react": "1.34.0",
-        motion: "13.1.1",
-        react: "19.2.8",
-        "react-dom": "19.2.8",
+        "lucide-react": "1.61.0",
+        motion: "14.6.0",
+        react: "19.3.1",
+        "react-dom": "19.3.1",
       },
     });
 

@@ -1,6 +1,6 @@
 # Public V2 source preview
 
-This is a development snapshot, not a package release or a production-readiness
+This snapshot was published as the 2.0.0 packages; it is not a production-readiness
 certificate. It starts from public `main` and contains no private development
 ancestry. The generated Meridian example uses fictional test content. Private
 trip inputs, operational reports, deployment records and live environment files
@@ -29,21 +29,26 @@ Fresh local checks on 2026-10-19:
   The neutral input uses the generator's canonical JSON bytes so strict artifact
   verification and injected-failure/crash tests exercise the intended boundary.
 
-## Known repository-wide blockers (2026-10-19)
+## Repository-wide gates (2026-10-27, integrated with `main`)
 
-- Root `npm run type-check` reports 67 errors in the internal Field Atlas
-  presentation/tests, which still target the earlier presentation contract.
-- Bare `npm test` stalled during root test module collection and was
-  interrupted after five minutes without a completed test summary on both Node
-  26 and CI-matching Node 22. This is not
-  a green full-suite result; separately scoped checks do not replace that gate.
-- Root `npm run lint` reports 721 errors across Field Atlas and existing test
-  sources, including the Oak style-contract suite. These sources were not
-  migrated as part of this privacy-safe snapshot.
-- Root `npm audit` reports 18 vulnerable package records: 1 critical, 15 high and 2 moderate.
-  All 18 implicated package records are unchanged from public `main`; they
-  principally affect the development/release toolchain. This does not make the
-  findings safe to ignore. Dependency remediation is required before release.
+The 2026-10-19 blockers were resolved while landing V2 on `main`:
+
+- Root `npm run type-check` and `npm run lint` pass. Field Atlas still targets
+  the removed v1 presentation contract, so `plugins/eternal-pose/recipes-v2/field-atlas`
+  is excluded from both root gates until it is migrated; Create already rejects
+  it as a retired recipe.
+- The v1-contract product worlds added on `main` (Live Journey, Pocket Instrument,
+  Reset Arcade) and their tests were removed rather than shipped broken. Their
+  source remains in history (commit `58de156`) and on
+  `codex/headless-theme-implementation`.
+- Bare `npm test` completes; it does not stall. The Create/Upgrade/Verify suites are
+  slow (4-15 s per case on macOS), so the unit project uses a 30 s test timeout.
+- `jsdom` is pinned to 30.0.1 in the root workspace: 30.1.3 computes
+  `border-width` overrides of a `var()` border shorthand as `0px`, which breaks
+  the Oak map-marker state assertions.
+- `npm audit`: production dependencies report 0 vulnerabilities. Two
+  development findings (`undici`, `ip-address`) remain inside the npm CLI bundled
+  by `@semantic-release/npm`, already at the latest npm 11 release.
 - The historical `npm run test:starter` convenience script assumes `tmp/`
   exists. Use the documented `npm run stage:starter -- --setup-locale en` flow
   first on a fresh clone.

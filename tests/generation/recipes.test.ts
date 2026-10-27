@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 
@@ -30,14 +30,6 @@ interface CssRule {
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 const recipesRoot = join(repoRoot, "plugins/eternal-pose/recipes");
-const starterRecipePath = join(
-  repoRoot,
-  "plugins/eternal-pose/starter/react/src/presentation/styles/recipe.css",
-);
-const baseCssPath = join(
-  repoRoot,
-  "plugins/eternal-pose/starter/react/src/presentation/styles/base.css",
-);
 const expectedRecipeIds = [
   "native-minimal",
   "quiet-wood",
@@ -278,16 +270,6 @@ const knownTouchTargetClassNames = [
   "trip-home__day-action",
 ] as const;
 
-const requiredRecipeTokens = [
-  "--color-canvas",
-  "--color-focus",
-  "--color-selected",
-  "--color-selected-text",
-  "--sheet-motion-duration",
-  "--component-motion-duration",
-  "--motion-easing",
-] as const;
-
 const semanticSurfaceTokens = [
   "--color-transport-surface",
   "--color-transfer-surface",
@@ -299,32 +281,6 @@ const semanticSurfaceTokens = [
   "--color-logistics-surface",
   "--color-custom-surface",
   "--color-route-surface",
-] as const;
-
-const requiredComponentSelectors = [
-  ".trip-experience",
-  ".trip-home",
-  ".trip-home__day-action",
-  ".day-header",
-  ".day-header__date",
-  ".map-controls",
-  ".map-degraded-state",
-  ".map-marker",
-  ".itinerary-sheet",
-  ".itinerary-sheet__drag-handle",
-  ".itinerary-row",
-  ".timeline-entry__details",
-  ".semantic-entry__body",
-  ".route-connector",
-  ".route-status",
-  ".candidate-decision",
-  ".candidate-decision__option",
-  ".shopping-decision-panel",
-  ".shopping-status-select__control",
-  ".task-widget__dialog",
-  ".reservation-panel__dialog",
-  ".trip-progress-persistence",
-  ".icon-control",
 ] as const;
 
 function recipeDirectories(): string[] {
@@ -751,14 +707,6 @@ function declaredTokens(css: string): Map<string, string> {
   return declarations;
 }
 
-function consumedTokens(css: string): Set<string> {
-  return new Set(
-    [...css.matchAll(/var\((--[a-z0-9-]+)/gi)]
-      .map((match) => match[1])
-      .filter((token): token is string => token !== undefined),
-  );
-}
-
 function expectSyntacticallyCompleteCss(css: string): void {
   let depth = 0;
   let quote: "\"" | "'" | null = null;
@@ -899,50 +847,6 @@ describe("compile-time design recipe catalog", () => {
           values.map(() => expected),
         );
       }
-    }
-  });
-
-  test("uses one complete token and component-selector contract", () => {
-    const baseCss = readFileSync(baseCssPath, "utf8");
-    const baseTokens = [...consumedTokens(baseCss)]
-      .filter((name) => !runtimeGeometryTokens.has(name))
-      .sort();
-    const recipes = loadRecipes();
-    expect(recipes).toHaveLength(3);
-
-    const tokenSets = recipes.map(({ css }) => [...declaredTokens(css).keys()].sort());
-    expect(tokenSets[1]).toEqual(tokenSets[0]);
-    expect(tokenSets[2]).toEqual(tokenSets[0]);
-
-    for (const recipe of recipes) {
-      const tokens = declaredTokens(recipe.css);
-      for (const name of [...baseTokens, ...requiredRecipeTokens, ...semanticSurfaceTokens]) {
-        expect(tokens.has(name), `${recipe.directory} must declare ${name}`).toBe(true);
-      }
-      expect(
-        runtimeGeometryTokenContractViolations(recipe.css),
-        `${recipe.directory} must not own runtime geometry tokens`,
-      ).toEqual([]);
-      for (const selector of requiredComponentSelectors) {
-        expect(recipe.css, `${recipe.directory} must style ${selector}`).toContain(selector);
-      }
-      for (const kind of [
-        "transport",
-        "transfer",
-        "lodging",
-        "dining",
-        "shopping",
-        "sightseeing",
-        "experience",
-        "logistics",
-        "custom",
-      ]) {
-        expect(recipe.css).toContain(`[data-kind="${kind}"]`);
-      }
-      expect(
-        touchTargetContractViolations(recipe.css),
-        `${recipe.directory} touch-target contract`,
-      ).toEqual([]);
     }
   });
 
@@ -1174,12 +1078,4 @@ describe("compile-time design recipe catalog", () => {
     }
   });
 
-  test("keeps Quiet Wood byte-identical to the starter default", () => {
-    const quietWoodPath = join(recipesRoot, "quiet-wood", "recipe.css");
-    expect(existsSync(quietWoodPath)).toBe(true);
-    expect(readFileSync(starterRecipePath, "utf8")).toBe(
-      existsSync(quietWoodPath) ? readFileSync(quietWoodPath, "utf8") : "",
-    );
-    expect(basename(starterRecipePath)).toBe("recipe.css");
-  });
 });

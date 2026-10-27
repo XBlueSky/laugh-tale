@@ -361,7 +361,7 @@ test("selected task lead and metadata stay compact without clipping on narrow ph
       const lead = element.querySelector(".oak-task-lead")!.getBoundingClientRect();
       const meta = element.querySelector(".oak-task-meta")!.getBoundingClientRect();
       const sheet = element.closest(".oak-sheet-scroll")!.getBoundingClientRect();
-      return { lead: lead.toJSON(), meta: meta.toJSON(), sheet: sheet.toJSON(), viewport: innerWidth };
+      return { lead: lead.toJSON() as DOMRectReadOnly, meta: meta.toJSON() as DOMRectReadOnly, sheet: sheet.toJSON() as DOMRectReadOnly, viewport: innerWidth };
     });
     expect(geometry.lead.right).toBeLessThanOrEqual(geometry.sheet.right + 1);
     expect(geometry.meta.right).toBeLessThanOrEqual(geometry.sheet.right + 1);
@@ -464,7 +464,7 @@ test("closeout simultaneous map and global notices retain compact chrome and tru
           await page.keyboard.press("Home"); await settle(page);
           for (let step = 0; step < 60 && !await lineFits(); step++) await page.keyboard.press("ArrowDown");
         }
-        expect(await lineFits(), `status line ${line + 1} is completely reachable at ${width} × ${height}, ${scale * 100}% in ${notice === global ? "global" : "map"}; ${JSON.stringify(await status.evaluate((element, line) => { const p = element.closest(".oak-upper-clearance, .oak-map-status")!.getBoundingClientRect(), r = element.getBoundingClientRect(), range = document.createRange(); range.selectNodeContents(element); return { host: p.toJSON(), status: r.toJSON(), line: range.getClientRects()[line]?.toJSON(), scrollTop: element.closest<HTMLElement>(".oak-upper-clearance, .oak-map-status")!.scrollTop }; }, line))}`).toBe(true);
+        expect(await lineFits(), `status line ${line + 1} is completely reachable at ${width} × ${height}, ${scale * 100}% in ${notice === global ? "global" : "map"}; ${JSON.stringify(await status.evaluate((element, line) => { const p = element.closest(".oak-upper-clearance, .oak-map-status")!.getBoundingClientRect(), r = element.getBoundingClientRect(), range = document.createRange(); range.selectNodeContents(element); return { host: p.toJSON() as DOMRectReadOnly, status: r.toJSON() as DOMRectReadOnly, line: range.getClientRects()[line]?.toJSON() as DOMRectReadOnly | undefined, scrollTop: element.closest<HTMLElement>(".oak-upper-clearance, .oak-map-status")!.scrollTop }; }, line))}`).toBe(true);
       }
       keyboardEvidence.push({ host: notice === global ? "upper" : "map-status", traversal, lineCount });
       if (short) await closeoutEvidence(page, `notice-native-tab-${notice === global ? "upper" : "map"}`, keyboardEvidence);
@@ -474,7 +474,7 @@ test("closeout simultaneous map and global notices retain compact chrome and tru
     const r = await retry.boundingBox(); expect(r!.width).toBeGreaterThanOrEqual(44); expect(r!.height).toBeGreaterThanOrEqual(44);
     if (height === 568) await closeoutEvidence(page, "notice-native-tab-retry", await retry.evaluate(element => { const r = element.getBoundingClientRect(), host = element.closest<HTMLElement>(".oak-map-status")!, p = host.getBoundingClientRect(); return { retry: { top: r.top, bottom: r.bottom, height: r.height, left: r.left, right: r.right }, host: { top: p.top, bottom: p.bottom, height: p.height, clientHeight: host.clientHeight, clientTop: host.clientTop, scrollTop: host.scrollTop, scrollHeight: host.scrollHeight } }; }));
     await expect(retry).toBeInViewport({ ratio: 1 });
-    const retryFocus = await retry.evaluate(element => { const r = element.getBoundingClientRect(), host = element.closest(".oak-map-status")!, p = host.getBoundingClientRect(), css = getComputedStyle(element), border = getComputedStyle(host); const outset = Number.parseFloat(css.outlineWidth) + Number.parseFloat(css.outlineOffset); return { fits: r.top - outset >= p.top + Number.parseFloat(border.borderTopWidth) && r.bottom + outset <= p.bottom - Number.parseFloat(border.borderBottomWidth) && r.left - outset >= p.left + Number.parseFloat(border.borderLeftWidth) && r.right + outset <= p.right - Number.parseFloat(border.borderRightWidth), control: r.toJSON(), host: p.toJSON(), outset, scrollTop: (host as HTMLElement).scrollTop }; });
+    const retryFocus = await retry.evaluate(element => { const r = element.getBoundingClientRect(), host = element.closest(".oak-map-status")!, p = host.getBoundingClientRect(), css = getComputedStyle(element), border = getComputedStyle(host); const outset = Number.parseFloat(css.outlineWidth) + Number.parseFloat(css.outlineOffset); return { fits: r.top - outset >= p.top + Number.parseFloat(border.borderTopWidth) && r.bottom + outset <= p.bottom - Number.parseFloat(border.borderBottomWidth) && r.left - outset >= p.left + Number.parseFloat(border.borderLeftWidth) && r.right + outset <= p.right - Number.parseFloat(border.borderRightWidth), control: r.toJSON() as DOMRectReadOnly, host: p.toJSON() as DOMRectReadOnly, outset, scrollTop: (host as HTMLElement).scrollTop }; });
     expect(retryFocus.fits, JSON.stringify(retryFocus)).toBe(true);
     expect(await retry.evaluate(element => getComputedStyle(element).outlineWidth)).toBe("3px");
     await commonGeometry(page, { ...item.variant, viewport: { width, height }, scenario: { ...item.variant.scenario, textScale: scale, safeArea: [20, 13, 34, 7] } });
@@ -1704,7 +1704,7 @@ test("authored date rail stays compact, readable and keyboard operable through m
 });
 
 test("changing dates starts the itinerary at its beginning while return-to-current reveals its owner", async ({ page }) => {
-  const item = variants.find(item => item.visualCase.id === "experience-expanded-dense" && item.variant.id === "dense-half")!;
+  expect(variants.some(item => item.visualCase.id === "experience-expanded-dense" && item.variant.id === "dense-half")).toBe(true);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/?case=experience-expanded-dense&variant=dense-half&days=long-rail");
