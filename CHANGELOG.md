@@ -1,3 +1,13 @@
+## [2.0.0](https://github.com/XBlueSky/laugh-tale/compare/v1.1.0...v2.0.0) (2026-10-27)
+
+### ⚠ BREAKING CHANGES
+
+* land Eternal Pose v2 (Oak & Washi starter, four 2.0 packages) (#38)
+
+### Features
+
+* land Eternal Pose v2 (Oak & Washi starter, four 2.0 packages) ([#38](https://github.com/XBlueSky/laugh-tale/issues/38)) ([a1bb053](https://github.com/XBlueSky/laugh-tale/commit/a1bb0538a725b74c2ecdfb0b1d9ad865bbc4e6b9))
+
 # [1.1.0](https://github.com/XBlueSky/laugh-tale/compare/v1.0.0...v1.1.0) (2026-10-23)
 
 
