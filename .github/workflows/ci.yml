@@ -10,9 +10,17 @@ permissions:
   contents: read
 
 jobs:
+  # The V2 root suite runs serially per process (vitest.config.ts) and takes over
+  # an hour end to end on a hosted runner, so CI splits `npm run check` into
+  # parallel suites. Run `npm run check` locally for the same gates in one go.
   check:
+    name: check (${{ matrix.suite }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [static, unit-1, unit-2, unit-3, unit-4, unit-5, unit-6, package-builders, starter]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -31,15 +39,40 @@ jobs:
           echo "$GITHUB_WORKSPACE/tmp/oak-font-validation/bin" >> "$GITHUB_PATH"
       # Build, pack, and install the four unpublished packages in DAG order.
       - run: npm run stage:starter -- --setup-locale en
-      # The V2 root suite runs serially (vitest.config.ts) and takes ~20-30 min.
-      - run: npm run check
-        timeout-minutes: 45
+      - name: Static gates and package suites
+        if: matrix.suite == 'static'
+        run: |
+          npm run validate:plugins
+          npm run check:marketplace
+          npm run build:packages
+          npm run test:packages
+          npm run type-check
+          npm run type-check:packages
+          npm run lint
+          npm run lint:packages
+      - name: Root unit shard
+        if: startsWith(matrix.suite, 'unit-')
+        run: |
+          npm run build:packages
+          npx vitest run --project unit --shard="${SUITE#unit-}/6"
+        env:
+          SUITE: ${{ matrix.suite }}
+          LAUGH_TALE_STARTER_ROOT: ${{ github.workspace }}/tmp/staged-starter
+      - name: Package-building suites
+        if: matrix.suite == 'package-builders'
+        run: |
+          npm run build:packages
+          npx vitest run --project package-builders
         env:
           LAUGH_TALE_STARTER_ROOT: ${{ github.workspace }}/tmp/staged-starter
-      - run: npm run test:starter:staged
-      - run: npm --prefix tmp/staged-starter exec playwright install --with-deps chromium
-      - run: npm run test:e2e:staged
-      - run: npm run test:oak-washi:browser
+      - name: Staged starter, end-to-end and Oak browser suites
+        if: matrix.suite == 'starter'
+        run: |
+          npm run build:packages
+          npm run test:starter:staged
+          npm --prefix tmp/staged-starter exec playwright install --with-deps chromium
+          npm run test:e2e:staged
+          npm run test:oak-washi:browser
 
   # Generate a synthetic example against locally packed, unpublished packages.
   # Provider calls remain fake in its end-to-end suite.

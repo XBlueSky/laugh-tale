@@ -69,7 +69,7 @@ describe("real Oak & Washi starter generation", () => {
         "@laugh-tale-island/testing": "2.0.0",
       },
     });
-  }, 20_000);
+  }, 60_000);
 
   test("retains shared starter source and documentation without local artifacts", async () => {
     const targetDir = join(ownedRoot(), "site");
@@ -92,5 +92,5 @@ describe("real Oak & Washi starter generation", () => {
     for (const path of files(join(first, "src/presentation"))) {
       expect(readFileSync(join(first, "src/presentation", path))).toEqual(readFileSync(join(second, "src/presentation", path)));
     }
-  }, 20_000);
+  }, 60_000);
 });

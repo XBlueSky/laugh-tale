@@ -245,7 +245,7 @@ test("concurrent static Validate and isolated Verify readers refuse the in-progr
   expect(installed.counts.errors).toBe(0);
   expect(installed.commands.map(command => command.command)).toEqual(["npm test", "npm run type-check", "npm run lint", "npm run test:experience", "npm run test:a11y", "npm run build"]);
   expect(executions).toBe(6);
-}, 20_000);
+}, 60_000);
 
 function workerSource(root: string, failure: "committed-kill" | "recovery") {
   const moduleUrl = pathToFileURL(join(repoRoot, "plugins/eternal-pose/scripts/upgrade-trip-project.mjs")).href;

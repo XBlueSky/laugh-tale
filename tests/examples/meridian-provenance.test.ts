@@ -51,7 +51,7 @@ test("neutral trip generation changes content without changing presentation or r
     await writeFile(drift, "export const drift = true;\n");
     expect((await compareGeneratedProjects(starterRoot, generatedRoot)).runtimeConfigurationDifferences).toEqual(["src/app/unowned.ts"]);
   } finally { await rm(drift, { force: true }); }
-}, 20000);
+}, 60_000);
 
 test("checked-in Meridian is the exact generated neutral example", async () => {
   const { generatedRoot } = pair;
@@ -59,4 +59,4 @@ test("checked-in Meridian is the exact generated neutral example", async () => {
   const localArtifacts = new Set(["node_modules", "dist", "coverage", "tmp", "test-results", "playwright-report", ".env.local"]);
   expect(await atomic.hashProjectFiles(exampleRoot, localArtifacts)).toEqual(expected);
   expect([...expected.keys()]).not.toContain(".env.local");
-}, 20000);
+}, 60_000);

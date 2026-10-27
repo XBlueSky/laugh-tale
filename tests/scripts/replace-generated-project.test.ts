@@ -35,13 +35,13 @@ test("whole-directory replacement installs exact Create output and retains compl
   expect(await atomic.hashProjectFiles(f.request.backupDir)).toEqual(f.old);
   expect((await lstat(f.request.backupDir)).ino).toBe(oldInode);
   await expect(lstat(f.request.candidateDir)).rejects.toThrow();
-}, 20000);
+}, 60_000);
 test.each(["stage-validate", "directory-backup", "directory-install", "file-set-validate"])("failure at %s restores complete old generation and candidate", async phase => {
   const f = await fixture(); await expect(f.run(failAt(phase))).rejects.toThrow("injected");
   expect(await atomic.hashProjectFiles(f.request.targetDir)).toEqual(f.old);
   expect(await atomic.hashProjectFiles(f.request.candidateDir)).toEqual(f.candidate);
   await expect(lstat(f.request.backupDir)).rejects.toThrow();
-}, 20000);
+}, 60_000);
 test.each(["different-input", "different-ledger", "preexisting-backup", "candidate-link", "target-link", "traversal"])("rejects %s without changing the target", async mutation => {
   const f = await fixture();
   if (mutation === "different-input") await writeFile(join(f.request.candidateDir, paths.input), "{}");
@@ -54,7 +54,7 @@ test.each(["different-input", "different-ledger", "preexisting-backup", "candida
   if (mutation === "traversal") f.request.targetDir = join(f.directory, "elsewhere") + "/../target";
   await expect(f.run()).rejects.toThrow();
   expect(await atomic.hashProjectFiles(mutation === "target-link" ? f.request.targetDir + ".saved" : join(f.directory, "target"))).toEqual(f.old);
-}, 20000);
+}, 60_000);
 test("valid candidate reaches the same-device refusal and preserves all three paths", async () => {
   const f = await fixture();
   let mismatches = 0;
@@ -83,7 +83,7 @@ test("valid candidate reaches the same-device refusal and preserves all three pa
   expect(await atomic.hashProjectFiles(f.request.targetDir)).toEqual(f.old);
   expect(await atomic.hashProjectFiles(f.request.candidateDir)).toEqual(f.candidate);
   await expect(lstat(f.request.backupDir)).rejects.toThrow();
-}, 20000);
+}, 60_000);
 test.each(["during-validation", "after-validation-script", "after-validation-manifest", "after-validation-journal", "after-validation-link"])("rejects %s mutation without publishing unvalidated bytes", async mutation => {
   const f = await fixture();
   const candidate = f.request.candidateDir;
@@ -135,7 +135,7 @@ test.each(["during-validation", "after-validation-script", "after-validation-man
   expect(await readFile(join(candidate, paths.input))).toEqual(originalInput);
   expect(await readFile(join(candidate, paths.ledger))).toEqual(originalLedger);
   if (mutation === "after-validation-link") expect((await lstat(join(candidate, "src/main.tsx"))).isSymbolicLink()).toBe(true);
-}, 20000);
+}, 60_000);
 test.each(["directory-backup", "directory-install", "file-set-validate"])("crash at %s recovers the complete old generation", async phase => {
   const f = await fixture();
   const child = fork(join(root, "tests/fixtures/generated-replacement-crash.mjs"), [JSON.stringify(f.request), phase], { stdio: ["ignore", "pipe", "pipe", "ipc"] });
@@ -148,4 +148,4 @@ test.each(["directory-backup", "directory-install", "file-set-validate"])("crash
   expect(await atomic.recoverProjectFileTransaction(f.request.targetDir)).toBe("rolled-back");
   expect(await atomic.hashProjectFiles(f.request.targetDir)).toEqual(f.old);
   expect(await atomic.hashProjectFiles(f.request.candidateDir)).toEqual(f.candidate);
-}, 20000);
+}, 60_000);

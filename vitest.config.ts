@@ -22,8 +22,8 @@ export default defineConfig({
           // Trade file parallelism for reliability; in-test races are unchanged.
           maxWorkers: 1,
           // Create/Upgrade/Verify suites build real projects, fsync journals and
-          // spawn npm; individual cases take 4-15s on macOS runners.
-          testTimeout: 30_000,
+          // spawn npm; individual cases take 4-20s on CI runners.
+          testTimeout: 60_000,
           include: ["tests/**/*.test.{ts,tsx}"],
           exclude: PACKAGE_BUILDING_TESTS,
           sequence: { groupOrder: 0 },
