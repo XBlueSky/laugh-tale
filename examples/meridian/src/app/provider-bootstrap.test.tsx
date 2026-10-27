@@ -79,6 +79,7 @@ describe("provider bootstrap composition", () => {
     boundary.freeConfigure.mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail; }));
     await act(async () => { await import("../main"); });
     await waitFor(() => expect(boundary.freeConfigure).toHaveBeenCalledOnce());
+    expect(screen.getByRole("checkbox", { name: /Pack identification/ })).not.toBeChecked();
     fireEvent.click(screen.getByRole("checkbox", { name: /Pack identification/ }));
     await act(async () => { boundary.props?.runtime?.retryMapBootstrap?.(); await Promise.resolve(); });
     await waitFor(() => expect(typeof boundary.props?.runtime?.createMap).toBe("function"));
@@ -110,6 +111,7 @@ describe("provider bootstrap composition", () => {
     await act(async () => { await import("../main"); });
     expect(screen.getByRole("heading", { name: "Synthetic Archipelago Journey" })).toBeVisible();
     expect(boundary.props?.providerBootstrap?.map).toEqual({ status: "loading", retryable: false });
+    expect(screen.getByRole("checkbox", { name: /Pack identification/ })).not.toBeChecked();
     fireEvent.click(screen.getByRole("checkbox", { name: /Pack identification/ }));
     expect(screen.getByRole("checkbox", { name: /Pack identification/ })).toBeChecked();
     fireEvent.click(screen.getByRole("button", { name: catalog.home.openExperience }));
