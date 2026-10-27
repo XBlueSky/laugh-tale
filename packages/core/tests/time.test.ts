@@ -2,7 +2,50 @@ import { Temporal } from "@js-temporal/polyfill";
 import { describe, expect, it } from "vitest";
 
 import type { Timing, Trip, TripNode } from "@laugh-tale-island/core";
-import { findLiveState, resolveSchedule } from "@laugh-tale-island/core";
+import { findLiveState, resolveSchedule, selectEffectiveDay, selectLiveState, selectAutomaticOwnerId } from "@laugh-tale-island/core";
+
+describe("selectLiveState", () => {
+  const authored = { timezone: "Asia/Tokyo", days: [{ id: "one", date: "2040-06-12", title: "One", nodes: [sightseeingNode("current", "one", { start: "09:00", end: "11:00", certainty: "fixed" }), sightseeingNode("next", "one", { start: "12:00", end: "13:00", certainty: "fixed" })] }] };
+  it("resolves current and next through the authored timezone and ignores skipped nodes", () => {
+    expect(selectLiveState(authored, "2040-06-12T01:30:00Z")).toEqual({ currentId: "current", nextId: "next" });
+    expect(selectLiveState(authored, "2040-06-12T01:30:00Z", { ignoredNodeIds: new Set(["current"]) })).toEqual({ currentId: null, nextId: "next" });
+  });
+  it("rejects invalid instants and zones", () => {
+    expect(() => selectLiveState(authored, "invalid")).toThrow();
+    expect(() => selectLiveState({ ...authored, timezone: "invalid" }, "2040-06-12T01:30:00Z")).toThrow();
+  });
+});
+
+describe("selectAutomaticOwnerId", () => {
+  const nodes = [sightseeingNode("past", "one", { start: "07:00", end: "08:00", certainty: "fixed" }), sightseeingNode("current", "one", { start: "09:00", end: "11:00", certainty: "fixed" }), sightseeingNode("next", "one", { start: "12:00", end: "13:00", certainty: "fixed" }), sightseeingNode("later", "one", { start: "14:00", end: "15:00", certainty: "fixed" })];
+  const trip = { timezone: "Asia/Tokyo", days: [{ id: "one", date: "2040-06-12", title: "One", nodes }] };
+  it("chooses the later unfinished temporal owner before an earlier authored fallback", () => {
+    expect(selectAutomaticOwnerId(trip, "2040-06-12T01:30:00Z", new Set(["current", "next"]))).toBe("later");
+    expect(selectAutomaticOwnerId(trip, "2040-06-12T01:30:00Z", new Set(["current", "next", "later"]))).toBe("past");
+  });
+  it("returns null when every owner is completed or skipped", () => {
+    expect(selectAutomaticOwnerId(trip, "2040-06-12T01:30:00Z", new Set(nodes.map((node) => node.id)))).toBeNull();
+  });
+});
+
+describe("selectEffectiveDay", () => {
+  const trip = { timezone: "Asia/Taipei", days: [
+    { id: "one", date: "2040-06-12", title: "One", nodes: [] },
+    { id: "two", date: "2040-06-14", title: "Two", nodes: [] },
+  ] };
+  it.each([
+    ["two", "2040-06-11T16:30:00Z", "two"],
+    [null, "2040-06-11T16:30:00Z", "one"],
+    ["invalid", "2040-06-13T00:00:00Z", "two"],
+    [null, "2040-06-01T00:00:00Z", "one"],
+    [null, "2040-06-20T00:00:00Z", "two"],
+  ])("chooses %s at %s as %s", (manualDayId, instant, expected) => {
+    expect(selectEffectiveDay(trip, instant, manualDayId)?.id).toBe(expected);
+  });
+  it("has no effective day for empty content", () => {
+    expect(selectEffectiveDay({ ...trip, days: [] }, "2040-06-12T00:00:00Z")).toBeNull();
+  });
+});
 
 function sightseeingNode(id: string, dayId: string, timing: Timing): TripNode {
   return {

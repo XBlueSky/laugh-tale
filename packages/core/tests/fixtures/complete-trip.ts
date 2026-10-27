@@ -3,6 +3,7 @@ import type { Trip } from "@laugh-tale-island/core";
 export const completeTrip: Trip = {
   id: "trip-complete",
   title: "Synthetic Archipelago Journey",
+  locale: "en",
   timezone: "Etc/UTC",
   startDate: "2040-06-12",
   endDate: "2040-06-12",
@@ -22,7 +23,7 @@ export const completeTrip: Trip = {
           optionality: "core",
           place: {
             name: "Synthetic Harbor Gate",
-            coordinates: { lat: 10.01, lng: 20.01 },
+            identity: { status: "resolved", coordinates: { lat: 10.01, lng: 20.01 } },
             certainty: "suggested",
           },
           payload: { mode: "transit", plan: "Use the local shuttle." },
@@ -51,7 +52,7 @@ export const completeTrip: Trip = {
           optionality: "core",
           place: {
             name: "Synthetic Hill House",
-            coordinates: { lat: 10.02, lng: 20.02 },
+            identity: { status: "resolved", coordinates: { lat: 10.02, lng: 20.02 } },
             certainty: "confirmed",
           },
           payload: {
@@ -79,7 +80,7 @@ export const completeTrip: Trip = {
           optionality: "optional",
           place: {
             name: "Synthetic Supply Hall",
-            coordinates: { lat: 10.03, lng: 20.03 },
+            identity: { status: "resolved", coordinates: { lat: 10.03, lng: 20.03 } },
             certainty: "candidate",
           },
           payload: {
@@ -102,7 +103,7 @@ export const completeTrip: Trip = {
           optionality: "core",
           place: {
             name: "Synthetic Clifftop",
-            coordinates: { lat: 10.04, lng: 20.04 },
+            identity: { status: "resolved", coordinates: { lat: 10.04, lng: 20.04 } },
             certainty: "suggested",
           },
           payload: { area: "North ridge" },
@@ -116,7 +117,7 @@ export const completeTrip: Trip = {
           optionality: "core",
           place: {
             name: "Synthetic Observatory",
-            coordinates: { lat: 10.05, lng: 20.05 },
+            identity: { status: "resolved", coordinates: { lat: 10.05, lng: 20.05 } },
             certainty: "confirmed",
           },
           booking: {
@@ -149,6 +150,7 @@ export const completeTrip: Trip = {
           optionality: "optional",
           payload: {
             customKind: "field-note-exchange",
+            presentationRole: "task",
             capabilities: { completion: true },
             data: { edition: 1, public: true },
           },
@@ -244,7 +246,7 @@ export const completeTrip: Trip = {
           title: "Garden kitchen",
           place: {
             name: "Synthetic Garden Kitchen",
-            coordinates: { lat: 10.06, lng: 20.06 },
+            identity: { status: "resolved", coordinates: { lat: 10.06, lng: 20.06 } },
             certainty: "candidate",
           },
           booking: {
@@ -258,7 +260,7 @@ export const completeTrip: Trip = {
           title: "Canal counter",
           place: {
             name: "Synthetic Canal Counter",
-            coordinates: { lat: 10.07, lng: 20.07 },
+            identity: { status: "resolved", coordinates: { lat: 10.07, lng: 20.07 } },
             certainty: "candidate",
           },
           booking: {

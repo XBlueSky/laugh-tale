@@ -1,10 +1,9 @@
 export type SheetSnap = "collapsed" | "half" | "expanded";
 
 export interface SheetGeometryInput {
-  viewportHeight: number;
-  topClearance: number;
-  safeBottom: number;
   collapsedHeight: number;
+  halfHeight: number;
+  expandedHeight: number;
 }
 
 export interface SheetGeometry {
@@ -18,8 +17,6 @@ interface SheetHeightBounds {
   min: number;
   max: number;
 }
-
-const DIRECTIONAL_VELOCITY_THRESHOLD = 0.5;
 
 function finiteLength(value: number): number {
   return Number.isFinite(value) ? Math.max(0, value) : 0;
@@ -36,58 +33,28 @@ export function clampSheetHeight(
 }
 
 export function resolveSheetGeometry(input: SheetGeometryInput): SheetGeometry {
-  const viewportHeight = finiteLength(input.viewportHeight);
-  const topClearance = finiteLength(input.topClearance);
-  const safeBottom = finiteLength(input.safeBottom);
   const collapsed = Math.round(finiteLength(input.collapsedHeight));
-  const ceiling = Math.round(
-    Math.max(collapsed, viewportHeight - topClearance - safeBottom),
-  );
-  const expanded = ceiling;
-  const halfTarget = Math.round(
-    (viewportHeight - safeBottom - collapsed) / 2,
+  const expanded = Math.max(
+    collapsed,
+    Math.round(finiteLength(input.expandedHeight)),
   );
   const half = Math.round(
-    clampSheetHeight(halfTarget, { min: collapsed, max: expanded }),
+    clampSheetHeight(finiteLength(input.halfHeight), {
+      min: collapsed,
+      max: expanded,
+    }),
   );
 
-  return { collapsed, half, expanded, ceiling };
+  return { collapsed, half, expanded, ceiling: expanded };
 }
 
 export function nearestSheetSnap(
   height: number,
   geometry: Pick<SheetGeometry, "collapsed" | "half" | "expanded">,
-  velocityY = 0,
 ): SheetSnap {
-  const points: Array<{ snap: SheetSnap; height: number }> = [
-    { snap: "collapsed", height: geometry.collapsed },
-    { snap: "half", height: geometry.half },
-    { snap: "expanded", height: geometry.expanded },
-  ];
-  points.sort((left, right) => left.height - right.height);
-  const resolvedHeight = clampSheetHeight(height, {
-    min: points[0]?.height ?? 0,
-    max: points.at(-1)?.height ?? 0,
-  });
-
-  if (velocityY <= -DIRECTIONAL_VELOCITY_THRESHOLD) {
-    return (
-      points.find((point) => point.height > resolvedHeight + 0.5) ??
-      points.at(-1)!
-    ).snap;
-  }
-  if (velocityY >= DIRECTIONAL_VELOCITY_THRESHOLD) {
-    return (
-      [...points]
-        .reverse()
-        .find((point) => point.height < resolvedHeight - 0.5) ?? points[0]
-    ).snap;
-  }
-
-  return points.reduce((nearest, point) =>
-    Math.abs(point.height - resolvedHeight) <
-    Math.abs(nearest.height - resolvedHeight)
-      ? point
-      : nearest,
-  ).snap;
+  return (["collapsed", "half", "expanded"] as const).reduce((best, snap) =>
+    Math.abs(geometry[snap] - height) < Math.abs(geometry[best] - height)
+      ? snap
+      : best,
+  );
 }

@@ -2,6 +2,21 @@ import { Temporal } from "@js-temporal/polyfill";
 
 import type { Timing, Trip, TripDay, TripNode } from "./model.js";
 
+/** Authored day order with manual, local calendar day, upcoming, then final fallback. */
+export function selectEffectiveDay(
+  trip: Pick<Trip, "timezone" | "days">,
+  instant: string,
+  manualDayId: string | null = null,
+): TripDay | null {
+  const manual = trip.days.find((day) => day.id === manualDayId);
+  if (manual !== undefined) return manual;
+  const today = Temporal.Instant.from(instant).toZonedDateTimeISO(trip.timezone).toPlainDate();
+  return trip.days.find((day) => Temporal.PlainDate.compare(day.date, today) === 0)
+    ?? trip.days.find((day) => Temporal.PlainDate.compare(day.date, today) > 0)
+    ?? trip.days.at(-1)
+    ?? null;
+}
+
 export interface ResolvedScheduleEntry {
   id: string;
   nodeId: string;
@@ -19,6 +34,17 @@ export interface LiveState {
 
 export interface LiveStateOptions {
   ignoredNodeIds?: ReadonlySet<string>;
+}
+
+/** String-instant boundary for consumers without their own Temporal runtime. */
+export function selectLiveState(trip: Pick<Trip, "timezone" | "days">, instant: string, options: LiveStateOptions = {}): LiveState {
+  return findLiveState(resolveSchedule(trip), Temporal.Instant.from(instant).toZonedDateTimeISO(trip.timezone), options);
+}
+
+/** Incomplete temporal owners precede the first remaining authored owner. */
+export function selectAutomaticOwnerId(trip: Pick<Trip, "timezone" | "days">, instant: string, ignoredNodeIds: ReadonlySet<string>): string | null {
+  const live = selectLiveState(trip, instant, { ignoredNodeIds });
+  return live.currentId ?? live.nextId ?? trip.days.flatMap((day) => day.nodes).find((node) => !ignoredNodeIds.has(node.id))?.id ?? null;
 }
 
 interface UnboundedScheduleEntry {

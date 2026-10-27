@@ -27,12 +27,13 @@ describe("Eternal Pose distribution manifests", () => {
 
     expect(claudePlugin).toMatchObject({
       name: "eternal-pose",
-      version: "0.1.0",
+      version: "2.0.0",
       license: "MIT",
     });
+    const releaseVersion = claudePlugin.version;
     expect(codexPlugin).toMatchObject({
       name: "eternal-pose",
-      version: "0.1.0",
+      version: releaseVersion,
       skills: "./skills/",
     });
     expect(codexMarketplace.plugins).toEqual([
@@ -48,6 +49,8 @@ describe("Eternal Pose distribution manifests", () => {
 
     expect(claudeMarketplace.plugins?.[0]?.source).toBe("./plugins/eternal-pose");
     expect(codexMarketplace.plugins?.[0]?.source?.path).toBe("./plugins/eternal-pose");
+    expect((claudeMarketplace.plugins?.[0] as { version?: string })?.version).toBe(releaseVersion);
+    expect((codexMarketplace.plugins?.[0] as { version?: string })?.version).toBe(releaseVersion);
 
     for (const manifest of [claudePlugin, codexPlugin]) {
       const serialized = JSON.stringify(manifest).toLowerCase();

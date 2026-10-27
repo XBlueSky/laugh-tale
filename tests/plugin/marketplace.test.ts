@@ -77,16 +77,16 @@ describe.sequential("Laugh Tale marketplace presentation", () => {
       plugins: [
         {
           name: "eternal-pose",
-          version: "0.1.0",
+          version: "2.0.0",
           source: "./plugins/eternal-pose",
           category: "Developer Tools",
         },
       ],
     });
-    expect(claudePlugin).toMatchObject({ name: "eternal-pose", version: "0.1.0" });
+    expect(claudePlugin).toMatchObject({ name: "eternal-pose", version: "2.0.0" });
     expect(codexPlugin).toMatchObject({
       name: "eternal-pose",
-      version: "0.1.0",
+      version: "2.0.0",
       interface: {
         category: "Developer Tools",
         capabilities: ["Interactive", "Read", "Write"],
@@ -134,7 +134,7 @@ describe.sequential("Laugh Tale marketplace presentation", () => {
     expect(manifest.plugins).toHaveLength(1);
     expect(manifest.plugins?.[0]).toMatchObject({
       id: "eternal-pose",
-      version: "0.1.0",
+      version: "2.0.0",
       category: "Developer Tools",
       group: "trip-sites",
     });

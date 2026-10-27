@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@laugh-tale-island/core": ["../core/src/index.ts"],
+      "@laugh-tale-island/core/browser": ["../core/src/browser/index.ts"],
+      "@laugh-tale-island/core/enrichment": ["../core/src/enrichment/index.ts"],
+      "@laugh-tale-island/react": ["../react/src/index.ts"],
+      "@laugh-tale-island/adapters/google": ["../adapters/src/google/index.ts"],
+      "@laugh-tale-island/adapters/google/node": ["../adapters/src/google/node/index.ts"]
+    },
+    "strict": true,
+    "isolatedModules": true,
+    "declaration": true,
+    "noEmit": true,
+    "types": ["vitest/globals", "google.maps"]
+  },
+  "include": ["src", "tests", "vitest.config.ts", "playwright.config.ts"]
+}

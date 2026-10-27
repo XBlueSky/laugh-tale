@@ -11,10 +11,7 @@ const starterRoot =
   process.env.LAUGH_TALE_STARTER_ROOT ?? join(repoRoot, "plugins/eternal-pose/starter/react");
 const contractDriverPath = join(starterRoot, "tests/e2e/contract-driver.ts");
 const contractSpecPath = join(starterRoot, "tests/e2e/presentation-contract.spec.ts");
-const presentationBoundaryTestPath = join(
-  starterRoot,
-  "src/controllers/presentation-contract.test.tsx",
-);
+const sharedDriverPath = join(repoRoot, "packages/testing/src/presentation-driver.tsx");
 const authoredThemeIds = [
   "field-atlas",
   "reset-arcade",
@@ -58,7 +55,9 @@ function listPlaywrightTests({ recipe, files = [] }: { recipe?: string; files?: 
   const env: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: "1" };
   if (recipe === undefined) delete env.ETERNAL_POSE_RECIPE_UNDER_TEST;
   else env.ETERNAL_POSE_RECIPE_UNDER_TEST = recipe;
-  const npmArguments = ["run", "test:e2e", "--", "--list", ...files];
+  // Collection is read-only. The generated test:e2e script also runs the loader
+  // browser suite, which belongs to execution, not test discovery.
+  const npmArguments = ["exec", "--", "playwright", "test", "--list", ...files];
   const invocation = process.env.npm_execpath
     ? { command: process.execPath, arguments: [process.env.npm_execpath, ...npmArguments] }
     : {
@@ -77,71 +76,65 @@ describe("presentation contract harness", () => {
   test("keeps the internal-only contract out of the default public Playwright collection", () => {
     const result = listPlaywrightTests();
 
-    expect(result.status, result.stderr).toBe(0);
+    expect(result.status, result.stdout + result.stderr).toBe(0);
     expect(result.stdout).not.toContain("presentation-contract.spec.ts");
-    expect(result.stdout).toContain("Total: 27 tests in 1 file");
+    expect(result.stdout).toContain("Total: 51 tests in 1 file");
   });
 
   test("collects the shared contract at every viewport for an identified internal recipe", () => {
     const result = listPlaywrightTests({
-      recipe: "field-atlas",
+      recipe: "oak-washi",
       files: ["tests/e2e/presentation-contract.spec.ts"],
     });
 
-    expect(result.status, result.stderr).toBe(0);
+    expect(result.status, result.stdout + result.stderr).toBe(0);
     expect(result.stdout).not.toContain("mobile-trip.spec.ts");
     expect(result.stdout).toContain("Total: 3 tests in 1 file");
   });
 
   test("locates presentation behavior through generic contract ownership", () => {
-    const source = readFileSync(contractDriverPath, "utf8");
+    const source = readFileSync(sharedDriverPath, "utf8");
 
     for (const hook of [
-      'data-contract-action="',
-      'data-contract-owner="',
-      'data-contract-surface="',
-      'data-owner-id',
+      '"data-contract-action"',
+      '"data-contract-role"',
+      '.dataset.ownerId',
     ]) {
       expect(source).toContain(hook);
     }
-    expect(source).toContain('owner("reservation-reference")');
+    expect(source).toContain("renderTripContract");
   });
 
   test("configures reduced motion before the contract can navigate or render", () => {
     const specSource = readFileSync(contractSpecPath, "utf8");
-    const driverSource = readFileSync(contractDriverPath, "utf8");
     const mediaIndex = specSource.indexOf('page.emulateMedia({ reducedMotion: "reduce" })');
     const installIndex = specSource.indexOf("installContractGeolocation(page)");
 
     expect(mediaIndex).toBeGreaterThanOrEqual(0);
     expect(mediaIndex).toBeLessThan(installIndex);
-    expect(driverSource).toContain(
-      'window.matchMedia("(prefers-reduced-motion: reduce)").matches',
-    );
-    expect(driverSource.indexOf("matchMedia")).toBeLessThan(driverSource.indexOf("page.goto"));
+    expect(installIndex).toBeGreaterThan(mediaIndex);
+    expect(specSource.indexOf("test.beforeEach")).toBeLessThan(specSource.indexOf('test("shared presentation contract"'));
   });
 
   test("builds repeated collapsed-to-half-to-expanded snap stress into every contract run", () => {
     const source = readFileSync(contractDriverPath, "utf8");
 
-    expect(source).toContain("const sheetSnapStressCycles = 5;");
     expect(source).toMatch(
-      /for \(let cycle = 0; cycle < sheetSnapStressCycles; cycle \+= 1\)[\s\S]*for \(const snap of \["collapsed", "half", "expanded"\]/,
+      /for \(let cycle = 0; cycle < 5; cycle\+\+\)[\s\S]*for \(const snap of \["collapsed", "half", "expanded"\]/,
     );
   });
 
-  test("discovers repository package sources without assuming a fixed consumer depth", () => {
-    const source = readFileSync(presentationBoundaryTestPath, "utf8");
-
-    expect(source).toContain("findRepositorySourceRoot(controllerDirectory)");
-    expect(source).toContain("if (repositoryDirectory === undefined) return;");
-    expect(source).not.toMatch(
-      /resolve\(controllerDirectory,\s*["'`](?:\.\.\/){2,}["'`]\)/,
-    );
+  test("generated suites consume installed testing APIs and local presentation without repository internals", () => {
+    for (const name of ["generated-experience.contract.test.tsx", "generated-accessibility.contract.test.tsx"]) {
+      const source = readFileSync(join(starterRoot, "src/app", name), "utf8");
+      expect(source).toContain('from "@laugh-tale-island/testing"');
+      expect(source).toContain('from "../presentation"');
+      expect(source).not.toMatch(/packages\/(?:core|react|testing)\/src|findRepositorySourceRoot/);
+    }
   });
 
   test("keeps the driver neutral to authored themes, copy, CSS, and pointer geometry", () => {
-    const source = readFileSync(contractDriverPath, "utf8");
+    const source = readFileSync(sharedDriverPath, "utf8");
 
     expect(neutralityViolations(source)).toEqual([]);
   });

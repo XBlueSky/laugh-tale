@@ -1,641 +1,191 @@
-import { spawnSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import {
-  lstat,
-  mkdir,
-  mkdtemp,
-  open,
-  readFile,
-  readdir,
-  realpath,
-  rmdir,
-  unlink,
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
-import {
-  basename,
-  dirname,
-  isAbsolute,
-  join,
-  relative,
-  resolve,
-  sep,
-} from "node:path";
-import { pathToFileURL } from "node:url";
+import { createHash } from "node:crypto";
+import { Buffer } from "node:buffer";
+import { gunzipSync } from "node:zlib";
+import { lstat, readdir } from "node:fs/promises";
+import { isAbsolute, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { readProjectFileSet } from "../lib/atomic-publication.mjs";
+import { readRegularFile } from "../lib/path-safety.mjs";
+import { scanPublicationSnapshot } from "../lib/publication-analysis.mjs";
+import { parseTripProjectManifest, assertManifestMatchesLedger, ETERNAL_POSE_PACKAGE_NAMES } from "../lib/project-manifest-v2.mjs";
+import { parseTripProjectInputV2 } from "../lib/trip-project-input-v2.mjs";
+import { parsePlaceResolutionLedger } from "../lib/place-resolution-ledger.mjs";
+import { loadRecipeV2Catalog } from "../lib/recipe-v2.mjs";
 
-import { scanPublication } from "../lib/publication-scan.mjs";
-
-const REQUIRED_FILES = [
-  "README.md",
-  "AGENTS.md",
-  "CLAUDE.md",
-  ".env.example",
-  ".gitignore",
-  "package.json",
-  "package-lock.json",
-  "docs/trip-experience-contract.md",
-];
-const REQUIRED_DIRECTORIES = [
-  "src/trip-content",
-  "src/providers/google",
-  "src/ui",
-  "tests/e2e",
-];
-const REQUIRED_SCRIPTS = ["build", "lint", "test", "type-check"];
-const REQUIRED_PACKAGE_DEPENDENCIES = ["@laugh-tale-island/core", "@laugh-tale-island/react"];
-const EXACT_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?$/;
-const RESULT_PREFIX = "ETERNAL_POSE_VALIDATION_RESULT ";
-const COMMANDS = [
-  { command: "npm test", arguments: ["test"] },
-  { command: "npm run type-check", arguments: ["run", "type-check"] },
-  { command: "npm run lint", arguments: ["run", "lint"] },
-  { command: "npm run build", arguments: ["run", "build"] },
-];
-const DEFAULT_VALIDATION_OPERATIONS = {
-  lstat,
-  mkdir,
-  mkdtemp,
-  open,
-  readFile,
-  readdir,
-  realpath,
-  rmdir,
-  spawnSync,
-  unlink,
-  importModule: (url) => import(url),
-};
-
-function finding(severity, code, path, message) {
-  return { severity, code, path, message };
+const modes = ["local", "candidate", "registry"];
+const exact = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+const roots = ["README.md", "AGENTS.md", "CLAUDE.md", ".env.example", ".gitignore", "package.json", "package-lock.json", "eternal-pose.json", "docs/trip-experience-contract.md", "scripts/assert-project-readable.mjs", "src/app/App.tsx", "src/main.tsx", "src/trip-content/trip-input.json", "src/trip-content/place-resolutions.json", "src/trip-content/trip.ts"];
+const scripts = ["test", "type-check", "lint", "test:experience", "test:a11y", "build"];
+// Only root dependency installation and Git metadata are outside project source.
+// Nested names and cache/build output still require publication analysis.
+const skippedRootEntries = new Set(["node_modules", ".git"]);
+export const finding = (code, path, message, severity = "error") => ({ severity, code, path, message });
+export function summarize(mode, findings) {
+ const sorted = [...findings].sort((a,b)=>a.path.localeCompare(b.path)||a.code.localeCompare(b.code));
+ return { mode, counts: { errors: sorted.filter(f=>f.severity==="error").length, warnings: sorted.filter(f=>f.severity==="warning").length }, findings: sorted };
 }
-
-function projectFinding(code, path, message) {
-  return finding("error", code, path, message);
+export function parseArguments(args) {
+ let root=null, mode=null;
+ for(let i=0;i<args.length;i++) {
+  if(args[i]==="--mode" && mode===null) mode=args[++i];
+  else if(args[i]==="--root" && root===null) root=args[++i];
+  else if(!args[i].startsWith("--") && root===null) root=args[i];
+  else return null;
+ }
+ return typeof root==="string" && isAbsolute(root) && modes.includes(mode) ? {root:resolve(root),mode}:null;
 }
+export function invalidArgumentsResult() { return summarize(null,[finding("project.invalid-arguments",".","Expected one absolute project root and --mode local|candidate|registry.")]); }
+export function transactionFinding() { return finding("project.transaction-in-progress",".","Project transaction or file generation changed; retry after the writer finishes."); }
+const object = value => value!==null && typeof value==="object" && !Array.isArray(value);
 
-async function pathIsFile(rootDir, relativePath) {
+/** Capture all owned source bytes through the journal-aware reader before parsing anything.
+ * Dependency trees may contain npm's executable symlinks and are intentionally outside this inventory. */
+export async function projectSnapshot(root) {
+ await readProjectFileSet({projectDir:root,paths:[]});
+ const paths=[], privateFiles=[];
+ async function visit(directory,prefix="") {
+  for(const name of (await readdir(directory)).sort()) {
+   if(prefix==="" && skippedRootEntries.has(name)) continue;
+   if(name.startsWith(".laugh-tale-")) { privateFiles.push(prefix+name); continue; }
+   if(name.startsWith(".env") && name!==".env.example") { privateFiles.push(prefix+name); continue; }
+   const path=join(directory,name), relative=prefix+name, stats=await lstat(path);
+   if(stats.isSymbolicLink()) throw new Error("Project source cannot contain symbolic links.");
+   if(stats.isDirectory()) await visit(path,relative+"/");
+   else if(stats.isFile()) paths.push(relative);
+   else throw new Error("Project source must contain regular files.");
+  }
+ }
+ await visit(root);
+ const files=await readProjectFileSet({projectDir:root,paths});
+ for(const path of privateFiles) files.set(path,Buffer.alloc(0));
+ const hash=createHash("sha256");
+ for(const [name,bytes] of files) {
+  const stat=await lstat(join(root,name),{bigint:true});
+  hash.update(name).update("\0").update(bytes).update("\0").update([stat.dev,stat.ino,stat.mtimeNs,stat.ctimeNs].join(":"));
+ }
+ return {files,hash:hash.digest("hex"),redactedPaths:new Set(privateFiles)};
+}
+async function candidateArtifacts(root, manifest, pkg, lock, findings) {
+ try {
+  const path=process.env.ETERNAL_POSE_CANDIDATE_ATTESTATION;
+  if(typeof path!=="string" || !isAbsolute(path)) throw new Error("Candidate attestation must be an absolute regular JSON file.");
+  const record=JSON.parse((await readRegularFile(path)).bytes.toString("utf8"));
+  if(record.schemaVersion!==1 || !Array.isArray(record.packages) || record.packages.length!==4) throw new Error("Candidate attestation must contain exactly four packages.");
+  const seen=new Set();
+  for(const name of ETERNAL_POSE_PACKAGE_NAMES) {
+   const matches=record.packages.filter(item=>item.name===name); const item=matches[0];
+   if(matches.length!==1 || item.version!==manifest.packages[name] || !isAbsolute(item.archive) || !item.archive.endsWith(".tgz") || seen.has(item.archive)) throw new Error("Candidate package identity mismatch.");
+   seen.add(item.archive);
+   const section=name.endsWith("/testing")?"devDependencies":"dependencies";
+   const spec=pkg[section]?.[name], entry=lock.packages?.["node_modules/"+name];
+   if(typeof spec!=="string" || !spec.startsWith("file:") || resolve(root,spec.slice(5))!==item.archive) throw new Error("Candidate specifier must name its attested archive.");
+   const file=await readRegularFile(item.archive);
+   if(file.bytes.length!==item.bytes || file.hash!==item.sha256) throw new Error("Candidate archive size or SHA-256 mismatch.");
+   const archive=gunzipSync(file.bytes,{maxOutputLength:64*1024*1024});
+   const packageManifests=[];
+   for(let offset=0;offset+512<=archive.length;) {
+    const header=archive.subarray(offset,offset+512);
+    if(header.every(byte=>byte===0))break;
+    const name=header.subarray(0,100).toString("utf8").replace(/\0.*$/s,"");
+    const size=Number.parseInt(header.subarray(124,136).toString("ascii").replace(/\0.*$/s,"").trim(),8);
+    if(!Number.isSafeInteger(size)||size<0||offset+512+size>archive.length)throw new Error("Invalid candidate archive.");
+    if(name==="package/package.json") {
+     if(header[156]!==0&&header[156]!==48)throw new Error("Candidate manifest must be a regular file.");
+     packageManifests.push(JSON.parse(archive.subarray(offset+512,offset+512+size).toString("utf8")));
+    }
+    offset+=512+Math.ceil(size/512)*512;
+   }
+   if(packageManifests.length!==1||packageManifests[0].name!==name||packageManifests[0].version!==item.version)throw new Error("Candidate archive package name/version mismatch.");
+   if(entry?.version!==item.version || typeof entry.resolved!=="string" || !entry.resolved.startsWith("file:") || resolve(root,entry.resolved.slice(5))!==item.archive) throw new Error("Candidate lock identity mismatch.");
+   if(item.integrity!==undefined && (entry.integrity!==item.integrity || item.integrity!=="sha512-"+createHash("sha512").update(file.bytes).digest("base64"))) throw new Error("Candidate integrity mismatch.");
+  }
+ } catch(error) { findings.push(finding("project.candidate-attestation-invalid","package.json",error.message)); }
+}
+export async function validateTripProject(rootDir,mode) {
+ if(typeof rootDir!=="string" || !isAbsolute(rootDir) || !modes.includes(mode)) return invalidArgumentsResult();
+ const root=resolve(rootDir), findings=[];
+ let snapshot;
+ try { snapshot=await projectSnapshot(root); }
+ catch(error) { return summarize(mode,[error.code==="transaction-in-progress"?transactionFinding():finding("project.invalid-source",".",error.message)]); }
+ const {files}=snapshot;
+ const text=path=>files.get(path)?.toString("utf8")??"";
+ for(const path of roots) if(!files.has(path)) findings.push(finding("project.missing-file",path,"Required project file is missing."));
+ const parse=(path,parser=value=>value,code="project.invalid-json")=>{
+  if(!files.has(path))return null;
+  try{return parser(JSON.parse(text(path)));}catch(error){findings.push(finding(code,path,error.message));return null;}
+ };
+ const manifest=parse("eternal-pose.json",parseTripProjectManifest,"project.invalid-manifest");
+ const input=parse("src/trip-content/trip-input.json",parseTripProjectInputV2,"project.invalid-trip-input");
+ const pkg=parse("package.json",value=>value,"project.invalid-package-json"),lock=parse("package-lock.json");
+ const ledger=parse("src/trip-content/place-resolutions.json",value=>{
+  if(manifest)assertManifestMatchesLedger(manifest,value);
+  return input?parsePlaceResolutionLedger(value,input):value;
+ },"project.provenance-mismatch");
+ void ledger;
+ if(object(pkg)) {
+  if(!object(pkg.scripts)) findings.push(finding("project.invalid-scripts","package.json","Scripts must be an object."));
+  for(const script of scripts) {
+   if(typeof pkg.scripts?.[script]!=="string" || !pkg.scripts[script].trim()) findings.push(finding("project.missing-script","package.json","Required script missing: "+script));
+   if(pkg.scripts?.["pre"+script]!=="node scripts/assert-project-readable.mjs") findings.push(finding("project.missing-read-preflight","package.json","Required transaction preflight missing: "+script));
+  }
+  for(const [script,path] of [["test:experience","generated-experience.contract.test.tsx"],["test:a11y","generated-accessibility.contract.test.tsx"]]) {
+   if(pkg.scripts?.[script]!=="vitest run src/app/"+path || !files.has("src/app/"+path)) findings.push(finding("project.missing-contract-suite","package.json","Generated contract suite missing: "+script));
+  }
+  const sections=["dependencies","devDependencies","optionalDependencies","peerDependencies"];
+  for(const name of ETERNAL_POSE_PACKAGE_NAMES) {
+   const expected=name.endsWith("/testing")?"devDependencies":"dependencies";
+   const locations=sections.filter(section=>object(pkg[section])&&Object.hasOwn(pkg[section],name));
+   if(!locations.includes(expected)) findings.push(finding("project.missing-package-dependency","package.json","Missing package: "+name));
+   if(locations.some(section=>section!==expected)) findings.push(finding("project.misplaced-package-dependency","package.json","Misplaced package: "+name));
+   const spec=pkg[expected]?.[name];
+   if(mode!=="candidate" && (typeof spec!=="string" || !exact.test(spec))) findings.push(finding("project.invalid-package-specifier","package.json","An exact semver is required for "+name));
+   if(mode!=="candidate" && manifest && spec!==manifest.packages[name]) findings.push(finding("project.package-version-drift","package.json","Package version differs from eternal-pose.json: "+name));
+   const entry=lock?.packages?.["node_modules/"+name];
+   if(!object(lock) || lock.lockfileVersion!==3 || lock.packages?.[""]?.[expected]?.[name]!==spec || !entry || entry.link || (manifest && entry.version!==manifest.packages[name])) findings.push(finding("project.lock-identity-mismatch","package-lock.json","Lock identity differs for "+name));
+  }
+  for(const section of sections) for(const name of Object.keys(object(pkg[section])?pkg[section]:{})) if(name.startsWith("@laugh-tale-island/")&&!ETERNAL_POSE_PACKAGE_NAMES.includes(name)) findings.push(finding("project.misplaced-package-dependency","package.json","Unsupported internal package: "+name));
+  if(lock?.name!==pkg.name || lock?.version!==pkg.version || lock?.packages?.[""]?.name!==pkg.name || lock?.packages?.[""]?.version!==pkg.version) findings.push(finding("project.lock-identity-mismatch","package-lock.json","Root lock identity differs."));
+  if(pkg.devDependencies?.["axe-core"]!=="4.11.0" || lock?.packages?.[""]?.devDependencies?.["axe-core"]!=="4.11.0" || lock?.packages?.["node_modules/axe-core"]?.version!=="4.11.0") findings.push(finding("project.axe-version-mismatch","package-lock.json","axe-core must remain exactly 4.11.0."));
+  if(mode==="candidate"&&manifest&&lock) await candidateArtifacts(root,manifest,pkg,lock,findings);
+ } else if(files.has("package.json") && !findings.some(item=>item.code==="project.invalid-package-json")) findings.push(finding("project.invalid-package-shape","package.json","Package must be an object."));
+ if(object(lock?.packages)) for(const [path,entry] of Object.entries(lock.packages)) if(path.includes("node_modules/@laugh-tale-island/")) {
+  if(!ETERNAL_POSE_PACKAGE_NAMES.some(name=>path==="node_modules/"+name)) findings.push(finding("project.lock-identity-mismatch","package-lock.json","Unexpected internal lock package."));
+  if(mode==="registry" && (typeof entry?.resolved!=="string" || !entry.resolved.startsWith("https://registry.npmjs.org/"))) findings.push(finding("project.non-registry-resolution","package-lock.json","Internal package resolution must use npmjs."));
+ }
+ if(manifest) {
   try {
-    const stats = await lstat(join(rootDir, relativePath));
-    return stats.isFile() && !stats.isSymbolicLink();
-  } catch (error) {
-    if (error?.code === "ENOENT") return false;
-    throw error;
-  }
+   const catalog=await loadRecipeV2Catalog(fileURLToPath(new URL("../recipes-v2",import.meta.url)));
+   const recipe=catalog.get(manifest.recipe.id).manifest.presentation;
+   for(const path of [recipe.entry,...recipe.css,recipe.copy.output]) if(!files.has("src/presentation/"+path)) findings.push(finding("project.presentation-entry-mismatch","src/presentation/"+path,"Declared presentation file is missing."));
+   for(const path of recipe.assets) if(![...files.keys()].some(name=>name.startsWith("src/presentation/"+path+"/"))) findings.push(finding("project.presentation-entry-mismatch","src/presentation/"+path,"Declared asset root is missing."));
+   const imported=[...text("src/app/App.tsx").matchAll(/from\s*["']([^"']*presentation[^"']*)["']/g)].map(match=>match[1]);
+   const approved=["../presentation","../presentation/index","../presentation/index.js","../presentation/index.ts"];
+   if(!imported.length||imported.some(path=>!approved.includes(path))) findings.push(finding("project.presentation-entry-mismatch","src/app/App.tsx","App must consume the declared presentation entry."));
+  }catch(error){findings.push(finding("project.presentation-entry-mismatch","eternal-pose.json",error.message));}
+ }
+ const catalogs=[...files.keys()].filter(path=>/^src\/presentation\/.*(?:^|\/)catalog\.ts$/.test(path));
+ if(catalogs.length!==1 || catalogs[0]!=="src/presentation/copy/catalog.ts") findings.push(finding("project.copy-catalog-mismatch","src/presentation","Exactly one materialized copy/catalog.ts is required."));
+ if(input) {
+  const locale=/export\s+const\s+locale\s*=\s*["']([^"']+)["']/.exec(text("src/presentation/copy/catalog.ts"))?.[1];
+  if(locale!==(input.trip?.locale??input.setupLocale)) findings.push(finding("project.copy-locale-mismatch","src/presentation/copy/catalog.ts","Catalog locale must equal authored locale."));
+  if(input.trip===null) findings.push(finding("trip-content.missing","src/trip-content/trip-input.json","Setup Required: trip content is not configured.",mode==="local"?"warning":"error"));
+ }
+ for(const [path,bytes] of files) if(path.startsWith("src/")) {
+  if(/(?:^|\/)(?:en\.json|zh-Hant\.json|catalog-schema\.json|resolve-copy\.ts)$/.test(path)) findings.push(finding("project.private-copy-input",path,"Private copy input must not be published."));
+  if(/\b(?:navigator|window\.navigator)\s*(?:\.\s*(?:language|languages)|\[\s*["']languages?["']\s*\])/.test(bytes.toString("utf8"))) findings.push(finding("project.browser-locale",path,"Browser locale must not replace authored locale."));
+ }
+ // Readiness is informational; neither credential is inspected by static validation.
+ findings.push(finding("provider.google-key.unverified",".env.local","Browser map readiness is checked when the app runs.","warning"));
+ try {
+  findings.push(...await scanPublicationSnapshot(root, files, {redactedPaths:snapshot.redactedPaths}));
+  const after=await projectSnapshot(root);
+  if(after.hash!==snapshot.hash)return summarize(mode,[transactionFinding()]);
+ }catch(error){return summarize(mode,[error.code==="transaction-in-progress"?transactionFinding():finding("project.validation-failure",".",error.message)]);}
+ return summarize(mode,findings);
 }
-
-async function pathIsDirectory(rootDir, relativePath) {
-  try {
-    const stats = await lstat(join(rootDir, relativePath));
-    return stats.isDirectory() && !stats.isSymbolicLink();
-  } catch (error) {
-    if (error?.code === "ENOENT") return false;
-    throw error;
-  }
-}
-
-function isPlainObject(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-export async function validateTripProject(rootDir) {
-  const resolvedRoot = resolve(rootDir);
-  const findings = await scanPublication(resolvedRoot);
-
-  for (const relativePath of REQUIRED_FILES) {
-    if (!(await pathIsFile(resolvedRoot, relativePath))) {
-      findings.push(projectFinding("project.missing-file", relativePath, `Required generated-project file is missing at "${relativePath}".`));
-    }
-  }
-
-  for (const relativePath of REQUIRED_DIRECTORIES) {
-    if (!(await pathIsDirectory(resolvedRoot, relativePath))) {
-      findings.push(
-        projectFinding(
-          "project.missing-directory",
-          relativePath,
-          `Required generated-project directory is missing at "${relativePath}".`,
-        ),
-      );
-    }
-  }
-
-  if (await pathIsFile(resolvedRoot, "package.json")) {
-    let packageJson;
-    try {
-      packageJson = JSON.parse(await readFile(join(resolvedRoot, "package.json"), "utf8"));
-    } catch {
-      findings.push(projectFinding("project.invalid-package-json", "package.json", "Generated project package.json is not valid JSON."));
-    }
-    if (packageJson !== undefined && !isPlainObject(packageJson)) {
-      findings.push(
-        projectFinding("project.invalid-package-shape", "package.json", "Generated project package.json must contain a JSON object."),
-      );
-    } else if (packageJson !== undefined && !isPlainObject(packageJson.scripts)) {
-      findings.push(
-        projectFinding(
-          "project.invalid-scripts",
-          "package.json",
-          "Generated project package.json scripts must contain a JSON object.",
-        ),
-      );
-    } else if (packageJson !== undefined) {
-      for (const script of REQUIRED_SCRIPTS) {
-        if (typeof packageJson.scripts[script] !== "string" || packageJson.scripts[script].trim() === "") {
-          findings.push(
-            projectFinding("project.missing-script", "package.json", `Required generated-project script "${script}" is missing.`),
-          );
-        }
-      }
-      const dependencies = isPlainObject(packageJson.dependencies) ? packageJson.dependencies : {};
-      for (const dependencyName of REQUIRED_PACKAGE_DEPENDENCIES) {
-        const specifier = dependencies[dependencyName];
-        if (typeof specifier !== "string" || specifier.trim() === "") {
-          findings.push(
-            projectFinding(
-              "project.missing-package-dependency",
-              "package.json",
-              `Generated project must declare "${dependencyName}" as a dependency.`,
-            ),
-          );
-        } else if (!EXACT_VERSION_PATTERN.test(specifier)) {
-          findings.push(
-            projectFinding(
-              "project.invalid-package-specifier",
-              "package.json",
-              `Dependency "${dependencyName}" must pin an exact registry version, not "${specifier}".`,
-            ),
-          );
-        }
-      }
-    }
-  }
-
-  return findings.sort((left, right) => left.path.localeCompare(right.path) || left.code.localeCompare(right.code));
-}
-
-function parseArguments(arguments_) {
-  let root = null;
-  let mode = null;
-  for (let index = 0; index < arguments_.length; index += 1) {
-    const argument = arguments_[index];
-    if (argument === "--mode") {
-      const value = arguments_[index + 1];
-      if (mode !== null || value === undefined || value.startsWith("--")) return null;
-      mode = value;
-      index += 1;
-      continue;
-    }
-    if (argument === "--root") {
-      const value = arguments_[index + 1];
-      if (root !== null || value === undefined || value.startsWith("--")) return null;
-      root = value;
-      index += 1;
-      continue;
-    }
-    if (argument.startsWith("--") || root !== null) return null;
-    root = argument;
-  }
-  if (root === null || mode === null || !isAbsolute(root) || !["local", "deploy"].includes(mode)) {
-    return null;
-  }
-  return { root: resolve(root), mode };
-}
-
-function summarize(mode, findings, commands = [], failedCommand = null) {
-  const sortedFindings = [...findings].sort(
-    (left, right) => left.path.localeCompare(right.path) || left.code.localeCompare(right.code),
-  );
-  return {
-    mode,
-    counts: {
-      errors: sortedFindings.filter(({ severity }) => severity === "error").length,
-      warnings: sortedFindings.filter(({ severity }) => severity === "warning").length,
-    },
-    findings: sortedFindings,
-    commands,
-    failedCommand,
-  };
-}
-
-function invalidArgumentsResult() {
-  return summarize(null, [
-    projectFinding(
-      "project.invalid-arguments",
-      ".",
-      "Usage: node validate-trip-project.mjs /absolute/project/path --mode local|deploy",
-    ),
-  ]);
-}
-
-function sameIdentity(left, right) {
-  return left.dev === right.dev && left.ino === right.ino;
-}
-
-function normalizeError(error) {
-  return error instanceof Error ? error : new Error("validation temp operation failed");
-}
-
-async function captureValidationParent(operations) {
-  const path = await operations.realpath(tmpdir());
-  const stats = await operations.lstat(path);
-  if (!stats.isDirectory() || stats.isSymbolicLink()) {
-    throw new Error("validation temp parent is unavailable");
-  }
-  return { path, stats };
-}
-
-async function assertValidationRootIdentity(ownership, operations) {
-  if (ownership.stats === null) {
-    throw new Error("validation temp ownership is uncertain");
-  }
-  try {
-    const parentPath = await operations.realpath(dirname(ownership.path));
-    const parentStats = await operations.lstat(parentPath);
-    const beforeStats = await operations.lstat(ownership.path);
-    const canonicalPath = await operations.realpath(ownership.path);
-    const afterStats = await operations.lstat(ownership.path);
-    if (
-      parentPath !== ownership.parent.path ||
-      !sameIdentity(parentStats, ownership.parent.stats) ||
-      canonicalPath !== ownership.path ||
-      basename(ownership.path).startsWith("eternal-pose-validation-") === false ||
-      !beforeStats.isDirectory() ||
-      beforeStats.isSymbolicLink() ||
-      !afterStats.isDirectory() ||
-      afterStats.isSymbolicLink() ||
-      !sameIdentity(beforeStats, afterStats) ||
-      !sameIdentity(afterStats, ownership.stats)
-    ) {
-      throw new Error("validation temp ownership changed");
-    }
-  } catch {
-    throw new Error("validation temp ownership changed");
-  }
-}
-
-async function assertValidationOwnership(ownership, operations) {
-  await assertValidationRootIdentity(ownership, operations);
-  if (ownership.marker.stats === null) {
-    throw new Error("validation temp ownership is uncertain");
-  }
-  try {
-    const stats = await operations.lstat(ownership.marker.path);
-    const contents = await operations.readFile(ownership.marker.path, "utf8");
-    if (
-      !stats.isFile() ||
-      stats.isSymbolicLink() ||
-      !sameIdentity(stats, ownership.marker.stats) ||
-      contents !== ownership.marker.token
-    ) {
-      throw new Error("validation temp ownership changed");
-    }
-  } catch {
-    throw new Error("validation temp ownership changed");
-  }
-}
-
-async function verifyValidationEntry(entry, operations) {
-  const stats = await operations.lstat(entry.path);
-  const expectedType = entry.type === "directory" ? stats.isDirectory() : stats.isFile();
-  if (!expectedType || stats.isSymbolicLink() || !sameIdentity(stats, entry.stats)) {
-    throw new Error("validation temp entry ownership changed");
-  }
-}
-
-async function assertValidationParentChain(ownership, destinationPath, operations) {
-  await assertValidationOwnership(ownership, operations);
-  const relativeParent = relative(ownership.path, dirname(destinationPath));
-  if (relativeParent === ".." || relativeParent.startsWith(`..${sep}`) || isAbsolute(relativeParent)) {
-    throw new Error("validation temp ownership changed");
-  }
-  let currentPath = ownership.path;
-  for (const part of relativeParent.split(sep).filter(Boolean)) {
-    currentPath = join(currentPath, part);
-    const entry = ownership.entries.find(
-      (candidate) => !candidate.removed && candidate.type === "directory" && candidate.path === currentPath,
-    );
-    if (entry === undefined) throw new Error("validation temp ownership changed");
-    await verifyValidationEntry(entry, operations);
-  }
-}
-
-async function acquireValidationDirectory(acquisition, operations) {
-  const parent = await captureValidationParent(operations);
-  const createdPath = resolve(await operations.mkdtemp(join(parent.path, "eternal-pose-validation-")));
-  const path = join(parent.path, basename(createdPath));
-  const ownership = {
-    path,
-    parent,
-    stats: null,
-    marker: {
-      path: join(path, `.laugh-tale-incomplete-${randomUUID()}`),
-      token: randomUUID(),
-      stats: null,
-    },
-    protectedEntries: [],
-    entries: [],
-    tainted: { path, type: "root" },
-  };
-  acquisition.ownership = ownership;
-  if (createdPath !== path) throw new Error("validation temp ownership changed");
-
-  const beforeStats = await operations.lstat(path);
-  const canonicalPath = await operations.realpath(path);
-  const afterStats = await operations.lstat(path);
-  if (
-    canonicalPath !== path ||
-    !beforeStats.isDirectory() ||
-    beforeStats.isSymbolicLink() ||
-    !afterStats.isDirectory() ||
-    afterStats.isSymbolicLink() ||
-    !sameIdentity(beforeStats, afterStats)
-  ) {
-    throw new Error("validation temp ownership changed");
-  }
-  ownership.stats = afterStats;
-  ownership.tainted = null;
-
-  await assertValidationRootIdentity(ownership, operations);
-  ownership.tainted = { path: ownership.marker.path, type: "marker" };
-  const handle = await operations.open(ownership.marker.path, "wx", 0o600);
-  let primaryError;
-  try {
-    const handleStats = await handle.stat();
-    const pathStats = await operations.lstat(ownership.marker.path);
-    if (
-      !handleStats.isFile() ||
-      !pathStats.isFile() ||
-      pathStats.isSymbolicLink() ||
-      !sameIdentity(handleStats, pathStats)
-    ) {
-      throw new Error("validation temp ownership changed");
-    }
-    ownership.marker.stats = pathStats;
-    await handle.writeFile(ownership.marker.token);
-    ownership.tainted = null;
-  } catch (error) {
-    primaryError = normalizeError(error);
-  }
-  try {
-    await handle.close();
-  } catch (error) {
-    primaryError ??= normalizeError(error);
-  }
-  if (primaryError !== undefined) throw primaryError;
-  await assertValidationOwnership(ownership, operations);
-  return ownership;
-}
-
-async function createValidationDirectoryEntry(ownership, name, operations) {
-  const path = join(ownership.path, name);
-  await assertValidationParentChain(ownership, path, operations);
-  if (ownership.tainted !== null) throw new Error("validation temp ownership is uncertain");
-  ownership.tainted = { path, type: "directory" };
-  await operations.mkdir(path);
-  const stats = await operations.lstat(path);
-  if (!stats.isDirectory() || stats.isSymbolicLink()) {
-    throw new Error("validation temp ownership changed");
-  }
-  const entry = { path, type: "directory", stats, removed: false };
-  ownership.entries.push(entry);
-  ownership.protectedEntries.push(entry);
-  ownership.tainted = null;
-}
-
-async function captureValidationInventory(ownership, operations) {
-  if (ownership.tainted !== null) throw new Error("validation temp ownership is uncertain");
-  await assertValidationOwnership(ownership, operations);
-  for (const entry of ownership.protectedEntries) await verifyValidationEntry(entry, operations);
-  const captured = [];
-
-  async function walk(directory) {
-    const namesBefore = (await operations.readdir(directory)).sort();
-    for (const name of namesBefore) {
-      const path = join(directory, name);
-      if (path === ownership.marker.path) {
-        if (directory !== ownership.path) throw new Error("validation temp inventory changed");
-        continue;
-      }
-      const beforeStats = await operations.lstat(path);
-      const type = beforeStats.isDirectory() ? "directory" : beforeStats.isFile() ? "file" : null;
-      if (type === null || beforeStats.isSymbolicLink()) {
-        throw new Error("validation temp inventory changed");
-      }
-      captured.push({ path, type, stats: beforeStats, removed: false });
-      if (type === "directory") await walk(path);
-      const afterStats = await operations.lstat(path);
-      if (!sameIdentity(beforeStats, afterStats)) throw new Error("validation temp inventory changed");
-    }
-    const namesAfter = (await operations.readdir(directory)).sort();
-    if (JSON.stringify(namesAfter) !== JSON.stringify(namesBefore)) {
-      throw new Error("validation temp inventory changed");
-    }
-  }
-
-  await walk(ownership.path);
-  ownership.entries = captured;
-  await verifyValidationInventory(ownership, operations);
-}
-
-async function verifyValidationInventory(ownership, operations) {
-  if (ownership.tainted !== null) throw new Error("validation temp ownership is uncertain");
-  await assertValidationOwnership(ownership, operations);
-  const expected = new Map(
-    ownership.entries.filter((entry) => !entry.removed).map((entry) => [entry.path, entry]),
-  );
-  const seen = new Set();
-
-  async function walk(directory) {
-    for (const name of await operations.readdir(directory)) {
-      const path = join(directory, name);
-      if (path === ownership.marker.path) continue;
-      const entry = expected.get(path);
-      if (entry === undefined) throw new Error("validation temp inventory changed");
-      await verifyValidationEntry(entry, operations);
-      seen.add(path);
-      if (entry.type === "directory") await walk(path);
-    }
-  }
-
-  await walk(ownership.path);
-  if (seen.size !== expected.size) throw new Error("validation temp inventory changed");
-}
-
-async function runBeforeTempMutation(operations, phase, path, validationDir) {
-  await operations.beforeTempMutation?.({ phase, path, validationDir });
-}
-
-async function cleanOwnedValidationDirectory(ownership, operations) {
-  try {
-    await verifyValidationInventory(ownership, operations);
-    for (const entry of [...ownership.entries].reverse()) {
-      if (entry.removed) continue;
-      await runBeforeTempMutation(operations, "validation-cleanup", entry.path, ownership.path);
-      await assertValidationParentChain(ownership, entry.path, operations);
-      await verifyValidationEntry(entry, operations);
-      if (entry.type === "directory") await operations.rmdir(entry.path);
-      else await operations.unlink(entry.path);
-      entry.removed = true;
-    }
-    await verifyValidationInventory(ownership, operations);
-    await runBeforeTempMutation(operations, "validation-cleanup", ownership.marker.path, ownership.path);
-    await assertValidationOwnership(ownership, operations);
-    await operations.unlink(ownership.marker.path);
-    await runBeforeTempMutation(operations, "validation-cleanup", ownership.path, ownership.path);
-    await assertValidationRootIdentity(ownership, operations);
-    await operations.rmdir(ownership.path);
-    return [];
-  } catch (error) {
-    return [normalizeError(error)];
-  }
-}
-
-function commandEnvironment(ownership) {
-  const environment = { ...process.env };
-  delete environment.VITE_GOOGLE_MAPS_API_KEY;
-  delete environment.VITE_E2E_FAKE_PROVIDER;
-  environment.ETERNAL_POSE_VALIDATION_OUT_DIR = join(ownership.path, "output");
-  environment.ETERNAL_POSE_VALIDATION_CACHE_DIR = join(ownership.path, "cache");
-  environment.ETERNAL_POSE_VALIDATION_ENV_DIR = join(ownership.path, "environment");
-  return environment;
-}
-
-async function runProjectCommand(root, command, environment, ownership, operations) {
-  await verifyValidationInventory(ownership, operations);
-  const executable = process.platform === "win32" ? "npm.cmd" : "npm";
-  const result = operations.spawnSync(executable, command.arguments, {
-    cwd: root,
-    shell: false,
-    stdio: "inherit",
-    env: environment,
-  });
-  await captureValidationInventory(ownership, operations);
-  return result.status ?? 1;
-}
-
-async function readTripReadiness(ownership, operations) {
-  await verifyValidationInventory(ownership, operations);
-  const entryPath = join(ownership.path, "output", "validation", "readiness.mjs");
-  const entry = ownership.entries.find(
-    (candidate) => !candidate.removed && candidate.path === entryPath && candidate.type === "file",
-  );
-  if (entry === undefined) throw new Error("built readiness entry is not owned");
-  await verifyValidationEntry(entry, operations);
-  const module = await operations.importModule(pathToFileURL(entryPath).href);
-  await captureValidationInventory(ownership, operations);
-  const readiness = module.tripContentReadiness;
-  if (
-    !isPlainObject(readiness) ||
-    typeof readiness.hasTripContent !== "boolean" ||
-    Object.keys(readiness).length !== 1
-  ) {
-    throw new Error("built readiness entry has an invalid shape");
-  }
-  return readiness.hasTripContent;
-}
-
-export async function runValidation(root, mode, testOperations = {}) {
-  const operations = { ...DEFAULT_VALIDATION_OPERATIONS, ...testOperations };
-  const findings = await validateTripProject(root);
-  if (findings.some(({ severity }) => severity === "error")) {
-    return summarize(mode, findings);
-  }
-
-  const acquisition = { ownership: null };
-  let ownership;
-  const commands = [];
-  let failedCommand = null;
-  let phase = "ownership";
-  try {
-    ownership = await acquireValidationDirectory(acquisition, operations);
-    phase = "validation";
-    for (const name of ["output", "cache", "environment"]) {
-      await createValidationDirectoryEntry(ownership, name, operations);
-    }
-    await captureValidationInventory(ownership, operations);
-    const environment = commandEnvironment(ownership);
-    for (const command of COMMANDS) {
-      const exitCode = await runProjectCommand(root, command, environment, ownership, operations);
-      const commandResult = { command: command.command, exitCode };
-      commands.push(commandResult);
-      if (exitCode !== 0) {
-        failedCommand = commandResult;
-        findings.push(projectFinding(
-          "project.command-failed",
-          "package.json",
-          `Generated-project command failed: ${command.command} (exit ${exitCode}).`,
-        ));
-        break;
-      }
-    }
-
-    if (failedCommand === null) {
-      const hasTripContent = await readTripReadiness(ownership, operations);
-      const hasGoogleKey = (process.env.VITE_GOOGLE_MAPS_API_KEY?.trim().length ?? 0) > 0;
-      const severity = mode === "deploy" ? "error" : "warning";
-      if (!hasTripContent) {
-        findings.push(finding(
-          severity,
-          "trip-content.missing",
-          "src/trip-content/trip.ts",
-          "Generated trip content is not configured.",
-        ));
-      }
-      if (!hasGoogleKey) {
-        findings.push(finding(
-          severity,
-          "provider.google-key.missing",
-          ".env.local",
-          "Google Maps provider configuration is missing.",
-        ));
-      }
-    }
-  } catch {
-    ownership = acquisition.ownership;
-    findings.push(projectFinding(
-      phase === "ownership" ? "project.validation-ownership-failed" : "project.validation-failure",
-      ".",
-      phase === "ownership"
-        ? "Validation temp ownership could not be established safely."
-        : "Trip project validation could not complete its isolated checks.",
-    ));
-  } finally {
-    if (ownership !== undefined && ownership !== null) {
-      const cleanupErrors = await cleanOwnedValidationDirectory(ownership, operations);
-      if (cleanupErrors.length > 0) {
-        findings.push(projectFinding(
-          "project.validation-cleanup-failed",
-          ".",
-          "Owned validation output could not be cleaned safely because its identity or inventory changed.",
-        ));
-      }
-    }
-  }
-  return summarize(mode, findings, commands, failedCommand);
-}
-
-function isMainModule() {
-  return process.argv[1] !== undefined && pathToFileURL(resolve(process.argv[1])).href === import.meta.url;
-}
-
-if (isMainModule()) {
-  const request = parseArguments(process.argv.slice(2));
-  let result;
-  if (request === null) {
-    result = invalidArgumentsResult();
-  } else {
-    try {
-      result = await runValidation(request.root, request.mode);
-    } catch {
-      result = summarize(request.mode, [
-        projectFinding(
-          "project.validation-failure",
-          ".",
-          "Trip project validation could not inspect the requested root.",
-        ),
-      ]);
-    }
-  }
-  console.log(`${RESULT_PREFIX}${JSON.stringify(result)}`);
-  if (result.counts.errors > 0) process.exitCode = 1;
+if(process.argv[1] && pathToFileURL(resolve(process.argv[1])).href===import.meta.url) {
+ const request=parseArguments(process.argv.slice(2));
+ const result=request?await validateTripProject(request.root,request.mode):invalidArgumentsResult();
+ console.log("ETERNAL_POSE_VALIDATION_RESULT "+JSON.stringify(result));
+ if(result.counts.errors)process.exitCode=1;
 }

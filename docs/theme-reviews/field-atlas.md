@@ -1,5 +1,7 @@
 # Field Atlas authored-world review
 
+This historical review is retained as implementation context with source commit identifiers omitted. Its recorded measurements are not a new verification run for the public snapshot.
+
 ## Completed controller browser record
 
 **Controller browser matrix: complete.** The controller inspected Home; default and expanded Experience; candidate, reservation, and task interactions; provider-key, provider-load, loading, map-error, and fatal states; and all three itinerary sheet snaps. Normal mobile coverage used `320x568`, `390x844`, and `430x932`. Desktop coverage used `768`, `1024`, and `1440` CSS-pixel widths, with representative captures at `1440x1000`.
@@ -24,7 +26,7 @@ The controller pass first exposed defects that headless review missed:
 - At normal `320`, `390`, and `430` widths, expanded-header scroll heights were `233px`, `195px`, and `172px` against the fixed header. The stacked sheet toolbar occupied `101px`.
 - Recipe-owned copy fragmented between English and Traditional Chinese despite the English document and fixture.
 
-Commit `6060810` corrected those findings. The post-fix controller measurements were:
+The controller fixes corrected those findings. The post-fix controller measurements were:
 
 - At `1440x1000`, the title is `220x46`, the primary rail region is `236x148`, date buttons form a vertical `236x56` stack, and the date rail is a `236px`-wide grid.
 - The map occupies `x=240..1056`; the detail sheet occupies `x=1056..1428`. The provider control remains `44x44`, and provider control and attribution stay contained.
@@ -49,11 +51,11 @@ The focused presentation fixture also renders Traditional Chinese authored conte
 
 These automated browser and contract results were subsequently confirmed with the four-day fixture in the controller's in-app-browser matrix.
 
-The controller's classic-scrollbar pre-fix recheck of commit `896b326` found a platform-specific containment defect that overlay-scrollbar Chromium did not reproduce. At 320, the `144x61` buttons fit above the `156px` header bottom, but the native scrollbar expanded the `300/576` client/scroll-width rail to `76px` high and a `165px` bottom; the header measured `155/144` scroll/client height. At 390, the `160x61` buttons also fit, but the `370/640` rail reached a `165.5px` bottom and the header measured `156/144`. Label readability and document horizontal overflow remained correct, and 430 plus desktop were contained.
+The controller's classic-scrollbar pre-fix recheck found a platform-specific containment defect that overlay-scrollbar Chromium did not reproduce. At 320, the `144x61` buttons fit above the `156px` header bottom, but the native scrollbar expanded the `300/576` client/scroll-width rail to `76px` high and a `165px` bottom; the header measured `155/144` scroll/client height. At 390, the `160x61` buttons also fit, but the `370/640` rail reached a `165.5px` bottom and the header measured `156/144`. Label readability and document horizontal overflow remained correct, and 430 plus desktop were contained.
 
 The normal-mobile cross-engine rule now keeps `overflow-x:auto` and scroll snapping while the native scrollbar is visually suppressed. The rail remains keyboard, touch, and wheel scrollable; focus-driven scrolling still moves `scrollLeft` and brings the last `44px`-minimum day target fully into view. The partially visible next day remains the visual affordance. Desktop retains its vertical rail, and the `<=15rem` document-flow override remains unchanged.
 
-The controller's completed post-fix IAB matrix on commit `ca866a0` measured header scroll/client heights of `140/140`, `141/141`, and `125/125` at 320, 390, and 430. Each rail remained approximately `61px` high with client/scroll widths of `300/576`, `370/640`, and `410/640`; computed `overflow-x` remained `auto` and `scrollbar-width` was `none`. Every day button remained `144–160px` wide, all labels fit, and document horizontal overflow was zero. At 1440, the date rail remained a vertical `236px` grid with `236px` buttons and no overflow.
+The controller's completed post-fix IAB matrix measured header scroll/client heights of `140/140`, `141/141`, and `125/125` at 320, 390, and 430. Each rail remained approximately `61px` high with client/scroll widths of `300/576`, `370/640`, and `410/640`; computed `overflow-x` remained `auto` and `scrollbar-width` was `none`. Every day button remained `144–160px` wide, all labels fit, and document horizontal overflow was zero. At 1440, the date rail remained a vertical `236px` grid with `236px` buttons and no overflow.
 
 At 320, activating Day 4 through its actual accessible locator moved the rail to its maximum `scrollLeft` of `276`, fully contained the selected button, switched the visible itinerary to Day 4, and left the header contained. The existing grayscale and accent-substitution captures are unchanged.
 

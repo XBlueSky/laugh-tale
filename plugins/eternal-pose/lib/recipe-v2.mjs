@@ -6,7 +6,14 @@ export const RECIPE_SCHEMA_VERSION = 2;
 const DEFAULT_OPERATIONS = { lstat, readFile, readdir, realpath };
 const REQUIRED_VIEWPORTS = [320, 390, 430, 768, 1024, 1440];
 const FEATURES = new Set(["media", "desktop-windows", "dense-telemetry"]);
-const SCREENSHOTS = new Set(["home", "experience", "experience-expanded"]);
+const SCREENSHOTS = new Set([
+  "home", "experience", "experience-expanded", "experience-default",
+  "experience-collapsed-current", "experience-expanded-dense", "candidate-open",
+  "candidate-zoom-200", "selection-truth", "route-state-matrix",
+  "opening-hours-matrix", "camera-adversarial", "marker-backends", "map-error",
+  "setup-states", "loading-owned", "runtime-degraded", "accessibility-media",
+  "desktop-bounded",
+]);
 
 function isWithin(parent, candidate) {
   const relativePath = relative(parent, candidate);
@@ -108,12 +115,28 @@ function buildManifest(value, expectedId) {
   const summary = nonblankString(value.summary, "summary");
   const register = enumValue(value.register, ["product"], "register");
 
-  exactKeys(value.presentation, ["source", "entry", "css", "assets"], "presentation");
+  exactKeys(value.presentation, ["source", "entry", "css", "assets", "copy"], "presentation");
+  let copy;
+  if (value.presentation.copy !== undefined) {
+    const declared = value.presentation.copy;
+    exactKeys(declared, ["schema", "references", "resolver", "output"], "presentation.copy");
+    exactKeys(declared.references, ["en", "zh-Hant"], "presentation.copy.references");
+    copy = Object.freeze({
+      schema: normalizedRelativePath(declared.schema, "presentation.copy.schema"),
+      references: Object.freeze({
+        en: normalizedRelativePath(declared.references.en, "presentation.copy.references.en"),
+        "zh-Hant": normalizedRelativePath(declared.references["zh-Hant"], "presentation.copy.references.zh-Hant"),
+      }),
+      resolver: normalizedRelativePath(declared.resolver, "presentation.copy.resolver"),
+      output: normalizedRelativePath(declared.output, "presentation.copy.output"),
+    });
+  }
   const presentation = {
     source: enumValue(value.presentation.source, ["presentation"], "presentation.source"),
     entry: normalizedRelativePath(value.presentation.entry, "presentation.entry"),
     css: normalizedPathArray(value.presentation.css, "presentation.css"),
     assets: normalizedPathArray(value.presentation.assets, "presentation.assets"),
+    ...(copy === undefined ? {} : { copy }),
   };
 
   exactKeys(value.map, ["profile", "googleStyleGuide"], "map");
@@ -163,7 +186,7 @@ function buildManifest(value, expectedId) {
     label,
     summary,
     register,
-    presentation: Object.freeze({ source: presentation.source, entry: presentation.entry, css: freezeArray(presentation.css), assets: freezeArray(presentation.assets) }),
+    presentation: Object.freeze({ source: presentation.source, entry: presentation.entry, css: freezeArray(presentation.css), assets: freezeArray(presentation.assets), ...(copy === undefined ? {} : { copy }) }),
     map: Object.freeze(map),
     motion: Object.freeze(motion),
     features,
@@ -185,6 +208,15 @@ export async function loadRecipeV2(recipeDir, expectedId, operations_ = {}) {
   const assetRoots = freezeArray(await Promise.all(manifest.presentation.assets.map((path, index) =>
     canonicalDeclaredPath(presentationRoot, path, `presentation.assets[${index}]`, "directory", operations),
   )));
+  const copy = manifest.presentation.copy === undefined ? undefined : Object.freeze({
+    schema: await canonicalDeclaredPath(presentationRoot, manifest.presentation.copy.schema, "presentation.copy.schema", "file", operations),
+    references: Object.freeze({
+      en: await canonicalDeclaredPath(presentationRoot, manifest.presentation.copy.references.en, "presentation.copy.references.en", "file", operations),
+      "zh-Hant": await canonicalDeclaredPath(presentationRoot, manifest.presentation.copy.references["zh-Hant"], "presentation.copy.references.zh-Hant", "file", operations),
+    }),
+    resolver: await canonicalDeclaredPath(presentationRoot, manifest.presentation.copy.resolver, "presentation.copy.resolver", "file", operations),
+    output: await canonicalDeclaredPath(presentationRoot, manifest.presentation.copy.output, "presentation.copy.output", "file", operations),
+  });
   const mapProfile = await canonicalDeclaredPath(root, manifest.map.profile, "map.profile", "file", operations);
   const googleStyleGuide = manifest.map.googleStyleGuide === undefined
     ? undefined
@@ -201,6 +233,7 @@ export async function loadRecipeV2(recipeDir, expectedId, operations_ = {}) {
     presentationEntry,
     cssFiles,
     assetRoots,
+    copy,
     mapProfile,
     googleStyleGuide,
   });

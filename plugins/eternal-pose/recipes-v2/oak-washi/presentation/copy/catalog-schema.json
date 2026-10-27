@@ -1,0 +1,1082 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://laugh-tale.dev/schemas/oak-washi-copy.schema.json",
+  "title": "Oak & Washi copy catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "accessibleNames",
+    "booking",
+    "candidate",
+    "certainty",
+    "experience",
+    "facts",
+    "fatal",
+    "home",
+    "loading",
+    "location",
+    "metadata",
+    "navigation",
+    "openingHours",
+    "persistence",
+    "progress",
+    "provider",
+    "roles",
+    "routes",
+    "setup",
+    "status",
+    "timeline",
+    "timing",
+    "types"
+  ],
+  "properties": {
+    "accessibleNames": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidateDialog",
+        "collapseDayRail",
+        "collapseSheet",
+        "dayRail",
+        "expandDayRail",
+        "expandSheet",
+        "header",
+        "itinerarySheet",
+        "map",
+        "marker",
+        "openDetails",
+        "route",
+        "userLocation"
+      ],
+      "properties": {
+        "candidateDialog": {
+          "type": "string"
+        },
+        "collapseDayRail": {
+          "type": "string"
+        },
+        "collapseSheet": {
+          "type": "string"
+        },
+        "dayRail": {
+          "type": "string"
+        },
+        "expandDayRail": {
+          "type": "string"
+        },
+        "expandSheet": {
+          "type": "string"
+        },
+        "header": {
+          "type": "string"
+        },
+        "itinerarySheet": {
+          "type": "string"
+        },
+        "map": {
+          "type": "string"
+        },
+        "marker": {
+          "type": "string"
+        },
+        "openDetails": {
+          "type": "string"
+        },
+        "route": {
+          "type": "string"
+        },
+        "userLocation": {
+          "type": "string"
+        }
+      }
+    },
+    "booking": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "confirmed",
+        "none",
+        "open",
+        "pending",
+        "reference"
+      ],
+      "properties": {
+        "confirmed": {
+          "type": "string"
+        },
+        "none": {
+          "type": "string"
+        },
+        "open": {
+          "type": "string"
+        },
+        "pending": {
+          "type": "string"
+        },
+        "reference": {
+          "type": "string"
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "browse",
+        "cancel",
+        "confirm",
+        "draft",
+        "open",
+        "preview",
+        "reopen",
+        "selected",
+        "single",
+        "title",
+        "unresolved"
+      ],
+      "properties": {
+        "browse": {
+          "type": "string"
+        },
+        "cancel": {
+          "type": "string"
+        },
+        "confirm": {
+          "type": "string"
+        },
+        "draft": {
+          "type": "string"
+        },
+        "open": {
+          "type": "string"
+        },
+        "preview": {
+          "type": "string"
+        },
+        "reopen": {
+          "type": "string"
+        },
+        "selected": {
+          "type": "string"
+        },
+        "single": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "unresolved": {
+          "type": "string"
+        }
+      }
+    },
+    "certainty": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate",
+        "confirmed",
+        "suggested",
+        "unverified"
+      ],
+      "properties": {
+        "candidate": {
+          "type": "string"
+        },
+        "confirmed": {
+          "type": "string"
+        },
+        "suggested": {
+          "type": "string"
+        },
+        "unverified": {
+          "type": "string"
+        }
+      }
+    },
+    "experience": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "collapseDayRail",
+        "collapseSheet",
+        "day",
+        "dayOfTrip",
+        "expandDayRail",
+        "expandSheet",
+        "home",
+        "itinerary",
+        "mapCoverageNone",
+        "mapCoveragePartial",
+        "primaryCount",
+        "summary",
+        "tripTime"
+      ],
+      "properties": {
+        "collapseDayRail": {
+          "type": "string"
+        },
+        "collapseSheet": {
+          "type": "string"
+        },
+        "day": {
+          "type": "string"
+        },
+        "dayOfTrip": {
+          "type": "string"
+        },
+        "expandDayRail": {
+          "type": "string"
+        },
+        "expandSheet": {
+          "type": "string"
+        },
+        "home": {
+          "type": "string"
+        },
+        "itinerary": {
+          "type": "string"
+        },
+        "mapCoverageNone": {
+          "type": "string"
+        },
+        "mapCoveragePartial": {
+          "type": "string"
+        },
+        "primaryCount": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "tripTime": {
+          "type": "string"
+        }
+      }
+    },
+    "facts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "area",
+        "arrivalBuffer",
+        "base",
+        "bus",
+        "checkIn",
+        "checkOut",
+        "checklist",
+        "cuisine",
+        "customKind",
+        "duration",
+        "false",
+        "meters",
+        "mode",
+        "must",
+        "nice",
+        "plan",
+        "priority",
+        "rail",
+        "return",
+        "status",
+        "terminal",
+        "true",
+        "unverifiedLocation",
+        "unverifiedLocationConsequence"
+      ],
+      "properties": {
+        "area": {
+          "type": "string"
+        },
+        "arrivalBuffer": {
+          "type": "string"
+        },
+        "base": {
+          "type": "string"
+        },
+        "bus": {
+          "type": "string"
+        },
+        "checkIn": {
+          "type": "string"
+        },
+        "checkOut": {
+          "type": "string"
+        },
+        "checklist": {
+          "type": "string"
+        },
+        "cuisine": {
+          "type": "string"
+        },
+        "customKind": {
+          "type": "string"
+        },
+        "duration": {
+          "type": "string"
+        },
+        "false": {
+          "type": "string"
+        },
+        "meters": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "must": {
+          "type": "string"
+        },
+        "nice": {
+          "type": "string"
+        },
+        "plan": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "string"
+        },
+        "rail": {
+          "type": "string"
+        },
+        "return": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "terminal": {
+          "type": "string"
+        },
+        "true": {
+          "type": "string"
+        },
+        "unverifiedLocation": {
+          "type": "string"
+        },
+        "unverifiedLocationConsequence": {
+          "type": "string"
+        }
+      }
+    },
+    "fatal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "externalNavigationRetained",
+        "homeRetained",
+        "itineraryRetained",
+        "openHome",
+        "provider",
+        "render",
+        "retry",
+        "state",
+        "title"
+      ],
+      "properties": {
+        "externalNavigationRetained": {
+          "type": "string"
+        },
+        "homeRetained": {
+          "type": "string"
+        },
+        "itineraryRetained": {
+          "type": "string"
+        },
+        "openHome": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "render": {
+          "type": "string"
+        },
+        "retry": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      }
+    },
+    "home": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dates",
+        "days",
+        "destination",
+        "lodging",
+        "noLodging",
+        "noReservations",
+        "noTasks",
+        "openDay",
+        "openExperience",
+        "reservations",
+        "tasks",
+        "title",
+        "travelers"
+      ],
+      "properties": {
+        "dates": {
+          "type": "string"
+        },
+        "days": {
+          "type": "string"
+        },
+        "destination": {
+          "type": "string"
+        },
+        "lodging": {
+          "type": "string"
+        },
+        "noLodging": {
+          "type": "string"
+        },
+        "noReservations": {
+          "type": "string"
+        },
+        "noTasks": {
+          "type": "string"
+        },
+        "openDay": {
+          "type": "string"
+        },
+        "openExperience": {
+          "type": "string"
+        },
+        "reservations": {
+          "type": "string"
+        },
+        "tasks": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "travelers": {
+          "type": "string"
+        }
+      }
+    },
+    "loading": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "experience",
+        "home",
+        "location",
+        "map",
+        "places",
+        "progress",
+        "routes",
+        "title"
+      ],
+      "properties": {
+        "experience": {
+          "type": "string"
+        },
+        "home": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string"
+        },
+        "map": {
+          "type": "string"
+        },
+        "places": {
+          "type": "string"
+        },
+        "progress": {
+          "type": "string"
+        },
+        "routes": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      }
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "active",
+        "denied",
+        "idle",
+        "locate",
+        "recenter",
+        "requesting",
+        "stop",
+        "unavailable",
+        "waitingForFix"
+      ],
+      "properties": {
+        "active": {
+          "type": "string"
+        },
+        "denied": {
+          "type": "string"
+        },
+        "idle": {
+          "type": "string"
+        },
+        "locate": {
+          "type": "string"
+        },
+        "recenter": {
+          "type": "string"
+        },
+        "requesting": {
+          "type": "string"
+        },
+        "stop": {
+          "type": "string"
+        },
+        "unavailable": {
+          "type": "string"
+        },
+        "waitingForFix": {
+          "type": "string"
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "productName",
+        "setupDescription",
+        "setupTitle"
+      ],
+      "properties": {
+        "productName": {
+          "type": "string"
+        },
+        "setupDescription": {
+          "type": "string"
+        },
+        "setupTitle": {
+          "type": "string"
+        }
+      }
+    },
+    "navigation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "open",
+        "restoreFullDay",
+        "returnToCurrent",
+        "returnToLodging",
+        "unavailable"
+      ],
+      "properties": {
+        "open": {
+          "type": "string"
+        },
+        "restoreFullDay": {
+          "type": "string"
+        },
+        "returnToCurrent": {
+          "type": "string"
+        },
+        "returnToLodging": {
+          "type": "string"
+        },
+        "unavailable": {
+          "type": "string"
+        }
+      }
+    },
+    "openingHours": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "absent",
+        "alwaysOpen",
+        "closed",
+        "incomplete",
+        "invalid",
+        "open",
+        "permanentlyClosed",
+        "temporarilyClosed",
+        "unknown"
+      ],
+      "properties": {
+        "absent": {
+          "type": "string"
+        },
+        "alwaysOpen": {
+          "type": "string"
+        },
+        "closed": {
+          "type": "string"
+        },
+        "incomplete": {
+          "type": "string"
+        },
+        "invalid": {
+          "type": "string"
+        },
+        "open": {
+          "type": "string"
+        },
+        "permanentlyClosed": {
+          "type": "string"
+        },
+        "temporarilyClosed": {
+          "type": "string"
+        },
+        "unknown": {
+          "type": "string"
+        }
+      }
+    },
+    "persistence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cancelReset",
+        "confirmReset",
+        "manageProgress",
+        "memoryOnly",
+        "memoryOnlyNotice",
+        "persistent",
+        "resetDay",
+        "resetDayScope",
+        "resetDone",
+        "resetExplanation",
+        "resetTrip"
+      ],
+      "properties": {
+        "cancelReset": { "type": "string" },
+        "confirmReset": { "type": "string" },
+        "manageProgress": { "type": "string" },
+        "memoryOnly": {
+          "type": "string"
+        },
+        "memoryOnlyNotice": {
+          "type": "string"
+        },
+        "persistent": {
+          "type": "string"
+        },
+        "resetDay": {
+          "type": "string"
+        },
+        "resetDayScope": { "type": "string" },
+        "resetDone": { "type": "string" },
+        "resetExplanation": { "type": "string" },
+        "resetTrip": {
+          "type": "string"
+        }
+      }
+    },
+    "progress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "complete",
+        "completedOfTotal",
+        "markComplete",
+        "markIncomplete",
+        "pending",
+        "purchased",
+        "restore",
+        "skip",
+        "skipped",
+        "unavailable"
+      ],
+      "properties": {
+        "complete": {
+          "type": "string"
+        },
+        "completedOfTotal": {
+          "type": "string"
+        },
+        "markComplete": {
+          "type": "string"
+        },
+        "markIncomplete": {
+          "type": "string"
+        },
+        "pending": {
+          "type": "string"
+        },
+        "purchased": {
+          "type": "string"
+        },
+        "restore": {
+          "type": "string"
+        },
+        "skip": {
+          "type": "string"
+        },
+        "skipped": {
+          "type": "string"
+        },
+        "unavailable": {
+          "type": "string"
+        }
+      }
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cancelled",
+        "idle",
+        "implausibleResult",
+        "loaderFailed",
+        "loading",
+        "malformedResponse",
+        "map",
+        "missingConfiguration",
+        "network",
+        "notFound",
+        "places",
+        "ready",
+        "requestDenied",
+        "retry",
+        "routes",
+        "unavailable",
+        "unsupported"
+      ],
+      "properties": {
+        "cancelled": {
+          "type": "string"
+        },
+        "idle": {
+          "type": "string"
+        },
+        "implausibleResult": {
+          "type": "string"
+        },
+        "loaderFailed": {
+          "type": "string"
+        },
+        "loading": {
+          "type": "string"
+        },
+        "malformedResponse": {
+          "type": "string"
+        },
+        "map": {
+          "type": "string"
+        },
+        "missingConfiguration": {
+          "type": "string"
+        },
+        "network": {
+          "type": "string"
+        },
+        "notFound": {
+          "type": "string"
+        },
+        "places": {
+          "type": "string"
+        },
+        "ready": {
+          "type": "string"
+        },
+        "requestDenied": {
+          "type": "string"
+        },
+        "retry": {
+          "type": "string"
+        },
+        "routes": {
+          "type": "string"
+        },
+        "unavailable": {
+          "type": "string"
+        },
+        "unsupported": {
+          "type": "string"
+        }
+      }
+    },
+    "roles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "base",
+        "connector",
+        "journey",
+        "logisticsGroup",
+        "primary",
+        "task"
+      ],
+      "properties": {
+        "base": {
+          "type": "string"
+        },
+        "connector": {
+          "type": "string"
+        },
+        "journey": {
+          "type": "string"
+        },
+        "logisticsGroup": {
+          "type": "string"
+        },
+        "primary": {
+          "type": "string"
+        },
+        "task": {
+          "type": "string"
+        }
+      }
+    },
+    "routes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authoredFallback",
+        "distance",
+        "driving",
+        "duration",
+        "external",
+        "flight",
+        "idle",
+        "loading",
+        "manual",
+        "noDetails",
+        "provider",
+        "ready",
+        "recomposed",
+        "retry",
+        "steps",
+        "transit",
+        "unavailable",
+        "unknown",
+        "walking"
+      ],
+      "properties": {
+        "authoredFallback": {
+          "type": "string"
+        },
+        "distance": {
+          "type": "string"
+        },
+        "driving": {
+          "type": "string"
+        },
+        "duration": {
+          "type": "string"
+        },
+        "external": {
+          "type": "string"
+        },
+        "flight": {
+          "type": "string"
+        },
+        "idle": {
+          "type": "string"
+        },
+        "loading": {
+          "type": "string"
+        },
+        "manual": {
+          "type": "string"
+        },
+        "noDetails": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "ready": {
+          "type": "string"
+        },
+        "recomposed": {
+          "type": "string"
+        },
+        "retry": {
+          "type": "string"
+        },
+        "steps": {
+          "type": "string"
+        },
+        "transit": {
+          "type": "string"
+        },
+        "unavailable": {
+          "type": "string"
+        },
+        "unknown": {
+          "type": "string"
+        },
+        "walking": {
+          "type": "string"
+        }
+      }
+    },
+    "setup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "invalidTrip",
+        "missingTrip",
+        "retry",
+        "title"
+      ],
+      "properties": {
+        "invalidTrip": {
+          "type": "string"
+        },
+        "missingTrip": {
+          "type": "string"
+        },
+        "retry": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      }
+    },
+    "status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate",
+        "completed",
+        "current",
+        "next",
+        "selected",
+        "skipped",
+        "unresolved",
+        "viewing"
+      ],
+      "properties": {
+        "candidate": {
+          "type": "string"
+        },
+        "completed": {
+          "type": "string"
+        },
+        "current": {
+          "type": "string"
+        },
+        "next": {
+          "type": "string"
+        },
+        "selected": {
+          "type": "string"
+        },
+        "skipped": {
+          "type": "string"
+        },
+        "unresolved": {
+          "type": "string"
+        },
+        "viewing": {
+          "type": "string"
+        }
+      }
+    },
+    "timeline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "logisticsGroup"
+      ],
+      "properties": {
+        "logisticsGroup": {
+          "type": "string"
+        }
+      }
+    },
+    "timing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end",
+        "fixed",
+        "nextDay",
+        "range",
+        "start",
+        "suggested",
+        "unknown",
+        "untimed"
+      ],
+      "properties": {
+        "end": {
+          "type": "string"
+        },
+        "fixed": {
+          "type": "string"
+        },
+        "nextDay": {
+          "type": "string"
+        },
+        "range": {
+          "type": "string"
+        },
+        "start": {
+          "type": "string"
+        },
+        "suggested": {
+          "type": "string"
+        },
+        "unknown": {
+          "type": "string"
+        },
+        "untimed": {
+          "type": "string"
+        }
+      }
+    },
+    "types": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "custom",
+        "dining",
+        "experience",
+        "lodging",
+        "logistics",
+        "shopping",
+        "sightseeing",
+        "transfer",
+        "transport"
+      ],
+      "properties": {
+        "custom": {
+          "type": "string"
+        },
+        "dining": {
+          "type": "string"
+        },
+        "experience": {
+          "type": "string"
+        },
+        "lodging": {
+          "type": "string"
+        },
+        "logistics": {
+          "type": "string"
+        },
+        "shopping": {
+          "type": "string"
+        },
+        "sightseeing": {
+          "type": "string"
+        },
+        "transfer": {
+          "type": "string"
+        },
+        "transport": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

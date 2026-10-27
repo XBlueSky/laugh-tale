@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+test-results/
+playwright-report/
+.env.local
+.eternal-pose-review.json
+.eternal-pose-selection.json
+.DS_Store
+*.tsbuildinfo

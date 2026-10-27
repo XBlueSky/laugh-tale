@@ -1,21 +1,15 @@
-import type { RouteEdge } from "@laugh-tale-island/core";
-import type { RouteResult } from "@laugh-tale-island/core";
-import type { RouteAdapter } from "@laugh-tale-island/core/browser";
-export type RouteLoadState = RouteResult | {
-    status: "loading";
-};
+import { type RouteProviderResult, type RouteRequestV2, type RouteRuntimeState } from "@laugh-tale-island/core";
+import type { RouteAdapterV2 } from "@laugh-tale-island/core/browser";
+export type RouteLoadState = RouteRuntimeState;
 export interface RouteStates {
     states: Readonly<Record<string, RouteLoadState>>;
-    mapResults: Readonly<Record<string, RouteResult>>;
+    mapResults: Readonly<Record<string, Extract<RouteProviderResult, {
+        status: "ready";
+    }>>>;
     retry(routeId: string): boolean;
 }
 export interface UseRouteStatesOptions {
-    /**
-     * Maps an adapter failure to the `reason` carried by the unavailable
-     * result. The default keeps a non-blank `Error` message (provider data)
-     * and otherwise returns an empty string; visible copy belongs to the
-     * consuming site.
-     */
+    /** Converts adapter failures to non-display diagnostic data. */
     adapterErrorReason?: (error: unknown) => string;
 }
-export declare function useRouteStates(routes: readonly RouteEdge[], routeAdapterFactory?: () => RouteAdapter, options?: UseRouteStatesOptions): RouteStates;
+export declare function useRouteStates(requests: readonly RouteRequestV2[], routeAdapterFactory?: () => RouteAdapterV2, options?: UseRouteStatesOptions): RouteStates;

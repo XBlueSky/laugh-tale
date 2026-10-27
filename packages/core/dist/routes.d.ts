@@ -9,6 +9,8 @@ export type RoutePresentationDay = TripDay & {
     routes: readonly RouteEdge[];
 };
 export interface RouteOwnerOptions {
+    /** Providers supported by the navigation adapter; no provider is implicit. */
+    supportedNavigationProviders?: readonly string[];
     /**
      * How to handle duplicate route owner IDs. `validateTrip` already reports
      * duplicates as structured issues; `"throw"` turns them into a hard error

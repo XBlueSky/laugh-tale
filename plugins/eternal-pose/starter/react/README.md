@@ -10,11 +10,31 @@ npm ci
 npm run dev
 ```
 
-`npm ci` installs the exact pinned `@laugh-tale-island/core` and `@laugh-tale-island/react` versions from the public npm registry.
+`npm ci` installs the exact pinned core, react and adapters packages, plus the
+development-only testing package, from the public npm registry. Contributors
+validating unpublished versions must use the toolkit's staged-consumer workflow.
 
-Add your itinerary in `src/trip-content/trip.ts`, then set `VITE_GOOGLE_MAPS_API_KEY` in `.env.local`. Missing trip content or a missing key intentionally renders a configuration-required screen; it never substitutes a fake map or claims Google is connected.
+Author your itinerary in `src/trip-content/trip-input.json`; keep accepted place
+evidence in `src/trip-content/place-resolutions.json`. The `trip.ts` module only
+materializes those inputs. Prefer the toolkit's Create/Update/Enrich workflows
+to maintain their schema and provenance, then choose the keyless map below or
+configure Google. Missing trip content renders Setup; map configuration failures
+preserve authored Home and itinerary content. The site never substitutes a fake
+map or claims a provider is connected.
 
 Before editing the experience, read [docs/trip-experience-contract.md](docs/trip-experience-contract.md). Run `npm run check` after ordinary changes and `npm run test:e2e` after changing a protected interaction contract.
+
+## Keyless Oak & Washi map
+
+Set `VITE_MAP_PROVIDER=maplibre` in your local build configuration. This uses MapLibre GL JS 6.10.0 and the OpenStreetMap Shortbread v1 public vector service, with no Google key or paid Google initialization. Old Google Places/Routes flags are ignored in this mode. Blank/omitted `VITE_MAP_PROVIDER` preserves the Google option; unsupported values fail visibly, never silently switch providers.
+
+The OSM public service is for modest interactive previews, with no availability or unlimited-free-usage promise. Keep the visible OpenStreetMap attribution, normal browser Referer and caching. Do not bulk-download, prefetch, scrape or package its tiles for offline use. Ordinary viewing sends the requested map area and browser network metadata to the tile service; itinerary names and owner IDs are not sent. For production traffic, choose a compatible service you are entitled to use through `VITE_MAPLIBRE_TILEJSON_URL` (HTTPS, same-origin tile templates, no URL credentials/query). No remote style or glyph server is loaded. The SDK worker and CSS are bundled locally; system fonts generate labels locally. WebGL2 is required.
+
+The default viewing center is the world, not an invented trip place. To set an initial overview, provide all three `VITE_MAPLIBRE_INITIAL_LAT`, `VITE_MAPLIBRE_INITIAL_LNG`, `VITE_MAPLIBRE_INITIAL_ZOOM` values; valid trip camera requests override it. Viewing configuration does not establish place resolution. The public `examples/meridian` site uses fictional trip details and coordinates as labelled test input, not personal travel records or verified provider data. Station labels become available from source zoom 13.
+
+This option supplies a basemap, not geocoding, live routes or opening hours. Unresolved places remain unmarked. Provider-tagged coordinates and provider routes are conservatively refused before enabling the free map; review provenance rather than removing its tags. Untagged historical coordinates cannot be automatically certified as authored. Explicit external Google Maps navigation links remain available only when the traveler opens them.
+
+Automated tests use local synthetic tiles and deny external requests; do not point a screenshot sweep at the public OSM endpoint. Compatible local HTTP tiles are allowed only explicitly in development/test fixtures, never by a production URL query.
 
 ## Google configuration
 

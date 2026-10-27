@@ -2,7 +2,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const PLUGIN_NAME = "eternal-pose";
-const VERSION = "0.1.0";
 const STRICT_SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 const FORBIDDEN_MARKERS = /\[todo:|placeholder|example\.com/i;
 const PROHIBITED_MANIFEST_COMPONENTS = ["commands", "agents", "hooks", "apps", "mcpServers", "mcp"];
@@ -43,10 +42,10 @@ function isRealRelativePath(rootUrl, value) {
   return existsSync(new URL(value, rootUrl));
 }
 
-function validateManifest(errors, manifest, label, requiresSkills) {
+function validateManifest(errors, manifest, label, requiresSkills, expectedVersion) {
   if (!manifest || typeof manifest !== "object") return;
   errorFor(errors, manifest.name === PLUGIN_NAME, `${label} manifest name must be ${PLUGIN_NAME}`);
-  errorFor(errors, manifest.version === VERSION && STRICT_SEMVER.test(manifest.version), `${label} manifest version must be strict SemVer ${VERSION}`);
+  errorFor(errors, manifest.version === expectedVersion && STRICT_SEMVER.test(manifest.version), `${label} manifest version must be strict SemVer ${expectedVersion}`);
   errorFor(errors, typeof manifest.description === "string" && manifest.description.length > 0, `${label} manifest requires a description`);
   errorFor(errors, manifest.author?.name === "Laugh Tale contributors", `${label} manifest author.name must be Laugh Tale contributors`);
   errorFor(errors, manifest.license === "MIT", `${label} manifest license must be MIT`);
@@ -83,17 +82,18 @@ export async function validatePluginContracts(repoRoot) {
     errorFor(errors, !existsSync(new URL(`plugins/eternal-pose/${relativePath}`, rootUrl)), `v1 must not include ${displayPath}`);
   }
 
-  validateManifest(errors, claudePlugin, "Claude", false);
-  validateManifest(errors, codexPlugin, "Codex", true);
+  const version = claudePlugin?.version;
+  validateManifest(errors, claudePlugin, "Claude", false, version);
+  validateManifest(errors, codexPlugin, "Codex", true, version);
 
   const claudeEntry = claudeMarketplace?.plugins?.[0];
   errorFor(errors, claudeMarketplace?.name === "laugh-tale", "Claude marketplace name must be laugh-tale");
-  errorFor(errors, claudeEntry?.name === PLUGIN_NAME && claudeEntry?.version === VERSION, "Claude marketplace must expose eternal-pose@0.1.0");
+  errorFor(errors, claudeEntry?.name === PLUGIN_NAME && claudeEntry?.version === version, `Claude marketplace must expose eternal-pose@${version}`);
   errorFor(errors, claudeEntry?.source === "./plugins/eternal-pose" && isRealRelativePath(rootUrl, claudeEntry?.source), "Claude marketplace source must be a real relative Eternal Pose path");
 
   const codexEntry = codexMarketplace?.plugins?.[0];
   errorFor(errors, codexMarketplace?.name === "laugh-tale", "Codex marketplace name must be laugh-tale");
-  errorFor(errors, codexEntry?.name === PLUGIN_NAME && codexEntry?.version === VERSION, "Codex marketplace must expose eternal-pose@0.1.0");
+  errorFor(errors, codexEntry?.name === PLUGIN_NAME && codexEntry?.version === version, `Codex marketplace must expose eternal-pose@${version}`);
   errorFor(errors, codexEntry?.category === "Developer Tools", "Codex marketplace category must be Developer Tools");
   errorFor(errors, codexEntry?.source?.source === "local" && codexEntry?.source?.path === "./plugins/eternal-pose" && isRealRelativePath(rootUrl, codexEntry?.source?.path), "Codex marketplace source must be a real relative Eternal Pose path");
   errorFor(errors, codexEntry?.policy?.installation === "AVAILABLE", "Codex marketplace policy.installation must be AVAILABLE");
@@ -113,7 +113,8 @@ async function main() {
     process.exitCode = 1;
     return;
   }
-  console.log(`Plugin contracts valid: ${PLUGIN_NAME}@${VERSION}`);
+  const plugin = JSON.parse(readFileSync(new URL("../plugins/eternal-pose/.claude-plugin/plugin.json", import.meta.url), "utf8"));
+  console.log(`Plugin contracts valid: ${PLUGIN_NAME}@${plugin.version}`);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) await main();

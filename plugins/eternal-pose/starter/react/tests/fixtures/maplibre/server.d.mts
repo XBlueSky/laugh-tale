@@ -1,0 +1,1 @@
+export function startMapLibreFixture(options: { built: boolean }): Promise<{ url: string; evidenceRoot: string; requests: { tiles: number; successfulTiles: number; failedTiles: number }; setTileResponse(mode: "ok" | "failed" | "mixed"): void; close(): Promise<void> }>;

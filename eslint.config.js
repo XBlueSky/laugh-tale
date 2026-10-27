@@ -26,6 +26,11 @@ export default tseslint.config(
       // nearest config per file, so linting it from here would load the
       // starter's own toolchain.
       "plugins/eternal-pose/starter/react/**",
+      // Field Atlas still targets the removed v1 presentation contract; it is
+      // quarantined from root gates until migrated (docs/public-preview-status.md).
+      "plugins/eternal-pose/recipes-v2/field-atlas/**",
+      // Generated examples own their toolchain; lint runs in the staged check.
+      "examples/meridian/**",
       // The Tokyo flagship is likewise independent; its lint runs in the
       // example-tokyo CI job.
       "examples/tokyo/**",
@@ -37,7 +42,11 @@ export default tseslint.config(
     languageOptions: { globals: nodeGlobals },
   },
   {
-    files: ["tests/**/*.ts", "vitest.config.ts"],
+    files: [
+      "tests/**/*.{ts,tsx}",
+      "plugins/eternal-pose/recipes-v2/**/*.{ts,tsx}",
+      "vitest.config.ts",
+    ],
     extends: [tseslint.configs.recommendedTypeChecked],
     languageOptions: {
       globals: nodeGlobals,

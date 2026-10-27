@@ -17,7 +17,14 @@ export default defineConfig({
         test: {
           name: "unit",
           environment: "node",
-          include: ["tests/**/*.test.ts"],
+          // Source-snapshot/installed-boundary suites contend on filesystem and
+          // scanner work: two workers still timed out in the focused gate.
+          // Trade file parallelism for reliability; in-test races are unchanged.
+          maxWorkers: 1,
+          // Create/Upgrade/Verify suites build real projects, fsync journals and
+          // spawn npm; individual cases take 4-20s on CI runners.
+          testTimeout: 60_000,
+          include: ["tests/**/*.test.{ts,tsx}"],
           exclude: PACKAGE_BUILDING_TESTS,
           sequence: { groupOrder: 0 },
         },

@@ -1,6 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, realpathSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { realpath as realpathPath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -27,7 +27,8 @@ interface ScanTestOperations {
   unlink?: (path: string) => Promise<void>;
 }
 type ScanPublication = (rootDir: string, testOperations?: ScanTestOperations) => Promise<PublicationFinding[]>;
-type ValidateTripProject = (rootDir: string) => Promise<PublicationFinding[]>;
+type ValidateTripProject = (rootDir: string, mode: "local") => Promise<{findings: PublicationFinding[]; counts: {errors: number}}>;
+import { completeV2Project } from "../generation/generated-project-v2-fixture.js";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 const publicationModuleUrl = pathToFileURL(join(repoRoot, "plugins/eternal-pose/lib/publication-scan.mjs")).href;
@@ -76,7 +77,7 @@ function parseValidationResult(stdout: string): {
 }
 
 function createTemporaryRoot(): string {
-  const root = mkdtempSync(join(tmpdir(), "eternal-pose-publication-"));
+  const root = mkdtempSync(join(realpathSync(tmpdir()), "eternal-pose-publication-"));
   temporaryRoots.push(root);
   return root;
 }
@@ -120,6 +121,7 @@ function copyEntitiesVendor(pluginRoot: string): void {
 function copyScannerPlugin(pluginRoot: string): void {
   mkdirSync(join(pluginRoot, "lib"), { recursive: true });
   copyFileSync(join(repoRoot, "plugins/eternal-pose/lib/publication-scan.mjs"), join(pluginRoot, "lib/publication-scan.mjs"));
+  copyFileSync(join(repoRoot, "plugins/eternal-pose/lib/publication-analysis.mjs"), join(pluginRoot, "lib/publication-analysis.mjs"));
   for (const file of babelVendorFiles) {
     const target = join(pluginRoot, "vendor/@babel/parser", file.path);
     mkdirSync(dirname(target), { recursive: true });
@@ -148,37 +150,8 @@ function fileInventory(root: string, directory = root): string[] {
   });
 }
 
-function createValidGeneratedProject(root: string): void {
-  const files: Record<string, string> = {
-    "README.md": "# Trip\n",
-    "AGENTS.md": "Read docs/trip-experience-contract.md.\n",
-    "CLAUDE.md": "Read docs/trip-experience-contract.md.\n",
-    ".env.example": "GOOGLE_MAPS_API_KEY=\n",
-    ".gitignore": ".env.local\ndist/\ncoverage/\n",
-    "package.json": `${JSON.stringify({ scripts: { build: "node scripts/build.mjs", lint: "node scripts/pass.mjs", test: "node scripts/pass.mjs", "type-check": "node scripts/pass.mjs" }, dependencies: { "@laugh-tale-island/core": "0.1.0", "@laugh-tale-island/react": "0.1.0" } }, null, 2)}\n`,
-    "package-lock.json": "{}\n",
-    "docs/trip-experience-contract.md": "# Contract\n",
-    "scripts/pass.mjs": "// Synthetic validation fixture command.\n",
-    "scripts/build.mjs": [
-      'import { mkdir, writeFile } from "node:fs/promises";',
-      'import { join } from "node:path";',
-      'const output = process.env.ETERNAL_POSE_VALIDATION_OUT_DIR;',
-      'if (output === undefined) throw new Error("isolated output is required");',
-      'const validation = join(output, "validation");',
-      'await mkdir(validation, { recursive: true });',
-      'await writeFile(join(validation, "readiness.mjs"), "export const tripContentReadiness = Object.freeze({ hasTripContent: false });\\n", { flag: "wx" });',
-      "",
-    ].join("\n"),
-  };
-  for (const [relativePath, contents] of Object.entries(files)) writeFixture(root, relativePath, contents);
-  for (const relativePath of [
-    "src/trip-content",
-    "src/providers/google",
-    "src/ui",
-    "tests/e2e",
-  ]) {
-    mkdirSync(join(root, relativePath), { recursive: true });
-  }
+async function createValidGeneratedProject(): Promise<string> {
+ const fixture=await completeV2Project();temporaryRoots.push(fixture.parent);return fixture.root;
 }
 
 afterEach(() => {
@@ -221,6 +194,7 @@ describe("vendored Babel parser", () => {
     mkdirSync(join(isolatedPlugin, "lib"), { recursive: true });
     mkdirSync(join(isolatedPlugin, "vendor/@babel/parser"), { recursive: true });
     copyFileSync(join(repoRoot, "plugins/eternal-pose/lib/publication-scan.mjs"), join(isolatedPlugin, "lib/publication-scan.mjs"));
+    copyFileSync(join(repoRoot, "plugins/eternal-pose/lib/publication-analysis.mjs"), join(isolatedPlugin, "lib/publication-analysis.mjs"));
     copyFileSync(parserPath, join(isolatedPlugin, "vendor/@babel/parser/index.cjs"));
     copyFileSync(licensePath, join(isolatedPlugin, "vendor/@babel/parser/LICENSE"));
     copyFileSync(upstreamPath, join(isolatedPlugin, "vendor/@babel/parser/UPSTREAM.json"));
@@ -336,7 +310,7 @@ describe("vendored WHATWG entity decoder", () => {
     const generator = join(repoRoot, "plugins/eternal-pose/scripts/create-trip-project.mjs");
     const child = spawnSync(
       process.execPath,
-      [generator, "--target", target, "--recipe", "quiet-wood"],
+      [generator, "--target", target, "--recipe", "oak-washi", "--setup-locale", "zh-Hant-TW"],
       { cwd: root, encoding: "utf8" },
     );
 
@@ -2910,72 +2884,65 @@ describe("publication CLIs", () => {
 
 describe("generated-project validation", () => {
   test("accepts the complete approved generated-project contract", async () => {
-    const root = createTemporaryRoot();
-    createValidGeneratedProject(root);
+    const root = await createValidGeneratedProject();
 
-    await expect(validateTripProject(root)).resolves.toEqual([]);
+    expect((await validateTripProject(root, "local")).counts.errors).toBe(0);
   });
 
   test.each([null, [], "package", 42])("rejects non-object package.json shape %#", async (packageShape) => {
-    const root = createTemporaryRoot();
-    createValidGeneratedProject(root);
+    const root = await createValidGeneratedProject();
     writeFixture(root, "package.json", `${JSON.stringify(packageShape)}\n`);
 
-    const findings = await validateTripProject(root);
+    const { findings } = await validateTripProject(root, "local");
 
     expect(findingAt(findings, "package.json", "project.invalid-package-shape")).toBe(true);
   });
 
   test("rejects malformed package JSON", async () => {
-    const root = createTemporaryRoot();
-    createValidGeneratedProject(root);
+    const root = await createValidGeneratedProject();
     writeFixture(root, "package.json", "{ malformed\n");
 
-    const findings = await validateTripProject(root);
+    const { findings } = await validateTripProject(root, "local");
 
     expect(findingAt(findings, "package.json", "project.invalid-package-json")).toBe(true);
   });
 
   test.each([null, [], "scripts"])("rejects non-object scripts shape %#", async (scriptsShape) => {
-    const root = createTemporaryRoot();
-    createValidGeneratedProject(root);
+    const root = await createValidGeneratedProject();
     writeFixture(root, "package.json", `${JSON.stringify({ scripts: scriptsShape })}\n`);
 
-    const findings = await validateTripProject(root);
+    const { findings } = await validateTripProject(root, "local");
 
     expect(findingAt(findings, "package.json", "project.invalid-scripts")).toBe(true);
   });
 
   test("reports an exact missing required script", async () => {
-    const root = createTemporaryRoot();
-    createValidGeneratedProject(root);
+    const root = await createValidGeneratedProject();
     writeFixture(
       root,
       "package.json",
       `${JSON.stringify({ scripts: { build: "vite build", lint: "eslint .", test: "vitest run" } })}\n`,
     );
 
-    const findings = await validateTripProject(root);
+    const { findings } = await validateTripProject(root, "local");
 
     expect(findingAt(findings, "package.json", "project.missing-script")).toBe(true);
     expect(findings.some((finding) => finding.code === "project.missing-script" && finding.message.includes("type-check"))).toBe(true);
   });
 
   test("reports missing approved files and source directories", async () => {
-    const root = createTemporaryRoot();
-    createValidGeneratedProject(root);
+    const root = await createValidGeneratedProject();
     rmSync(join(root, "AGENTS.md"));
-    rmSync(join(root, "src/ui"), { recursive: true });
+    rmSync(join(root, "src/app/App.tsx"));
 
-    const findings = await validateTripProject(root);
+    const { findings } = await validateTripProject(root, "local");
 
     expect(findingAt(findings, "AGENTS.md", "project.missing-file")).toBe(true);
-    expect(findingAt(findings, "src/ui", "project.missing-directory")).toBe(true);
+    expect(findingAt(findings, "src/app/App.tsx", "project.missing-file")).toBe(true);
   });
 
-  test("warning-only validation emits JSON and exits zero", () => {
-    const root = createTemporaryRoot();
-    createValidGeneratedProject(root);
+  test("warning-only validation emits JSON and exits zero", async () => {
+    const root = await createValidGeneratedProject();
     writeFixture(root, "vercel.json", '{"buildCommand":"npm run build"}\n');
 
     const result = spawnSync(process.execPath, [validateScript, root, "--mode", "local"], { encoding: "utf8" });
@@ -2987,9 +2954,8 @@ describe("generated-project validation", () => {
     expect(findingCodes(payload.findings)).toContain("access.public-configuration");
   });
 
-  test("release-blocking validation emits JSON and exits one", () => {
-    const root = createTemporaryRoot();
-    createValidGeneratedProject(root);
+  test("release-blocking validation emits JSON and exits one", async () => {
+    const root = await createValidGeneratedProject();
     writeFixture(root, ".env.production", "PUBLIC_DEPLOYMENT=true\n");
 
     const result = spawnSync(process.execPath, [validateScript, root, "--mode", "local"], { encoding: "utf8" });

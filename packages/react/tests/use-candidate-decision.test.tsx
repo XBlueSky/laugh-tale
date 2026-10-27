@@ -18,7 +18,7 @@ import {
   useCandidateDecision,
   useOptionalCandidateDecision,
   type UseCandidateDecisionOptions,
-} from "@laugh-tale-island/react";
+} from "../src/use-candidate-decision.js";
 
 afterEach(cleanup);
 

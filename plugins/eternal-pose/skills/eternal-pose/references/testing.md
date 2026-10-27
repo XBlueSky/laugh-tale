@@ -12,6 +12,12 @@ Use fresh evidence before any completion, readiness, or compliance claim.
 
 ## Generated-site gates
 
+Use the exact `validate-trip-project.mjs` then `verify-trip-project.mjs` invocations in `workflow.md`. Install first with `npm ci` for registry projects; contributor staging installs its attested candidate itself. Verify runs unit, type-check, lint, generated experience, accessibility, and build commands in the project using installed dependencies, redirects output/cache/environment to owned temporary directories, and verifies unchanged source identity. Validate scans authored/build content and checks manifest/input/ledger/package/lock identity; it does not prove live Google readiness. Never delete artifacts or weaken scanner rules to obtain a passing result.
+
+Run generated `npm run check`, `npm run test:experience`, `npm run test:a11y`, and `npm run test:e2e` for their respective coverage. Browser tests use explicitly synthetic test fixtures; their success is not proof that an unreviewed real Trip has accepted places. Null-content Setup can render correctly while trip-readiness remains incomplete. Root contributor checks, candidate checks, provider observations, native-device checks, and visual review are separate evidence.
+
+Verify checks the installed `node_modules` directory, the four owned package names/pinned versions, and contained `vitest`, `tsc`, `eslint`, and `vite` executables before each command. Ordinary npm `.bin` symlinks to contained files are supported. Missing installs or changed/escaping checked dependencies refuse execution. Static Validate does not certify an installed tree, and these checks do not sandbox arbitrary custom scripts or certify every transitive third-party link.
+
 Run the generated repository's canonical equivalents of:
 
 1. Trip-content validation and unit tests.

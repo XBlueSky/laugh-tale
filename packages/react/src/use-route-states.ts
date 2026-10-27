@@ -1,314 +1,258 @@
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+
 import {
-  useCallback,
-  useEffect,
-  useEffectEvent,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+  validateRouteProviderResult,
+  type RouteProviderResult,
+  type RouteRequestV2,
+  type RouteRuntimeState,
+} from "@laugh-tale-island/core";
+import type { RouteAdapterV2 } from "@laugh-tale-island/core/browser";
 
-import type { RouteEdge } from "@laugh-tale-island/core";
-import type { RouteResult } from "@laugh-tale-island/core";
-import type { RouteAdapter } from "@laugh-tale-island/core/browser";
-
-export type RouteLoadState = RouteResult | { status: "loading" };
+export type RouteLoadState = RouteRuntimeState;
 
 export interface RouteStates {
   states: Readonly<Record<string, RouteLoadState>>;
-  mapResults: Readonly<Record<string, RouteResult>>;
+  mapResults: Readonly<Record<string, Extract<RouteProviderResult, { status: "ready" }>>>;
   retry(routeId: string): boolean;
 }
 
 export interface UseRouteStatesOptions {
-  /**
-   * Maps an adapter failure to the `reason` carried by the unavailable
-   * result. The default keeps a non-blank `Error` message (provider data)
-   * and otherwise returns an empty string; visible copy belongs to the
-   * consuming site.
-   */
+  /** Converts adapter failures to non-display diagnostic data. */
   adapterErrorReason?: (error: unknown) => string;
 }
 
-interface RouteDescriptor {
-  edge: RouteEdge;
-  signature: string;
-}
+interface RouteDescriptor { request: RouteRequestV2; signature: string; }
+interface StoredState { signature: string; state: RouteLoadState; }
+interface ActiveRequest { signature: string; generation: number; controller: AbortController; }
 
-interface StoredState {
-  signature: string;
-  state: RouteLoadState;
-}
-
-interface ActiveRequest {
-  signature: string;
-  generation: number;
-  controller: AbortController;
-}
-
-function cloneEdge(edge: RouteEdge): RouteEdge {
+function cloneRequest(request: RouteRequestV2): RouteRequestV2 {
+  const cloneEndpoint = (endpoint: RouteRequestV2["origin"]): RouteRequestV2["origin"] => ({
+    ...endpoint,
+    identity: endpoint.identity.status === "resolved"
+      ? {
+          ...endpoint.identity,
+          ...(endpoint.identity.coordinates === undefined ? {} : { coordinates: { ...endpoint.identity.coordinates } }),
+          ...(endpoint.identity.providerReference === undefined ? {} : { providerReference: { ...endpoint.identity.providerReference } }),
+        }
+      : { ...endpoint.identity },
+  });
   return {
-    ...edge,
-    ...(edge.navigation === undefined
+    edge: {
+      ...request.edge,
+      ...(request.edge.navigation === undefined ? {} : { navigation: { ...request.edge.navigation } }),
+    },
+    origin: cloneEndpoint(request.origin),
+    destination: cloneEndpoint(request.destination),
+    ...(request.departureAt === undefined ? {} : { departureAt: request.departureAt }),
+    ...(request.transitPreferences === undefined
       ? {}
-      : { navigation: { ...edge.navigation } }),
+      : {
+          transitPreferences: {
+            ...(request.transitPreferences.allowedModes === undefined
+              ? {}
+              : { allowedModes: [...request.transitPreferences.allowedModes] }),
+          },
+        }),
   };
 }
 
-function edgeSignature(edge: RouteEdge): string {
+function signature(request: RouteRequestV2): string {
+  const snapshot = cloneRequest(request);
   return JSON.stringify({
-    id: edge.id,
-    dayId: edge.dayId,
-    fromNodeId: edge.fromNodeId,
-    toNodeId: edge.toNodeId,
-    mode: edge.mode,
-    source: edge.source,
-    certainty: edge.certainty,
-    durationMinutes: edge.durationMinutes ?? null,
-    distanceMeters: edge.distanceMeters ?? null,
-    summary: edge.summary ?? null,
-    navigation:
-      edge.navigation === undefined
-        ? null
-        : {
-            origin: edge.navigation.origin,
-            destination: edge.navigation.destination,
-          },
+    edge: snapshot.edge,
+    origin: snapshot.origin,
+    destination: snapshot.destination,
+    departureAt: snapshot.departureAt ?? null,
+    transitPreferences: snapshot.transitPreferences?.allowedModes === undefined
+      ? null
+      : [...snapshot.transitPreferences.allowedModes].sort(),
   });
 }
 
-function snapshotRoutes(routes: readonly RouteEdge[]): {
-  key: string;
-  descriptors: readonly RouteDescriptor[];
-} {
+function snapshotRequests(requests: readonly RouteRequestV2[]): { key: string; descriptors: readonly RouteDescriptor[] } {
   const owners = new Map<string, RouteDescriptor>();
-  for (const edge of routes) {
-    if (!owners.has(edge.id)) {
-      const snapshot = cloneEdge(edge);
-      owners.set(edge.id, {
-        edge: snapshot,
-        signature: edgeSignature(snapshot),
-      });
+  for (const request of requests) {
+    if (!owners.has(request.edge.id)) {
+      const snapshot = cloneRequest(request);
+      owners.set(snapshot.edge.id, { request: snapshot, signature: signature(snapshot) });
     }
   }
   const descriptors = [...owners.values()];
-  return {
-    key: JSON.stringify(descriptors.map(({ edge, signature }) => [edge.id, signature])),
-    descriptors,
-  };
+  return { key: JSON.stringify(descriptors.map(({ request, signature: value }) => [request.edge.id, value])), descriptors };
 }
 
 function cloneState(state: RouteLoadState): RouteLoadState {
-  if (state.status === "loading" || state.status === "unavailable") {
-    return { ...state };
-  }
+  if (state.status !== "ready") return { ...state };
   return {
     ...state,
-    path: state.path.map((point) => ({ ...point })),
     steps: [...state.steps],
+    ...(state.geometry === undefined ? {} : { geometry: state.geometry.map((point) => ({ ...point })) }),
+    ...(state.transit === undefined ? {} : { transit: { lines: state.transit.lines.map((line) => ({ ...line })) } }),
   };
 }
 
-function validReadyGeometry(
-  state: RouteLoadState,
-): state is Extract<RouteResult, { status: "ready" }> {
-  return (
-    state.status === "ready" &&
-    state.path.length >= 2 &&
-    state.path.every(
-      ({ lat, lng }) =>
-        Number.isFinite(lat) &&
-        lat >= -90 &&
-        lat <= 90 &&
-        Number.isFinite(lng) &&
-        lng >= -180 &&
-        lng <= 180,
-    )
-  );
+function isMapResult(state: RouteLoadState): state is Extract<RouteProviderResult, { status: "ready" }> {
+  return state.status === "ready" && state.geometry !== undefined;
 }
 
 function defaultAdapterErrorReason(error: unknown): string {
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message;
-  }
-  return "";
+  return error instanceof Error && error.message.trim().length > 0 ? error.message : "";
 }
 
 function recordsFrom(entries: ReadonlyMap<string, StoredState>): {
   states: Record<string, RouteLoadState>;
-  mapResults: Record<string, RouteResult>;
+  mapResults: Record<string, Extract<RouteProviderResult, { status: "ready" }>>;
 } {
   const states = Object.create(null) as Record<string, RouteLoadState>;
-  const mapResults = Object.create(null) as Record<string, RouteResult>;
+  const mapResults = Object.create(null) as Record<string, Extract<RouteProviderResult, { status: "ready" }>>;
   for (const [routeId, entry] of entries) {
     const state = cloneState(entry.state);
-    Object.defineProperty(states, routeId, {
-      configurable: true,
-      enumerable: true,
-      value: state,
-      writable: true,
-    });
-    if (validReadyGeometry(state)) {
-      Object.defineProperty(mapResults, routeId, {
-        configurable: true,
-        enumerable: true,
-        value: cloneState(state),
-        writable: true,
-      });
+    Object.defineProperty(states, routeId, { configurable: true, enumerable: true, value: state, writable: true });
+    if (isMapResult(state)) {
+      Object.defineProperty(mapResults, routeId, { configurable: true, enumerable: true, value: cloneState(state), writable: true });
     }
   }
   return { states, mapResults };
 }
 
 export function useRouteStates(
-  routes: readonly RouteEdge[],
-  routeAdapterFactory?: () => RouteAdapter,
+  requests: readonly RouteRequestV2[],
+  routeAdapterFactory?: () => RouteAdapterV2,
   options: UseRouteStatesOptions = {},
 ): RouteStates {
-  const adapterErrorReasonRef = useRef(
-    options.adapterErrorReason ?? defaultAdapterErrorReason,
-  );
+  const snapshot = snapshotRequests(requests);
+  const adapterErrorReasonRef = useRef(options.adapterErrorReason ?? defaultAdapterErrorReason);
   adapterErrorReasonRef.current = options.adapterErrorReason ?? defaultAdapterErrorReason;
-  const routeKey = snapshotRoutes(routes).key;
-  const [adapter] = useState<RouteAdapter | null>(() =>
-    routeAdapterFactory === undefined ? null : routeAdapterFactory(),
-  );
-  const [entries, setEntries] = useState<ReadonlyMap<string, StoredState>>(
-    () => new Map(),
-  );
+  const [entries, setEntries] = useState<ReadonlyMap<string, StoredState>>(() => new Map(
+    snapshot.descriptors.map((descriptor) => [
+      descriptor.request.edge.id,
+      { signature: descriptor.signature, state: { status: "idle" } },
+    ]),
+  ));
   const entriesRef = useRef(entries);
-  const currentRoutesRef = useRef(new Map<string, RouteDescriptor>());
+  const currentRequestsRef = useRef(new Map<string, RouteDescriptor>());
   const activeRef = useRef(new Map<string, ActiveRequest>());
   const generationsRef = useRef(new Map<string, number>());
   const mountedRef = useRef(false);
+  const adapterRef = useRef<RouteAdapterV2 | null>(null);
+  const factoryRef = useRef(routeAdapterFactory);
+  const factoryFailureRef = useRef<unknown>(undefined);
+  factoryRef.current = routeAdapterFactory;
 
-  const commitEntries = useCallback(
-    (next: ReadonlyMap<string, StoredState>): void => {
-      entriesRef.current = next;
-      if (mountedRef.current) {
-        setEntries(next);
-      }
-    },
-    [],
-  );
+  const commitEntries = useCallback((next: ReadonlyMap<string, StoredState>): void => {
+    entriesRef.current = next;
+    if (mountedRef.current) setEntries(next);
+  }, []);
 
-  const startLoad = useCallback(
-    (descriptor: RouteDescriptor): boolean => {
-      if (adapter === null) {
-        return false;
-      }
-      const routeId = descriptor.edge.id;
-      activeRef.current.get(routeId)?.controller.abort();
-      const generation = (generationsRef.current.get(routeId) ?? 0) + 1;
-      generationsRef.current.set(routeId, generation);
-      const controller = new AbortController();
-      const active = {
+  const getAdapter = useCallback((): RouteAdapterV2 | null => {
+    if (adapterRef.current !== null) return adapterRef.current;
+    const factory = factoryRef.current;
+    if (factory === undefined) return null;
+    try {
+      adapterRef.current = factory();
+      factoryFailureRef.current = undefined;
+      return adapterRef.current;
+    } catch (error: unknown) {
+      factoryFailureRef.current = error;
+      return null;
+    }
+  }, []);
+
+  const startLoad = useCallback((descriptor: RouteDescriptor): boolean => {
+    if (descriptor.request.edge.mode === "unknown") return false;
+    const adapter = getAdapter();
+    const routeId = descriptor.request.edge.id;
+    if (adapter === null) {
+      if (factoryRef.current === undefined) return false;
+      const failed = new Map(entriesRef.current);
+      failed.set(routeId, {
         signature: descriptor.signature,
-        generation,
-        controller,
-      };
-      activeRef.current.set(routeId, active);
-      const loading = new Map(entriesRef.current);
-      loading.set(routeId, {
-        signature: descriptor.signature,
-        state: { status: "loading" },
+        state: { status: "unavailable", reason: "network", retryable: true, diagnostic: adapterErrorReasonRef.current(factoryFailureRef.current) },
       });
-      commitEntries(loading);
-
-      void Promise.resolve()
-        .then(() => adapter.load({ edge: cloneEdge(descriptor.edge) }, controller.signal))
-        .catch((error: unknown): RouteResult => ({
-          status: "unavailable",
-          reason: adapterErrorReasonRef.current(error),
-        }))
-        .then((result) => {
-          const currentActive = activeRef.current.get(routeId);
-          const currentRoute = currentRoutesRef.current.get(routeId);
-          if (
-            controller.signal.aborted ||
-            !mountedRef.current ||
-            currentActive !== active ||
-            currentActive.generation !== generation ||
-            currentRoute?.signature !== descriptor.signature
-          ) {
-            return;
-          }
-          activeRef.current.delete(routeId);
-          const settled = new Map(entriesRef.current);
-          settled.set(routeId, {
-            signature: descriptor.signature,
-            state: cloneState(result),
-          });
-          commitEntries(settled);
-        });
+      commitEntries(failed);
       return true;
-    },
-    [adapter, commitEntries],
-  );
+    }
+    activeRef.current.get(routeId)?.controller.abort();
+    const generation = (generationsRef.current.get(routeId) ?? 0) + 1;
+    generationsRef.current.set(routeId, generation);
+    const controller = new AbortController();
+    const active: ActiveRequest = { signature: descriptor.signature, generation, controller };
+    activeRef.current.set(routeId, active);
+    const loading = new Map(entriesRef.current);
+    loading.set(routeId, { signature: descriptor.signature, state: { status: "loading" } });
+    commitEntries(loading);
+
+    void Promise.resolve()
+      .then(() => adapter.load(cloneRequest(descriptor.request), controller.signal))
+      .then((result): RouteProviderResult => validateRouteProviderResult(descriptor.request, result))
+      .catch((error: unknown): RouteProviderResult => controller.signal.aborted
+        ? { status: "unavailable", reason: "cancelled", retryable: false, diagnostic: "route-request-aborted" }
+        : { status: "unavailable", reason: "network", retryable: true, diagnostic: adapterErrorReasonRef.current(error) })
+      .then((result) => {
+        const currentActive = activeRef.current.get(routeId);
+        const currentRequest = currentRequestsRef.current.get(routeId);
+        if (
+          controller.signal.aborted || !mountedRef.current || currentActive !== active ||
+          currentActive.generation !== generation || currentRequest?.signature !== descriptor.signature
+        ) return;
+        activeRef.current.delete(routeId);
+        const settled = new Map(entriesRef.current);
+        settled.set(routeId, { signature: descriptor.signature, state: cloneState(result) });
+        commitEntries(settled);
+      });
+    return true;
+  }, [commitEntries, getAdapter]);
 
   useEffect(() => {
-    const activeRequests = activeRef.current;
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      for (const request of activeRequests.values()) {
-        request.controller.abort();
-      }
-      activeRequests.clear();
+      for (const active of activeRef.current.values()) active.controller.abort();
+      activeRef.current.clear();
     };
   }, []);
 
-  const synchronizeRoutes = useEffectEvent(() => {
-    const descriptors = snapshotRoutes(routes).descriptors;
-    const currentRoutes = new Map(
-      descriptors.map((descriptor) => [descriptor.edge.id, descriptor]),
-    );
-    currentRoutesRef.current = currentRoutes;
-
-    for (const [routeId, request] of activeRef.current) {
-      if (currentRoutes.get(routeId)?.signature !== request.signature) {
-        request.controller.abort();
+  const synchronizeRequests = useEffectEvent(() => {
+    const descriptors = snapshotRequests(requests).descriptors;
+    const currentRequests = new Map(descriptors.map((descriptor) => [descriptor.request.edge.id, descriptor]));
+    currentRequestsRef.current = currentRequests;
+    for (const [routeId, active] of activeRef.current) {
+      if (currentRequests.get(routeId)?.signature !== active.signature) {
+        active.controller.abort();
         activeRef.current.delete(routeId);
       }
     }
-
-    if (adapter === null) {
-      if (entriesRef.current.size > 0) {
-        commitEntries(new Map());
-      }
-      return;
-    }
-
     const retained = new Map<string, StoredState>();
     const pending: RouteDescriptor[] = [];
     for (const descriptor of descriptors) {
-      const existing = entriesRef.current.get(descriptor.edge.id);
-      const active = activeRef.current.get(descriptor.edge.id);
+      const routeId = descriptor.request.edge.id;
+      const existing = entriesRef.current.get(routeId);
+      const active = activeRef.current.get(routeId);
       if (existing?.signature === descriptor.signature) {
-        retained.set(descriptor.edge.id, existing);
-        if (existing.state.status === "loading" && active === undefined) {
-          pending.push(descriptor);
-        }
+        retained.set(routeId, existing);
+        if (
+          active === undefined &&
+          (existing.state.status === "loading" ||
+            (existing.state.status === "idle" && factoryRef.current !== undefined && descriptor.request.edge.mode !== "unknown"))
+        ) pending.push(descriptor);
+      } else if (descriptor.request.edge.mode === "unknown" || factoryRef.current === undefined) {
+        retained.set(routeId, { signature: descriptor.signature, state: { status: "idle" } });
       } else {
         pending.push(descriptor);
       }
     }
     commitEntries(retained);
-    for (const descriptor of pending) {
-      startLoad(descriptor);
-    }
+    for (const descriptor of pending) startLoad(descriptor);
   });
 
-  useEffect(() => {
-    synchronizeRoutes();
-  }, [routeKey]);
+  useEffect(() => { synchronizeRequests(); }, [snapshot.key]);
 
-  const retry = useCallback(
-    (routeId: string): boolean => {
-      const descriptor = currentRoutesRef.current.get(routeId);
-      return descriptor === undefined ? false : startLoad(descriptor);
-    },
-    [startLoad],
-  );
+  const retry = useCallback((routeId: string): boolean => {
+    const descriptor = currentRequestsRef.current.get(routeId);
+    const state = entriesRef.current.get(routeId)?.state;
+    if (descriptor === undefined || descriptor.request.edge.mode === "unknown" || state?.status === "unavailable" && !state.retryable) return false;
+    return startLoad(descriptor);
+  }, [startLoad]);
 
   const output = useMemo(() => recordsFrom(entries), [entries]);
   return { ...output, retry };

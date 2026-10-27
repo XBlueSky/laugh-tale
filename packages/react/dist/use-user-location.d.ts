@@ -1,5 +1,4 @@
 import type { Coordinates } from "@laugh-tale-island/core";
-import { type MapAdapter } from "@laugh-tale-island/core/browser";
 export type UserLocationStatus = "idle" | "requesting" | "active" | "denied" | "unavailable";
 export interface UserLocationController {
     status: UserLocationStatus;
@@ -8,4 +7,4 @@ export interface UserLocationController {
     recenter: () => void;
     stop: () => void;
 }
-export declare function useUserLocation(adapter: MapAdapter | null, geolocation?: Geolocation | undefined): UserLocationController;
+export declare function useUserLocation(onRecenter: () => void, geolocation?: Geolocation | undefined): UserLocationController;

@@ -1,12 +1,8 @@
 import type { CandidateGroup, Coordinates, RouteEdge } from "./model.js";
 import type { EffectiveDay } from "./resolve-itinerary.js";
 import { candidateMapOwnerId, nodeMapOwnerId } from "./map-owners.js";
-import type {
-  MapPlacePresentation,
-  MapPresentation,
-  MapRoutePresentation,
-  RouteResult,
-} from "./provider-data.js";
+import type { MapPlacePresentation, MapPresentation, MapRoutePresentation } from "./provider-data.js";
+import type { RouteProviderResult } from "./route-runtime.js";
 
 interface MapPresentationSelectionContext {
   expandedCandidateGroup?: CandidateGroup;
@@ -19,26 +15,44 @@ type MapPresentationRouteContext =
   | { routes?: never; routeResults?: never }
   | {
       routes: readonly RouteEdge[];
-      routeResults: Readonly<Record<string, RouteResult>>;
+      routeResults: Readonly<Record<string, RouteProviderResult>>;
     };
 
 export type MapPresentationContext = MapPresentationSelectionContext &
   MapPresentationRouteContext;
 
-function validCoordinates(value: Coordinates | undefined): value is Coordinates {
+function validCoordinates(value: unknown): value is Coordinates {
+  if (typeof value !== "object" || value === null) return false;
+  const { lat, lng } = value as { lat?: unknown; lng?: unknown };
   return (
-    value !== undefined &&
-    Number.isFinite(value.lat) &&
-    value.lat >= -90 &&
-    value.lat <= 90 &&
-    Number.isFinite(value.lng) &&
-    value.lng >= -180 &&
-    value.lng <= 180
+    typeof lat === "number" && Number.isFinite(lat) && lat >= -90 && lat <= 90 &&
+    typeof lng === "number" && Number.isFinite(lng) && lng >= -180 && lng <= 180
   );
+}
+
+function validGeometry(value: unknown): value is readonly Coordinates[] {
+  if (!Array.isArray(value) || value.length < 2) return false;
+  for (let index = 0; index < value.length; index += 1) if (!Object.hasOwn(value, index) || !validCoordinates(value[index])) return false;
+  return true;
+}
+
+function readyGeometry(value: unknown): value is { status: "ready"; geometry: readonly Coordinates[] } {
+  return typeof value === "object" && value !== null &&
+    (value as { status?: unknown }).status === "ready" &&
+    validGeometry((value as { geometry?: unknown }).geometry);
 }
 
 function cloneCoordinates({ lat, lng }: Coordinates): Coordinates {
   return { lat, lng };
+}
+
+function resolvedCoordinates(place: { identity: unknown } | undefined): Coordinates | undefined {
+  return place?.identity !== undefined &&
+    typeof place.identity === "object" &&
+    place.identity !== null &&
+    (place.identity as { status?: unknown }).status === "resolved"
+    ? (place.identity as { coordinates?: Coordinates }).coordinates
+    : undefined;
 }
 
 function effectivePlaces(
@@ -50,7 +64,7 @@ function effectivePlaces(
     const { node, sourceNodeId } = effectiveNode;
     if (
       sourceNodeId === expandedParentId ||
-      !validCoordinates(node.place?.coordinates)
+      !validCoordinates(resolvedCoordinates(node.place))
     ) {
       return [];
     }
@@ -58,14 +72,16 @@ function effectivePlaces(
     const tone: MapPlacePresentation["tone"] =
       sourceNodeId === context.selectedNodeId
         ? "selected"
-        : effectiveNode.completed
-          ? "completed"
-          : "default";
+        : effectiveNode.skipped
+          ? "skipped"
+          : effectiveNode.completed
+            ? "completed"
+            : "default";
     return [
       {
         ownerId: nodeMapOwnerId(sourceNodeId),
         label: node.title,
-        coordinates: cloneCoordinates(node.place.coordinates),
+        coordinates: cloneCoordinates(resolvedCoordinates(node.place)!),
         tone,
       },
     ];
@@ -85,14 +101,15 @@ function expandedCandidatePlaces(
   }
 
   return group.options.flatMap((option) => {
-    if (!validCoordinates(option.place?.coordinates)) {
+    const coordinates = resolvedCoordinates(option.place);
+    if (!validCoordinates(coordinates)) {
       return [];
     }
     return [
       {
         ownerId: candidateMapOwnerId(option.id),
         label: option.title,
-        coordinates: cloneCoordinates(option.place.coordinates),
+        coordinates: cloneCoordinates(coordinates),
         tone:
           option.id === context.activeCandidateOptionId
             ? ("selected" as const)
@@ -130,7 +147,7 @@ export function buildMapPresentation(
   context: MapPresentationContext = {},
 ): MapPresentation {
   let routeEdges: readonly RouteEdge[] = [];
-  let routeResults: Readonly<Record<string, RouteResult>> = {};
+  let routeResults: Readonly<Record<string, RouteProviderResult>> = {};
   if (context.routes !== undefined || context.routeResults !== undefined) {
     if (context.routes === undefined || context.routeResults === undefined) {
       throw new Error("Map presentation routes and routeResults must be provided together");
@@ -148,8 +165,8 @@ export function buildMapPresentation(
       return [];
     }
     routeOwners.add(edge.id);
-    const result = routeResults[edge.id];
-    if (result === undefined) {
+    const result: unknown = routeResults[edge.id];
+    if (!readyGeometry(result)) {
       return [];
     }
     const semantics = {
@@ -157,26 +174,12 @@ export function buildMapPresentation(
       certainty: edge.certainty,
       mode: edge.mode,
     };
-    return result.status === "ready"
-      ? [
-          {
-            edgeId: edge.id,
-            path: result.path.map(cloneCoordinates),
-            tone:
-              edge.id === context.selectedRouteId
-                ? ("selected" as const)
-                : ("default" as const),
-            ...semantics,
-          },
-        ]
-      : [
-          {
-            edgeId: edge.id,
-            path: [],
-            tone: "unavailable" as const,
-            ...semantics,
-          },
-        ];
+    return [{
+      edgeId: edge.id,
+      path: result.geometry.map(cloneCoordinates),
+      tone: edge.id === context.selectedRouteId ? ("selected" as const) : ("default" as const),
+      ...semantics,
+    }];
   });
   const selectedPlace = selectedPlaceOwnerId(places, context);
 

@@ -1,0 +1,1047 @@
+{
+  "schemaVersion": 2,
+  "status": "synthetic-technical-baselines",
+  "sourceSnapshot": {
+    "algorithm": "sha256(JSON.stringify(sorted [relativePath, sha256(fileBytes)] pairs))",
+    "directories": [
+      "packages/core/src",
+      "packages/react/src",
+      "packages/adapters/src",
+      "packages/testing/src",
+      "plugins/eternal-pose/recipes-v2/oak-washi/presentation",
+      "tests/fixtures/oak-washi"
+    ],
+    "sha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+    "provenance": "Imported synthetic fixture captures. Rendering inputs are identified by public content hashes, not private development history. Original technical review dates are retained. Static baselines do not certify the product or physical devices."
+  },
+  "limitations": [
+    "Synthetic fake map imagery and content do not establish original cartographic, Home, or desktop parity.",
+    "Most opening-hours and route-state variants are compact half-sheet poses; their expanded explanations and actions are not visually certified by those frames.",
+    "The 320px/200% candidate comparison is footer-scrolled. Cancel and Confirm are visible; initial dialog heading and first-option visibility are not established.",
+    "Several captures deliberately show partial rows at scroll boundaries; they are not whole-owner snapshots.",
+    "Static PNG review cannot establish transition behavior, actual VoiceOver, physical-device behavior, field Core Web Vitals, or Awwwards certification.",
+    "Owner product and aesthetic signoff remains pending."
+  ],
+  "entries": [
+    {
+      "file": "accessibility-media-390x844-asymmetric-safe-areas.png",
+      "caseId": "accessibility-media",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "f4f70f6f524e18ef4dd74793926cd086d07b5840f5dd953cc7cf92ac1f316e0b",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Safe-area header, date rail, controls, coverage notice and half-sheet remain separated. Selected overlook summary is readable; no map bleed into the opaque sheet."
+    },
+    {
+      "file": "accessibility-media-390x844-forced-colors.png",
+      "caseId": "accessibility-media",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "e4fc6f33d2c8e73fc88befc1b398740c3f285b5f0839f1c47d23865c41d8065d",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Forced-color controls and selected-owner focus outlines are visible. A preceding row fragment is clipped at the sheet scroll boundary; no claim that all owners are visible."
+    },
+    {
+      "file": "accessibility-media-390x844-keyboard-focus.png",
+      "caseId": "accessibility-media",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "7686b8655b03fa399485d30e0ae79a3e2c00906b789d91df035cb1329fe3133c",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Navigation button has a clear focus ring, with selected overlook time/title/status readable. Prior meal content is partly above the scroll boundary."
+    },
+    {
+      "file": "accessibility-media-390x844-reduced-motion.png",
+      "caseId": "accessibility-media",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "7b1c3b8617f7abaf2f51af8a67774118de5dc381c802886f68e54f422163ce9f",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Reduced-motion still has clear selected-owner summary and separated chrome; motion behavior is not inferred from this still."
+    },
+    {
+      "file": "accessibility-media-390x844-selected-error.png",
+      "caseId": "accessibility-media",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "6ab3000c567de42b5d85437f1f19304b56f803ea710db7227f0fb71c1dc6d078",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Map-error explanation and Retry are readable above the sheet. Selected-owner summary is visible; failed map has no visible synthetic attribution."
+    },
+    {
+      "file": "accessibility-media-390x844-text-reflow.png",
+      "caseId": "accessibility-media",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "c618457ed36bcbb12a4b0d1953f3a6bb10a721824e775b33d548eca4f1dca25f",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "200% text wraps within the viewport. The enlarged header and coverage notice occupy substantial space; the selected owner is below this captured scroll position, so full-owner/opening visibility is not certified."
+    },
+    {
+      "file": "camera-adversarial-390x844-flight.png",
+      "caseId": "camera-adversarial",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "e4ae9f05da9d69572ca948efe4da99d22f4655e4be93290a8bee5e2c4ea2fbda",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Half-sheet shows a readable selected flight label; following transfer and base summaries are readable. Expanded route evidence is not present in this compact pose."
+    },
+    {
+      "file": "camera-adversarial-390x844-implausible-duration.png",
+      "caseId": "camera-adversarial",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "effc0d6b33f85e37e84e7af893a70fb119b2060fae8d1e0c9ace2a31c710a85f",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Half-sheet shows readable selected walking label and following transfer/base summaries. Quarantine explanation is absent from this compact pose and cannot be visually certified."
+    },
+    {
+      "file": "camera-adversarial-390x844-remote-point.png",
+      "caseId": "camera-adversarial",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "effc0d6b33f85e37e84e7af893a70fb119b2060fae8d1e0c9ace2a31c710a85f",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Half-sheet shows readable selected walking label and following transfer/base summaries. Remote-point explanation is absent from this compact pose and cannot be visually certified."
+    },
+    {
+      "file": "candidate-open-390x844-cancelled.png",
+      "caseId": "candidate-open",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "093b269c973e970c4b0fd835fb03c05af593af75eedf151096f2b1bf25f96cb4",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Cancelled comparison shows the fully visible restored Change choice trigger with focus ring. Owner heading is above the scroll boundary; this is focus-return evidence, not an entire-owner overview."
+    },
+    {
+      "file": "candidate-open-390x844-confirmed.png",
+      "caseId": "candidate-open",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "07edaed96df6007485a46bdd89cc80ef2743a64a6d2106fa4c76502d61e3c137",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Restored Change choice trigger and focus ring are visible; the owner heading and candidate identity are above the scroll boundary. The final frame matches repeat 2/3, while repeat 0/1 differ only in a small clipped button-edge raster region without apparent layout displacement."
+    },
+    {
+      "file": "candidate-open-390x844-draft.png",
+      "caseId": "candidate-open",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "5b6ae50413950bf7ac8bee086b425bc2ed66089920fcbaa1a964d5888aee8c11",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Candidate heading, both options, distinct committed/preview labels and Cancel/Confirm fit in the expanded sheet. No text crosses the horizontal clip."
+    },
+    {
+      "file": "candidate-open-390x844-open.png",
+      "caseId": "candidate-open",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "b03b072f759bc95bdcff9e2c7eb577ba7513d8dc4c97899e21f5d2b8310e0b20",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Candidate heading, both options and Cancel/Confirm fit. Current preview has a distinct outline/tint; no lower-footer clipping."
+    },
+    {
+      "file": "candidate-zoom-200-320x568-comparison.png",
+      "caseId": "candidate-zoom-200",
+      "viewport": "320x568",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "ca4aa4f14e1d2ef6cae96d95c4b50a478514d21001f7469a9f203e84d42e6af8",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "320px/200% comparison is deliberately scrolled to full Cancel/Confirm controls. Day heading and option text are clipped by scroll boundaries; this frame cannot certify dialog heading/first-option visibility on opening."
+    },
+    {
+      "file": "desktop-bounded-1024x900-default-1024.png",
+      "caseId": "desktop-bounded",
+      "viewport": "1024x900",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "3831db9a8734d0134b10a92fb29ed9284a688545968e489afaa625f956db750a",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "1024px half-sheet and header are bounded and centered; current overlook summary is visible. First meal is partly clipped by the top scroll boundary. No original desktop benchmark parity claim."
+    },
+    {
+      "file": "desktop-bounded-1024x900-expanded-1024.png",
+      "caseId": "desktop-bounded",
+      "viewport": "1024x900",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "e4eef25e9000938a53980cc18ba32c87b89147f7bacdd8436f50d37fa4fcc1d3",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "1024px expanded sheet is bounded below controls. Current overlook summary is readable, with its note reaching the lower clip; full expanded-owner detail is not certified. No original desktop benchmark parity claim."
+    },
+    {
+      "file": "desktop-bounded-1440x1000-default-1440.png",
+      "caseId": "desktop-bounded",
+      "viewport": "1440x1000",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "ea86eb18c4346c62d8f20af2e8dbd6c3072e5f747f323e7ddfa888c0c6aa38b5",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "1440px half-sheet, controls and header are separated. Meal/supply/current summaries are readable within bounded content. No original desktop benchmark parity claim."
+    },
+    {
+      "file": "desktop-bounded-1440x1000-expanded-1440.png",
+      "caseId": "desktop-bounded",
+      "viewport": "1440x1000",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "642a38ea94948c74d710219a77bc5d8e70473971ba5dac130da0325d74092856",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "1440px expanded sheet shows current overlook title, timing, status and location within the clip. Coverage notice is opaque. No original desktop benchmark parity claim."
+    },
+    {
+      "file": "desktop-bounded-768x1024-default-768.png",
+      "caseId": "desktop-bounded",
+      "viewport": "768x1024",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "84cf0067a725952f912f233e5fce003732f4c974b0f472a91a970aed8a51fa43",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "768px half-sheet is bounded and centered; selected overlook summary is visible. Lower content continues beyond the viewport normally. No original desktop benchmark parity claim."
+    },
+    {
+      "file": "desktop-bounded-768x1024-expanded-768.png",
+      "caseId": "desktop-bounded",
+      "viewport": "768x1024",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "b0146980e7c7c94b8a948eb281d5e39cf8861da4ac783db9f3d1e9f3fcfe6fff",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "768px expanded sheet shows complete selected overlook summary and location; subsequent route label reaches lower edge. No map bleed. No original desktop benchmark parity claim."
+    },
+    {
+      "file": "experience-collapsed-current-390x844-current-next.png",
+      "caseId": "experience-collapsed-current",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "e8ab20e776d6de04e1580038a60c2c2b9e224b606d40e6c7ee1001c602e92dc3",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Collapsed summary shows current overlook time/title/status with navigation control; coverage notice stays above the collapsed sheet and attribution below it."
+    },
+    {
+      "file": "experience-default-390x844-full-day.png",
+      "caseId": "experience-default",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "7b1c3b8617f7abaf2f51af8a67774118de5dc381c802886f68e54f422163ce9f",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Half-sheet shows selected overlook time/title/status with readable route and supply context. Prior meal text is partly clipped at the scroll boundary."
+    },
+    {
+      "file": "experience-expanded-dense-320x568-dense-expanded-small.png",
+      "caseId": "experience-expanded-dense",
+      "viewport": "320x568",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "f71656c6a444f2dbb9cd2f1d4c7da096eea59ac9704687ca79684a820c63b8a4",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "320px expanded dense capture wraps long Chinese/Latin title within sheet width. Only the top of the long first support owner fits this scroll pose; full-title visibility is not certified."
+    },
+    {
+      "file": "experience-expanded-dense-320x568-dense-half.png",
+      "caseId": "experience-expanded-dense",
+      "viewport": "320x568",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "4af1637a69ca40cce3884f89bdd825596ee6f183505880d7f18352614c4edf0b",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "320px dense half-sheet wraps its first support title horizontally, with content continuing below the clip. This frame cannot certify all dense rows or current-owner visibility."
+    },
+    {
+      "file": "experience-expanded-dense-430x932-dense-expanded.png",
+      "caseId": "experience-expanded-dense",
+      "viewport": "430x932",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "a67495860e8170b300b32699c4eca76414a792b09b3ceea0616d0de2eebad7a2",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "430px dense expanded sheet shows a long supply title and selected long overlook title, time/status/location without horizontal clipping. Header remains separate."
+    },
+    {
+      "file": "home-1024x900-zero-desktop.png",
+      "caseId": "home",
+      "viewport": "1024x900",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "677056b50be91f73c5c0871541dde4b8a21e6acffe9fd9ef36607402a5f8634c",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Desktop Home title, artwork, dates, primary entry, day column and lodging column remain legible. Lower checklist content continues beyond the viewport. No trustworthy historical Home/desktop parity reference."
+    },
+    {
+      "file": "home-390x844-zero-mobile.png",
+      "caseId": "home",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "48d4cda92bfe770d368cfd0566d97f6646767b1a4afc20e0a621dc87d73208d4",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Mobile Home title/artwork, dates, entry, progress, first day and checklist align without horizontal clipping. Lower tasks continue beyond viewport. No trustworthy historical Home parity reference."
+    },
+    {
+      "file": "loading-owned-390x844-place.png",
+      "caseId": "loading-owned",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "d53d53e6b6e01bce57cf16e55218353edbbba148844f233a5be781fb2fd3e73a",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Expanded loading-place pose keeps air-transfer facts, terminal, booking action and completion control readable; four serial repeats have identical PNG bytes."
+    },
+    {
+      "file": "loading-owned-390x844-route.png",
+      "caseId": "loading-owned",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "d51e1f25235f31f016e35689066ed2af0ad247bceb4ef2326178e6ea9d2c21a1",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Expanded loading-route capture shows authored 5-minute fallback, loading notice and external-navigation action above following transfer; labels/actions are readable. Subsequent flight label reaches lower clip."
+    },
+    {
+      "file": "loading-owned-390x844-startup.png",
+      "caseId": "loading-owned",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "e841cb31c5028377b65f46992a96efcb4e87cbf2e3b57e6a8f5e515fa3f3e0b3",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Isolated startup loading title, progress message and skeleton shapes are visible and horizontally contained. This still does not certify the runtime transition into loading."
+    },
+    {
+      "file": "map-error-390x844-runtime-failure.png",
+      "caseId": "map-error",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "c89dad453df413d047a697e7e17185c9affe0f7c2f15cc4611b24e2d8136b3ec",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Map-error notice and Retry remain readable; selected overlook summary is fully above lower sheet edge. No map bleed and no visible stale synthetic legal label."
+    },
+    {
+      "file": "marker-backends-390x844-advanced.png",
+      "caseId": "marker-backends",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "9cb0aed6992c6c8556438d057f775fcec118cd5a51a0a569b99a9acc18efa1a3",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Advanced-marker capture shows location status, distinct user-location marker and controls. Sheet/current summary remain readable; marker overlap itself is synthetic geometry, not live-map parity."
+    },
+    {
+      "file": "marker-backends-390x844-overlay.png",
+      "caseId": "marker-backends",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "371baac3f8897f0c18ca21cedd8c51a79abee840288b69dbfeac90bb4d7e5c9e",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Overlay-marker capture shows location status, distinct user-location marker and controls. Sheet/current summary remain readable; backend functional equivalence is not inferred solely from this still."
+    },
+    {
+      "file": "opening-hours-matrix-390x844-absent.png",
+      "caseId": "opening-hours-matrix",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "a29548c9359a7a4ad757da0e2eb4ebb37170d36e339c2a95c5aee1926698b41b",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Half-sheet shows selected air-transfer and current base summaries, with readable timing/status. Absent-hours explanation is hidden by compact presentation and not visually certified."
+    },
+    {
+      "file": "opening-hours-matrix-390x844-cross-midnight.png",
+      "caseId": "opening-hours-matrix",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "3f84528a180747bd37fc0b3e19b2f4f97b02b010c60a90463cf20c638789c0a4",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Cross-midnight clock is readable; half-sheet shows shuttle and selected air-transfer summaries. Actual opening-status label is absent from this compact capture."
+    },
+    {
+      "file": "opening-hours-matrix-390x844-incomplete.png",
+      "caseId": "opening-hours-matrix",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "a29548c9359a7a4ad757da0e2eb4ebb37170d36e339c2a95c5aee1926698b41b",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Half-sheet shows selected air-transfer and current base summaries. Incomplete-hours explanation is absent; frame visually matches other compact hour variants."
+    },
+    {
+      "file": "opening-hours-matrix-390x844-known-closed.png",
+      "caseId": "opening-hours-matrix",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "a29548c9359a7a4ad757da0e2eb4ebb37170d36e339c2a95c5aee1926698b41b",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Half-sheet shows selected air-transfer and current base summaries. Closed-hours label is absent; frame visually matches other compact hour variants."
+    },
+    {
+      "file": "opening-hours-matrix-390x844-known-open.png",
+      "caseId": "opening-hours-matrix",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "a29548c9359a7a4ad757da0e2eb4ebb37170d36e339c2a95c5aee1926698b41b",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Half-sheet shows selected air-transfer and current base summaries. Open-hours label is absent; frame visually matches other compact hour variants."
+    },
+    {
+      "file": "opening-hours-matrix-390x844-overnight.png",
+      "caseId": "opening-hours-matrix",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "c599522d7ac34f5a541429f1a679f65a00f73dc47e5c23c0584b9c6e1aa8eb93",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Overnight clock is readable; half-sheet shows shuttle and selected air-transfer summaries. Opening-status label is absent from this compact capture."
+    },
+    {
+      "file": "opening-hours-matrix-390x844-trip-timezone.png",
+      "caseId": "opening-hours-matrix",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "e3fa6829b93df95ca6881f84e8742b767ddbc12caba3c32370d30c88f67b465d",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Trip-timezone clock and next shuttle are readable; selected air-transfer summary fits. Closed-hours label is absent from this compact capture."
+    },
+    {
+      "file": "route-state-matrix-390x844-authored-fallback.png",
+      "caseId": "route-state-matrix",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "c8ce70b51762cd29f1dc36411d8b60725ead03883e8f413c452f4ac8b2808e00",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Compact selected route shows walking and authored 12-minute fact; following transfer/base summaries are readable. Expanded fallback explanation is not visible."
+    },
+    {
+      "file": "route-state-matrix-390x844-driving.png",
+      "caseId": "route-state-matrix",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "2670180a868507b42ef2cac41bd757bd977dcb914342dffcd22101bebcf7e1e2",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Compact selected driving route shows mode, 12 minutes and 1500 meters. Following transfer/base summaries remain readable."
+    },
+    {
+      "file": "route-state-matrix-390x844-external.png",
+      "caseId": "route-state-matrix",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "effc0d6b33f85e37e84e7af893a70fb119b2060fae8d1e0c9ace2a31c710a85f",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Compact selected walking label is readable. External-navigation action and unavailable reason are hidden in this half-sheet pose."
+    },
+    {
+      "file": "route-state-matrix-390x844-flight.png",
+      "caseId": "route-state-matrix",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "e4ae9f05da9d69572ca948efe4da99d22f4655e4be93290a8bee5e2c4ea2fbda",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Compact selected flight label is readable; following air-transfer and base summaries fit. Expanded authored route facts are not in this pose."
+    },
+    {
+      "file": "route-state-matrix-390x844-loading.png",
+      "caseId": "route-state-matrix",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "effc0d6b33f85e37e84e7af893a70fb119b2060fae8d1e0c9ace2a31c710a85f",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Compact selected walking label is readable. Loading explanation is absent in this half-sheet pose; expanded loading-route is separately inspected."
+    },
+    {
+      "file": "route-state-matrix-390x844-retry.png",
+      "caseId": "route-state-matrix",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "f294d7df5ec3ac0ee7ab41c2687473cfb354e71e3fdeacf71c460ada76c98351",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Post-retry compact walking route shows 12 minutes and 1500 meters. Previous retry action/unavailable explanation are not visible in this final pose."
+    },
+    {
+      "file": "route-state-matrix-390x844-transit.png",
+      "caseId": "route-state-matrix",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "5368feebae291afab81bd98feaa819f0406c0e90190abf32b36472c0235742aa",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Compact transit route shows mode, 12 minutes and 1500 meters. Expanded transit-line fact is absent from this half-sheet pose."
+    },
+    {
+      "file": "route-state-matrix-390x844-unavailable.png",
+      "caseId": "route-state-matrix",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "effc0d6b33f85e37e84e7af893a70fb119b2060fae8d1e0c9ace2a31c710a85f",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Compact selected walking label is readable. Unavailable explanation/retry action are hidden by half-sheet presentation."
+    },
+    {
+      "file": "route-state-matrix-390x844-unknown.png",
+      "caseId": "route-state-matrix",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "a9dafeed6e6181c8e17fd930a33f7f5e819a28fdcfd3afa0e03a222515eccbf0",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Compact selected unspecified-mode label is readable; following transfer/base summaries fit. No runtime-ready visual claim."
+    },
+    {
+      "file": "route-state-matrix-390x844-walking.png",
+      "caseId": "route-state-matrix",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "f294d7df5ec3ac0ee7ab41c2687473cfb354e71e3fdeacf71c460ada76c98351",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Compact walking route shows mode, 12 minutes and 1500 meters. Following transfer/base summaries remain readable."
+    },
+    {
+      "file": "runtime-degraded-390x844-fatal.png",
+      "caseId": "runtime-degraded",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "d7935865a52c8397cc5517b15fff54399602aedfce5958c4d58809160239d6c3",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Isolated fatal-state title/message and retry control are readable and contained; this still does not certify an error-boundary transition."
+    },
+    {
+      "file": "runtime-degraded-390x844-location-denied.png",
+      "caseId": "runtime-degraded",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "37975ed2dee0cf2b90824287e7d81282b7c0a0a8144b9858b34c162a0e14edf9",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Location-denied notice fits between header and controls without overlap. Current summary and attribution remain readable."
+    },
+    {
+      "file": "runtime-degraded-390x844-location-unavailable.png",
+      "caseId": "runtime-degraded",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "8551919ce6ed1fea7ed51e3758ae826fafc527a7fb697daea0104d077ad3eee9",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Location-unavailable notice fits between header and controls without overlap. Current summary and attribution remain readable."
+    },
+    {
+      "file": "runtime-degraded-390x844-memory-only.png",
+      "caseId": "runtime-degraded",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "d00bdd1400bba5bc1e23bc150c5af6341a2aedfd2ec3730e312d4a0922cd5c46",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Memory-only persistence warning is visible in one contained line. Sheet/current-owner composition remains readable."
+    },
+    {
+      "file": "selection-truth-390x844-grayscale.png",
+      "caseId": "selection-truth",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "2d528c4486072a21e1b37bff1639e444783c941ef3b7e9a6d6fda6af226672d0",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Grayscale skipped supply row has dashed boundary, skipped label and visible Restore action; selected overlook stays distinct by fill/rule. No color-only interpretation required for these visible states."
+    },
+    {
+      "file": "selection-truth-390x844-selected-resolved.png",
+      "caseId": "selection-truth",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "a6d0cc665f493b847eb365e695164256c90de0ff5938bee559655c022bc3efbe",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Skipped supply row has dashed boundary, skipped label and full Restore action; selected overlook title/time/current label remain readable."
+    },
+    {
+      "file": "selection-truth-390x844-selected-unresolved.png",
+      "caseId": "selection-truth",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "bdfcba11e158f108747961da37886f033302ec54706730acc23a68f19d2f0662",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Selected unresolved annex is visible with explicit unmapped/unverified message and no navigation arrow on that owner. Earlier content is partly above the scroll boundary."
+    },
+    {
+      "file": "setup-states-390x844-loader-failure.png",
+      "caseId": "setup-states",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "eb6d379bd47672556c89384d34a18ec8e788109d934d61808f44052d17831259",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Loader-failure explanation is readable above sheet; itinerary/current summary remains usable in the still. No map provider paint is claimed."
+    },
+    {
+      "file": "setup-states-390x844-missing-content.png",
+      "caseId": "setup-states",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "5faab4d497a175353608576885780641f60ae2b075ab188c07e5439132645c06",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Missing-content isolated state title and absent-trip message are readable and contained; no itinerary transition claim."
+    },
+    {
+      "file": "setup-states-390x844-missing-key.png",
+      "caseId": "setup-states",
+      "viewport": "390x844",
+      "sourceSnapshotSha256": "2ce743e331a9e64ea8dbcc227bcecf8df6585264a13282fcd65a307a5d590b0e",
+      "playwright": "1.62.1",
+      "chromium": "151.0.7922.34",
+      "revision": "1234",
+      "fonts": [
+        "粉圓 (Huninn-Regular; local)"
+      ],
+      "sha256": "d53c7fbf2ecadbe82292ccb91b7905d264054f77302a12798bea1288b7522235",
+      "reviewer": "Codex independent technical visual review",
+      "date": "2026-10-13",
+      "verdict": "accepted",
+      "reviewNote": "Missing-provider-configuration explanation is readable above sheet; itinerary/current summary is visible. No map provider paint is claimed."
+    }
+  ]
+}

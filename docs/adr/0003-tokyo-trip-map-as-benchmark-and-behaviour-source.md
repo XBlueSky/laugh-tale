@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded in part by ADR-0008 (the flagship is now examples/meridian)
 date: 2026-09-02
 ---
 

@@ -10,6 +10,7 @@ export interface TripProgressController {
     setSkipped: (nodeId: string, skipped: boolean) => void;
     setCompleted: (id: string, completed: boolean) => void;
     resetDay: (dayId: string) => void;
+    resetTrip: () => void;
 }
 /**
  * Trip-scoped progress bound to one injected {@link ProgressStore}. The

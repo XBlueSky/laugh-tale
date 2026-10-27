@@ -16,6 +16,7 @@ export interface EffectiveNode {
   node: TripNode;
   sourceNodeId: string;
   completed: boolean;
+  skipped: boolean;
   selectedCandidateId?: string;
 }
 
@@ -46,9 +47,21 @@ function sanitizePlace(place: PlaceRef | undefined): PlaceRef | undefined {
     return undefined;
   }
 
-  const coordinates = place.coordinates;
+  const identity = place.identity;
+  if (typeof identity !== "object" || identity === null) return undefined;
+  if (identity.status === "unresolved") {
+    return {
+      name: place.name,
+      certainty: isFactCertainty(place.certainty) ? place.certainty : "unverified",
+      identity: { status: "unresolved", reason: identity.reason },
+    };
+  }
+
+  if (identity.status !== "resolved") return undefined;
+
+  const coordinates = identity.coordinates;
   const safeCoordinates =
-    coordinates !== undefined &&
+    typeof coordinates === "object" && coordinates !== null && !Array.isArray(coordinates) &&
     Number.isFinite(coordinates.lat) &&
     coordinates.lat >= -90 &&
     coordinates.lat <= 90 &&
@@ -58,22 +71,28 @@ function sanitizePlace(place: PlaceRef | undefined): PlaceRef | undefined {
       ? { lat: coordinates.lat, lng: coordinates.lng }
       : undefined;
 
-  const provider = place.provider;
-  const safeProvider =
-    provider?.name === "google" &&
-    (provider.placeId === undefined ||
-      (typeof provider.placeId === "string" && provider.placeId.trim().length > 0))
-      ? {
-          name: "google" as const,
-          ...(provider.placeId === undefined ? {} : { placeId: provider.placeId }),
-        }
+  const providerReference = identity.providerReference;
+  const safeProviderReference =
+    typeof providerReference === "object" && providerReference !== null &&
+    typeof providerReference.provider === "string" &&
+    providerReference.provider.trim().length > 0 &&
+    typeof providerReference.id === "string" &&
+    providerReference.id.trim().length > 0
+      ? { provider: providerReference.provider, id: providerReference.id }
       : undefined;
+
+  if (safeCoordinates === undefined && safeProviderReference === undefined) {
+    return undefined;
+  }
 
   return {
     name: place.name,
-    ...(safeCoordinates === undefined ? {} : { coordinates: safeCoordinates }),
-    ...(safeProvider === undefined ? {} : { provider: safeProvider }),
     certainty: isFactCertainty(place.certainty) ? place.certainty : "unverified",
+    identity: {
+      status: "resolved",
+      ...(safeCoordinates === undefined ? {} : { coordinates: safeCoordinates }),
+      ...(safeProviderReference === undefined ? {} : { providerReference: safeProviderReference }),
+    } as PlaceRef["identity"],
   };
 }
 
@@ -141,6 +160,7 @@ function resolveNode(
   node: TripNode,
   candidateGroups: readonly CandidateGroup[],
   progress: TripProgressV1,
+  skipped: boolean,
 ): EffectiveNode {
   const selected = candidateForNode(node, candidateGroups, progress.selectedCandidateIds);
   if (selected === undefined) {
@@ -148,6 +168,7 @@ function resolveNode(
       node,
       sourceNodeId: node.id,
       completed: progress.completedIds.includes(nodeCompletionKey(node.id)),
+      skipped,
     };
   }
 
@@ -163,6 +184,7 @@ function resolveNode(
     },
     sourceNodeId: node.id,
     completed: progress.completedIds.includes(nodeCompletionKey(node.id)),
+    skipped,
     selectedCandidateId: selected.id,
   };
 }
@@ -175,13 +197,25 @@ export function resolveEffectiveItinerary(
   const skippedNodeIds = new Set(progress.skippedNodeIds);
   const days: EffectiveDay[] = trip.days.map((day) => ({
     day,
-    nodes: day.nodes
-      .filter((node) => !(node.optionality === "optional" && skippedNodeIds.has(node.id)))
-      .map((node) => resolveNode(node, trip.candidateGroups, progress)),
+    nodes: day.nodes.map((node) =>
+      resolveNode(
+        node,
+        trip.candidateGroups,
+        progress,
+        node.optionality === "optional" && skippedNodeIds.has(node.id),
+      ),
+    ),
   }));
 
   const routes = deduplicateRouteOwners(
-    days.flatMap(({ day, nodes }) => resolveRouteEdges(day, trip.routes, nodes, options)),
+    days.flatMap(({ day, nodes }) =>
+      resolveRouteEdges(
+        day,
+        trip.routes,
+        nodes.filter(({ skipped }) => !skipped),
+        options,
+      ),
+    ),
     options,
   );
 

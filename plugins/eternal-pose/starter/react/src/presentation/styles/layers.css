@@ -1,0 +1,42 @@
+:root {
+  --oak-layer-map-content: 0;
+  --oak-layer-routes: 10;
+  --oak-layer-markers: 20;
+  --oak-layer-attribution: 30;
+  --oak-layer-map-controls: 40;
+  --oak-layer-header: 50;
+  --oak-layer-sheet: 60;
+  --oak-layer-modal: 70;
+}
+
+.oak-map-content {
+  z-index: var(--oak-layer-map-content);
+}
+
+.oak-route-layer {
+  z-index: var(--oak-layer-routes);
+}
+
+.oak-marker-layer {
+  z-index: var(--oak-layer-markers);
+}
+
+.oak-provider-attribution {
+  z-index: var(--oak-layer-attribution);
+}
+
+.oak-map-controls {
+  z-index: var(--oak-layer-map-controls);
+}
+
+.oak-day-header {
+  z-index: var(--oak-layer-header);
+}
+
+.oak-itinerary-sheet {
+  z-index: var(--oak-layer-sheet);
+}
+
+.oak-modal-layer {
+  z-index: var(--oak-layer-modal);
+}

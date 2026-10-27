@@ -1,10 +1,8 @@
-import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import { act, cleanup, renderHook } from "@testing-library/react";
 import { createElement, StrictMode, type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { FakeMapAdapter } from "./helpers/fake-map-adapter.js";
-import { USER_LOCATION_OWNER_ID } from "@laugh-tale-island/core";
-import { useUserLocation } from "@laugh-tale-island/react";
+import { useUserLocation } from "../src/use-user-location.js";
 
 afterEach(cleanup);
 
@@ -53,132 +51,85 @@ class ControlledGeolocation {
 }
 
 describe("useUserLocation", () => {
-  it("waits for a late map adapter, focuses once, then only moves the marker", async () => {
-    const geolocation = new ControlledGeolocation();
-    const storageWrite = vi.spyOn(Storage.prototype, "setItem");
-    const initialProps: { adapter: FakeMapAdapter | null } = { adapter: null };
-    const { result, rerender } = renderHook(
-      ({ adapter }: { adapter: FakeMapAdapter | null }) =>
-        useUserLocation(adapter, geolocation as unknown as Geolocation),
-      { initialProps },
-    );
-
-    expect(result.current.status).toBe("idle");
-    act(() => result.current.start());
-    expect(result.current.status).toBe("requesting");
-    expect(geolocation.watchPosition).toHaveBeenCalledTimes(1);
-
-    act(() => geolocation.succeed(11, 35.6812, 139.7671));
-    expect(result.current.status).toBe("active");
-
-    const adapter = new FakeMapAdapter();
-    rerender({ adapter });
-    await waitFor(() => expect(adapter.userLocationCalls).toHaveLength(1));
-    expect(adapter.userLocationCalls).toEqual([{ lat: 35.6812, lng: 139.7671 }]);
-    expect(adapter.focusCalls).toEqual([
-      { kind: "place", id: USER_LOCATION_OWNER_ID },
-    ]);
-
-    act(() => geolocation.succeed(11, 35.682, 139.768));
-    await waitFor(() => expect(adapter.userLocationCalls).toHaveLength(2));
-    expect(adapter.focusCalls).toHaveLength(1);
-
-    act(() => result.current.recenter());
-    expect(adapter.focusCalls).toHaveLength(2);
-    expect(geolocation.watchPosition).toHaveBeenCalledTimes(1);
-    expect(storageWrite).not.toHaveBeenCalled();
+  it("returns coordinates and requests one semantic first-fix recenter, then explicit recenter", () => {
+    const geo = new ControlledGeolocation();
+    const recenter = vi.fn();
+    const hook = renderHook(() => useUserLocation(recenter, geo as unknown as Geolocation));
+    act(() => hook.result.current.start());
+    expect(hook.result.current.status).toBe("requesting");
+    act(() => geo.succeed(11, 35.68, 139.76));
+    expect(hook.result.current.location).toEqual({ lat: 35.68, lng: 139.76 });
+    expect(hook.result.current.status).toBe("active");
+    expect(recenter).toHaveBeenCalledTimes(1);
+    act(() => geo.succeed(11, 35.69, 139.77));
+    expect(hook.result.current.location).toEqual({ lat: 35.69, lng: 139.77 });
+    expect(recenter).toHaveBeenCalledTimes(1);
+    act(() => hook.result.current.recenter());
+    expect(recenter).toHaveBeenCalledTimes(2);
+    expect(geo.watchPosition).toHaveBeenCalledTimes(1);
   });
-
-  it("invalidates callbacks from stopped, retried, and unmounted generations", async () => {
-    const geolocation = new ControlledGeolocation();
-    const adapter = new FakeMapAdapter();
-    const { result, unmount } = renderHook(() =>
-      useUserLocation(adapter, geolocation as unknown as Geolocation),
-    );
-
-    act(() => result.current.start());
-    act(() => result.current.start());
-    expect(geolocation.clearWatch).toHaveBeenNthCalledWith(1, 11);
-    expect(result.current.status).toBe("requesting");
-
-    act(() => geolocation.succeed(11, 1, 2));
-    expect(adapter.userLocationCalls).toHaveLength(0);
-    expect(result.current.status).toBe("requesting");
-
-    act(() => geolocation.succeed(12, 3, 4));
-    await waitFor(() => expect(adapter.userLocationCalls).toEqual([{ lat: 3, lng: 4 }]));
-    expect(adapter.focusCalls).toEqual([
-      { kind: "place", id: USER_LOCATION_OWNER_ID },
-    ]);
-
-    act(() => result.current.stop());
-    expect(geolocation.clearWatch).toHaveBeenNthCalledWith(2, 12);
-    expect(adapter.userLocationCalls.at(-1)).toBeNull();
-    expect(result.current.status).toBe("idle");
-
-    act(() => geolocation.succeed(12, 5, 6));
-    expect(adapter.userLocationCalls).toHaveLength(2);
-
-    act(() => result.current.start());
-    unmount();
-    expect(geolocation.clearWatch).toHaveBeenNthCalledWith(3, 13);
-    act(() => geolocation.succeed(13, 7, 8));
-    expect(adapter.userLocationCalls).toHaveLength(2);
-    expect(adapter.focusCalls).toHaveLength(1);
+  it("invalidates callbacks from stopped, restarted, and unmounted generations", () => {
+    const geo = new ControlledGeolocation();
+    const recenter = vi.fn();
+    const hook = renderHook(() => useUserLocation(recenter, geo as unknown as Geolocation));
+    act(() => hook.result.current.start());
+    act(() => hook.result.current.start());
+    expect(geo.clearWatch).toHaveBeenCalledWith(11);
+    act(() => geo.succeed(11, 1, 2));
+    expect(hook.result.current.location).toBeNull();
+    act(() => geo.succeed(12, 3, 4));
+    expect(hook.result.current.location).toEqual({ lat: 3, lng: 4 });
+    act(() => hook.result.current.stop());
+    expect(geo.clearWatch).toHaveBeenCalledWith(12);
+    expect(hook.result.current.location).toBeNull();
+    expect(hook.result.current.status).toBe("idle");
+    act(() => geo.succeed(12, 5, 6));
+    expect(hook.result.current.location).toBeNull();
+    act(() => hook.result.current.start());
+    hook.unmount();
+    expect(geo.clearWatch).toHaveBeenCalledWith(13);
+    act(() => geo.succeed(13, 7, 8));
+    expect(recenter).toHaveBeenCalledTimes(1);
   });
-
-  it("surfaces permission denial and provider unavailability without implicit requests", () => {
-    const geolocation = new ControlledGeolocation();
-    const adapter = new FakeMapAdapter();
-    const denied = renderHook(() =>
-      useUserLocation(adapter, geolocation as unknown as Geolocation),
-    );
-
-    expect(geolocation.watchPosition).not.toHaveBeenCalled();
-    act(() => denied.result.current.start());
-    act(() => geolocation.fail(11, 1, "Permission denied"));
-    expect(denied.result.current.status).toBe("denied");
-    expect(geolocation.clearWatch).toHaveBeenCalledWith(11);
-    denied.unmount();
-
-    const unavailable = renderHook(() => useUserLocation(adapter, undefined));
-    act(() => unavailable.result.current.start());
-    expect(unavailable.result.current.status).toBe("unavailable");
+  it("classifies denied and missing APIs without implicit watches", () => {
+    const geo = new ControlledGeolocation();
+    const hook = renderHook(() => useUserLocation(() => {}, geo as unknown as Geolocation));
+    expect(geo.watchPosition).not.toHaveBeenCalled();
+    act(() => hook.result.current.start());
+    act(() => geo.fail(11, 1, "denied"));
+    expect(hook.result.current.status).toBe("denied");
+    expect(geo.clearWatch).toHaveBeenCalledWith(11);
+    hook.unmount();
+    const absent = renderHook(() => useUserLocation(() => {}, undefined));
+    act(() => absent.result.current.start());
+    expect(absent.result.current.status).toBe("unavailable");
   });
-
-  it("guards stale GPS callbacks across StrictMode cleanup and a fresh remount", async () => {
-    const geolocation = new ControlledGeolocation();
-    const adapter = new FakeMapAdapter();
-    const wrapper = ({ children }: { children: ReactNode }) =>
-      createElement(StrictMode, null, children);
-    const first = renderHook(
-      () => useUserLocation(adapter, geolocation as unknown as Geolocation),
-      { wrapper },
-    );
-
+  it.each([[NaN, 1], [91, 1], [1, 181]])("rejects invalid fix %s/%s and invalidates its watch", (lat, lng) => {
+    const geo = new ControlledGeolocation();
+    const recenter = vi.fn();
+    const hook = renderHook(() => useUserLocation(recenter, geo as unknown as Geolocation));
+    act(() => hook.result.current.start());
+    act(() => geo.succeed(11, lat, lng));
+    expect(hook.result.current.status).toBe("unavailable");
+    expect(hook.result.current.location).toBeNull();
+    act(() => geo.succeed(11, 1, 2));
+    expect(recenter).not.toHaveBeenCalled();
+  });
+  it("rejects stale callbacks across StrictMode cleanup and a new mount", () => {
+    const geo = new ControlledGeolocation();
+    const recenter = vi.fn();
+    const wrapper = ({ children }: { children: ReactNode }) => createElement(StrictMode, null, children);
+    const first = renderHook(() => useUserLocation(recenter, geo as unknown as Geolocation), { wrapper });
     act(() => first.result.current.start());
-    expect(geolocation.watchPosition).toHaveBeenCalledTimes(1);
     first.unmount();
-    expect(geolocation.clearWatch).toHaveBeenCalledWith(11);
-
-    const second = renderHook(
-      () => useUserLocation(adapter, geolocation as unknown as Geolocation),
-      { wrapper },
-    );
+    const second = renderHook(() => useUserLocation(recenter, geo as unknown as Geolocation), { wrapper });
     act(() => second.result.current.start());
-    expect(geolocation.watchPosition).toHaveBeenCalledTimes(2);
-
-    act(() => geolocation.succeed(11, 10, 20));
-    expect(adapter.userLocationCalls).toHaveLength(0);
-    act(() => geolocation.succeed(12, 35.68, 139.76));
-
-    await waitFor(() =>
-      expect(adapter.userLocationCalls).toEqual([{ lat: 35.68, lng: 139.76 }]),
-    );
-    expect(adapter.focusCalls).toEqual([
-      { kind: "place", id: USER_LOCATION_OWNER_ID },
-    ]);
+    act(() => geo.succeed(11, 1, 2));
+    expect(second.result.current.location).toBeNull();
+    act(() => geo.succeed(12, 3, 4));
+    expect(second.result.current.location).toEqual({ lat: 3, lng: 4 });
+    expect(recenter).toHaveBeenCalledTimes(1);
     second.unmount();
-    expect(geolocation.clearWatch).toHaveBeenCalledWith(12);
+    expect(geo.clearWatch.mock.calls).toEqual([[11], [12]]);
   });
 });
