@@ -46,6 +46,11 @@ The 2026-10-19 blockers were resolved while landing V2 on `main`:
 - `jsdom` is pinned to 30.0.1 in the root workspace: 30.1.3 computes
   `border-width` overrides of a `var()` border shorthand as `0px`, which breaks
   the Oak map-marker state assertions.
+- The 60 reviewed Oak goldens are macOS Chromium renders. CI (Linux) runs every
+  Oak browser assertion but compares screenshots only on macOS, and allows a
+  one-pixel run-width difference in the selective-font shaping proof (HarfBuzz
+  shapes the subset and original identically). Run `npm run test:oak-washi:browser`
+  on macOS before changing Oak presentation.
 - `npm audit`: production dependencies report 0 vulnerabilities. Two
   development findings (`undici`, `ip-address`) remain inside the npm CLI bundled
   by `@semantic-release/npm`, already at the latest npm 11 release.

@@ -85,7 +85,7 @@ for (const [width, height, scale] of [[390, 844, 1], [1024, 900, 1], [320, 568, 
     await expect(records).toHaveCount(11);
     await records.first().evaluate(element => element.scrollIntoView({ block: "start" }));
     const phase = process.env.OAK_POLISH_PHASE ?? "after";
-    await page.screenshot({ path: `/private/tmp/r110-${phase}-fixture-home-${width}.png` });
+    await page.screenshot({ path: test.info().outputPath(`r110-${phase}-fixture-home-${width}.png`) });
     console.log("LODGING_POLISH", JSON.stringify({ phase, width, scale, records: await records.evaluateAll(elements => elements.map(element => ({ text: element.textContent, top: element.getBoundingClientRect().top, height: element.getBoundingClientRect().height }))) }));
     expect(await records.locator("h3").count()).toBe(1);
     for (let index = 0; index < 11; index++) {

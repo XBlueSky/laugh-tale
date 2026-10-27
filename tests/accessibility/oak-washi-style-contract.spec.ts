@@ -866,7 +866,7 @@ for (const [width, height, scale] of [[390, 844, 1], [1024, 900, 1], [320, 568, 
       return { row: rect(element), selection: rect(element.querySelector(".oak-row-selection")!), location: rect(element.querySelector(".oak-row-location")!), text: element.textContent, outline: getComputedStyle(element).outlineStyle, viewport: innerWidth, scrollWidth: document.documentElement.scrollWidth };
     });
     const phase = process.env.OAK_POLISH_PHASE ?? "after";
-    await page.screenshot({ path: `/private/tmp/r110-${phase}-mixed-${width}.png` });
+    await page.screenshot({ path: test.info().outputPath(`r110-${phase}-mixed-${width}.png`) });
     console.log("ACTUAL_CONTENT_POLISH", JSON.stringify({ phase, width, scale, ...geometry }));
     await writeFile(info.outputPath("geometry.json"), JSON.stringify(geometry, null, 2));
     expect.soft(geometry.outline).toBe("none");
@@ -902,7 +902,7 @@ for (const [width, height, scale] of [[390, 844, 1], [1024, 900, 1], [320, 568, 
     await page.locator('[data-owner-id="node-sightseeing"] .oak-row-selection').click(); await settle(page);
     await expect(selection).toHaveAttribute("aria-pressed", "false");
     await row.scrollIntoViewIfNeeded();
-    await page.screenshot({ path: `/private/tmp/r110-${phase}-unselected-${width}.png` });
+    await page.screenshot({ path: test.info().outputPath(`r110-${phase}-unselected-${width}.png`) });
     await expect(row.locator('.oak-unresolved-facts .oak-row-location')).toBeVisible();
   });
 }
