@@ -26,6 +26,9 @@ export default tseslint.config(
       // nearest config per file, so linting it from here would load the
       // starter's own toolchain.
       "plugins/eternal-pose/starter/react/**",
+      // The Tokyo flagship is likewise independent; its lint runs in the
+      // example-tokyo CI job.
+      "examples/tokyo/**",
     ],
   },
   eslint.configs.recommended,

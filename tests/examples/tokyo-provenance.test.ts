@@ -4,16 +4,18 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const ROOT = resolve(import.meta.dirname, "../../examples/tokyo");
-const read = (file: string): Record<string, any> => JSON.parse(readFileSync(resolve(ROOT, file), "utf8"));
+const read = <T>(file: string): T => JSON.parse(readFileSync(resolve(ROOT, file), "utf8")) as T;
+
+type LockEntry = { version?: string; resolved?: string };
 const PACKAGES = ["@laugh-tale-island/core", "@laugh-tale-island/react"];
 
 // Baseline option (c): the two Laugh Tale packages come from tarballs packed from main HEAD and
 // committed under examples/tokyo/vendor; everything else must still resolve from registry.npmjs.org.
 describe("examples/tokyo provenance", () => {
   it("installs both packages from the vendored tarballs and everything else from npmjs", () => {
-    const pkg = read("package.json");
-    const meta = read("eternal-pose.json");
-    const lock = read("package-lock.json");
+    const pkg = read<{ dependencies: Record<string, string> }>("package.json");
+    const meta = read<{ packages: Record<string, string>; recipe: string }>("eternal-pose.json");
+    const lock = read<{ packages: Record<string, LockEntry> }>("package-lock.json");
     for (const name of PACKAGES) {
       const bare = name.split("/")[1];
       expect(pkg.dependencies[name]).toBe(`file:vendor/laugh-tale-island-${bare}-1.0.0.tgz`);
@@ -25,9 +27,9 @@ describe("examples/tokyo provenance", () => {
     const foreign = Object.entries(lock.packages).filter(
       ([key, value]) =>
         key.startsWith("node_modules/") &&
-        typeof (value as { resolved?: string }).resolved === "string" &&
-        !(value as { resolved: string }).resolved.startsWith("https://registry.npmjs.org/") &&
-        !(value as { resolved: string }).resolved.startsWith("file:vendor/"),
+        typeof value.resolved === "string" &&
+        !value.resolved.startsWith("https://registry.npmjs.org/") &&
+        !value.resolved.startsWith("file:vendor/"),
     );
     expect(foreign).toEqual([]);
     expect(JSON.stringify(lock)).not.toMatch(/"(link|workspace):/);
