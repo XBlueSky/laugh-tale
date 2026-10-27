@@ -1,0 +1,8 @@
+{
+  "generatorVersion": "0.1.0",
+  "recipe": "quiet-wood",
+  "packages": {
+    "@laugh-tale-island/core": "1.0.0",
+    "@laugh-tale-island/react": "1.0.0"
+  }
+}

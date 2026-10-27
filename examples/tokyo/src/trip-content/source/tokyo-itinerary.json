@@ -1,0 +1,171 @@
+{
+  "title": "26東京偷尼生日",
+  "timezone": "Asia/Tokyo",
+  "startDate": "2026-08-20",
+  "endDate": "2026-08-25",
+  "days": [
+    {
+      "id": "d1",
+      "date": "2026-08-20",
+      "title": "8月20日",
+      "stops": [
+        { "slug": "narita-t2", "title": "成田國際機場第二航廈", "kind": "transfer" },
+        { "slug": "mitsui-garden-nihonbashi", "title": "三井花園飯店日本橋普米爾", "kind": "lodging" },
+        { "slug": "suminoe-izakaya", "title": "海鮮居酒屋・墨之榮", "kind": "dining" }
+      ],
+      "legs": ["transit", "walking"]
+    },
+    {
+      "id": "d2",
+      "date": "2026-08-21",
+      "title": "8月21日",
+      "stops": [
+        { "slug": "mitsui-garden-nihonbashi", "title": "三井花園飯店日本橋普米爾", "kind": "lodging" },
+        { "slug": "tokyo-station", "title": "東京車站", "kind": "sightseeing" },
+        { "slug": "fuji-tv-shop-tokyo-station", "title": "Fuji TV Shop Fuji-san Tokyo Station", "kind": "shopping" },
+        { "slug": "biccamera-yurakucho", "title": "BicCamera 有樂町店", "kind": "shopping" },
+        { "slug": "nemuro-hanamaru-ginza", "title": "迴轉壽司 根室花丸 銀座店", "kind": "dining" },
+        { "slug": "muji-ginza", "title": "無印良品 銀座旗艦店", "kind": "shopping" },
+        { "slug": "lotte-duty-free-ginza", "title": "樂天免稅店 東京銀座店", "kind": "shopping" },
+        { "slug": "ginza-six", "title": "GINZA SIX", "kind": "shopping" },
+        { "slug": "uniqlo-ginza", "title": "Uniqlo Ginza Flagship Store", "kind": "shopping" },
+        { "slug": "wako-annex-tea-salon", "title": "和光 銀座別館茶沙龍", "kind": "dining" },
+        { "slug": "ginza-mitsukoshi", "title": "銀座三越", "kind": "shopping" },
+        { "slug": "matsuya-ginza", "title": "松屋銀座", "kind": "shopping" },
+        { "slug": "don-quijote-ginza", "title": "唐吉訶德 銀座本店", "kind": "shopping" },
+        { "slug": "mitsui-garden-nihonbashi", "title": "三井花園飯店日本橋普米爾", "kind": "lodging" },
+        { "slug": "kiwamiya-tokyo-station", "title": "極味屋 東京站店", "kind": "dining" },
+        { "slug": "tokyo-gift-palette", "title": "東京 禮物調色盤", "kind": "shopping" },
+        { "slug": "tokyo-station-ichibangai", "title": "東京站一番街", "kind": "shopping" },
+        { "slug": "press-butter-sand-daimaru", "title": "PRESS BUTTER SAND Daimaru Tokyo", "kind": "dining" },
+        { "slug": "tokyo-tulip-rose-tokyo-station", "title": "東京鬱金香玫瑰 東京站店", "kind": "dining" },
+        { "slug": "maple-mania-gransta-tokyo", "title": "楓糖男孩 The Maple mania GRANATA東京店", "kind": "dining" },
+        { "slug": "kouro-an-gransta-tokyo", "title": "Koroan KOURO - AN Guransutatokyoten", "kind": "dining" },
+        { "slug": "gransta-tokyo-marunouchi", "title": "GRANSTA東京·GRANSTA丸之內", "kind": "shopping" },
+        { "slug": "mitsui-garden-nihonbashi", "title": "三井花園飯店日本橋普米爾", "kind": "lodging" }
+      ],
+      "legs": [
+        "walking", "walking", "walking", "walking", "walking", "walking", "walking", "walking", "walking", "walking",
+        "walking", "walking", "transit", "walking", "walking", "walking", "walking", "walking", "walking", "walking",
+        "walking", "walking"
+      ]
+    },
+    {
+      "id": "d3",
+      "date": "2026-08-22",
+      "title": "8月22日",
+      "stops": [
+        { "slug": "mitsui-garden-nihonbashi", "title": "三井花園飯店日本橋普米爾", "kind": "lodging" },
+        { "slug": "balcony-by-6th", "title": "Balcony by 6th", "kind": "dining" },
+        { "slug": "pelican-cafe", "title": "Pelican Cafe", "kind": "dining" },
+        { "slug": "tokyo-azabudai-hills", "title": "東京麻布台之丘", "kind": "sightseeing" },
+        { "slug": "azabudai-hills-garden-plaza-c", "title": "麻布台之丘 花園廣場C", "kind": "sightseeing" },
+        { "slug": "echire-atelier-du-beurre", "title": "Échiré L'Atelier du Beurre", "kind": "dining" },
+        { "slug": "azabudai-hills-market", "title": "麻布台山市場", "kind": "shopping" },
+        { "slug": "suzukake-azabudai-hills", "title": "鈴懸 麻布台之丘店", "kind": "dining" },
+        { "slug": "teamlab-borderless", "title": "teamLab Borderless 數位藝術美術館", "kind": "experience" },
+        { "slug": "shiba-kyusuijo-park", "title": "芝給水所公園", "kind": "sightseeing" },
+        { "slug": "azabu-juban-shopping-street", "title": "麻布十番商店街", "kind": "shopping" },
+        { "slug": "hills-house-sky-room", "title": "Hills House Sky Room Café&Bar", "kind": "dining" },
+        { "slug": "azabudai-hills", "title": "麻布台之丘 Azabudai Hills", "kind": "sightseeing" },
+        { "slug": "mitsui-garden-nihonbashi", "title": "三井花園飯店日本橋普米爾", "kind": "lodging" }
+      ],
+      "legs": [
+        "transit", "unknown", "unknown", "walking", "walking", "walking", "walking", "walking", "walking", "walking",
+        "walking", "walking", "transit"
+      ]
+    },
+    {
+      "id": "d4",
+      "date": "2026-08-23",
+      "title": "8月23日",
+      "stops": [
+        { "slug": "mitsui-garden-nihonbashi", "title": "三井花園飯店日本橋普米爾", "kind": "lodging" },
+        { "slug": "kaminarimon", "title": "淺草寺 雷門", "kind": "sightseeing" },
+        { "slug": "azuma-kibi-dango", "title": "淺草吉備糰子 AZUMA", "kind": "dining" },
+        { "slug": "nakamise", "title": "仲見世商店街", "kind": "shopping" },
+        { "slug": "kimuraya-ningyoyaki", "title": "木村家人形燒本舖", "kind": "dining" },
+        { "slug": "sensoji", "title": "淺草寺", "kind": "sightseeing" },
+        { "slug": "daikokuya-tempura", "title": "天婦羅 大黑家 本店", "kind": "dining" },
+        { "slug": "asakusa-menchi", "title": "淺草炸肉餅", "kind": "dining" },
+        { "slug": "imahan-matsuya-asakusa", "title": "淺草今半 松屋淺草店", "kind": "dining" },
+        { "slug": "kamejyu-dorayaki", "title": "銅鑼燒 龜十", "kind": "dining" },
+        { "slug": "sumida-park-asakusa", "title": "隅田公園 (淺草側)", "kind": "sightseeing" },
+        { "slug": "sumida-river-walk", "title": "隅田川步道", "kind": "sightseeing" },
+        { "slug": "tokyo-mizumachi", "title": "東京水岸街道 (Tokyo Mizumachi)", "kind": "sightseeing" },
+        { "slug": "tokyo-solamachi", "title": "東京晴空街道 TOKYO Solamachi", "kind": "shopping" },
+        { "slug": "loft-skytree", "title": "東京晴空塔LOFT", "kind": "shopping" },
+        { "slug": "chiikawa-land-solamachi", "title": "ちいかわらんど 東京スカイツリータウン・ソラマチ店", "kind": "shopping" },
+        { "slug": "jump-shop-solamachi", "title": "JUMP SHOP Tokyo Skytree Town Soramachi", "kind": "shopping" },
+        { "slug": "skytree-cafe-350", "title": "Skytree Cafe 350", "kind": "dining" },
+        { "slug": "skytree-tembo-galleria", "title": "Tokyo Sky Tree Tembo Galleria", "kind": "experience" },
+        { "slug": "ameyoko", "title": "上野阿美橫町", "kind": "shopping" },
+        { "slug": "loft-ueno", "title": "上野LOFT", "kind": "shopping" },
+        { "slug": "unatoto-ueno", "title": "名代 宇奈とと", "kind": "dining" },
+        { "slug": "os-drug-ueno", "title": "OS Drug 上野店藥妝店", "kind": "shopping" },
+        { "slug": "hyakkaen-ameyoko", "title": "阿美橫百果園", "kind": "dining" },
+        { "slug": "minatoya", "title": "Minatoya", "kind": "dining" },
+        { "slug": "niki-no-kashi", "title": "二木菓子 第一營業所", "kind": "shopping" },
+        { "slug": "don-quijote-okachimachi", "title": "唐吉訶德 御徒町店", "kind": "shopping" },
+        { "slug": "maruetsu-petit-nihonbashi-honcho", "title": "Maruetsu petit Nihonbashihoncho", "kind": "shopping" },
+        { "slug": "mitsui-garden-nihonbashi", "title": "三井花園飯店日本橋普米爾", "kind": "lodging" }
+      ],
+      "legs": [
+        "transit", "walking", "walking", "walking", "walking", "walking", "walking", "walking", "walking", "walking",
+        "walking", "walking", "walking", "walking", "walking", "walking", "walking", "walking", "transit", "walking",
+        "walking", "walking", "walking", "walking", "walking", "walking", "transit", "walking"
+      ]
+    },
+    {
+      "id": "d5",
+      "date": "2026-08-24",
+      "title": "8月24日",
+      "stops": [
+        { "slug": "mitsui-garden-nihonbashi", "title": "三井花園飯店日本橋普米爾", "kind": "lodging" },
+        { "slug": "meiji-jingu", "title": "明治神宮", "kind": "sightseeing" },
+        { "slug": "atcosme-tokyo", "title": "＠cosme TOKYO", "kind": "shopping" },
+        { "slug": "afuri-harajuku", "title": "AFURI Harajuku", "kind": "dining" },
+        { "slug": "with-harajuku", "title": "WITH原宿", "kind": "shopping" },
+        { "slug": "takeshita-street", "title": "竹下通", "kind": "shopping" },
+        { "slug": "beams-harajuku", "title": "BEAMS 原宿", "kind": "shopping" },
+        { "slug": "hoka-harajuku", "title": "HOKA 原宿店", "kind": "shopping" },
+        { "slug": "tokyu-plaza-harakado", "title": "東急廣場原宿「HARAKADO原角」", "kind": "shopping" },
+        { "slug": "mugiwara-store-harajuku", "title": "ONE PIECE MUGIWARA STORE HARAJUKU", "kind": "shopping" },
+        { "slug": "tokyu-plaza-omotesando-harajuku", "title": "東急Plaza表參道原宿", "kind": "shopping" },
+        { "slug": "chiikawa-bakery", "title": "Chiikawa Bakery", "kind": "shopping" },
+        { "slug": "onitsuka-tiger-omotesando", "title": "Onitsuka Tiger NIPPON MADE 表參道店", "kind": "shopping" },
+        { "slug": "cat-street", "title": "Cat St", "kind": "shopping" },
+        { "slug": "omotesando-hills", "title": "表參道Hills", "kind": "shopping" },
+        { "slug": "house-of-hermes", "title": "House of Herme", "kind": "shopping" },
+        { "slug": "le-labo-aoyama", "title": "LE LABO 青山店", "kind": "shopping" },
+        { "slug": "miyashita-park", "title": "宮下公園", "kind": "sightseeing" },
+        { "slug": "disney-store-shibuya", "title": "迪士尼商店 澀谷公園大道店", "kind": "shopping" },
+        { "slug": "shibuya-parco", "title": "澀谷PARCO", "kind": "shopping" },
+        { "slug": "spain-zaka", "title": "西班牙坂", "kind": "sightseeing" },
+        { "slug": "mega-don-quijote-shibuya", "title": "MEGA唐吉訶德 澀谷本店", "kind": "shopping" },
+        { "slug": "seibu-shibuya", "title": "西武澀谷店", "kind": "shopping" },
+        { "slug": "shibuya-scramble-crossing", "title": "渋谷スクランブル交差点", "kind": "sightseeing" },
+        { "slug": "hachiko-statue", "title": "忠犬八公像", "kind": "sightseeing" },
+        { "slug": "shibuya-sky", "title": "澀谷 SKY", "kind": "experience" },
+        { "slug": "shibuya-stream", "title": "澀谷線流", "kind": "shopping" },
+        { "slug": "rikyu-shibuya-hikarie", "title": "Gyutan Sumiyaki Rikyu Shibuya Hikarie Branch", "kind": "dining" },
+        { "slug": "mitsui-garden-nihonbashi", "title": "三井花園飯店日本橋普米爾", "kind": "lodging" }
+      ],
+      "legs": [
+        "transit", "walking", "walking", "walking", "walking", "walking", "walking", "walking", "walking", "walking",
+        "walking", "walking", "walking", "walking", "walking", "walking", "walking", "walking", "walking", "walking",
+        "walking", "walking", "walking", "walking", "walking", "walking", "walking", "transit"
+      ]
+    },
+    {
+      "id": "d6",
+      "date": "2026-08-25",
+      "title": "8月25日",
+      "stops": [
+        { "slug": "mitsui-garden-nihonbashi", "title": "三井花園飯店日本橋普米爾", "kind": "lodging" },
+        { "slug": "narita-t2", "title": "成田機場第二航廈", "kind": "transfer" }
+      ],
+      "legs": ["transit"]
+    }
+  ]
+}

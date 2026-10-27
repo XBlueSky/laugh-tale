@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+test-results/
+playwright-report/
+.env.local
+.DS_Store
+*.tsbuildinfo
+
+# Baseline run: local-only Places review file
+scripts/.resolve-review.json

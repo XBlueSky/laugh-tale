@@ -1,0 +1,808 @@
+{
+  "成田國際機場第二航廈": {
+    "status": "resolved",
+    "placeId": "ChIJOWLCT3bzImARSeoxn2vEu8Y",
+    "lat": 35.773213,
+    "lng": 140.387543,
+    "displayName": "成田國際機場第二航廈",
+    "formattedAddress": "日本〒286-0104 千葉縣成田市 Furugome",
+    "queriedAs": "成田國際機場第二航廈"
+  },
+  "三井花園飯店日本橋普米爾": {
+    "status": "resolved",
+    "placeId": "ChIJ_6CJUFWJGGARv8kNhNPwtJk",
+    "lat": 35.6881348,
+    "lng": 139.7734674,
+    "displayName": "三井花園飯店日本橋普米爾",
+    "formattedAddress": "〒103-0022 Tokyo, Chuo City, Nihonbashimuromachi, 3-chōme−4−４ 三井ガーデンホテル日本橋プレミア 9階",
+    "queriedAs": "三井花園飯店日本橋普米爾"
+  },
+  "海鮮居酒屋・墨之榮": {
+    "status": "resolved",
+    "placeId": "ChIJ39vooVWJGGARBA8dHXdr02Y",
+    "lat": 35.686666699999996,
+    "lng": 139.7740227,
+    "displayName": "海鮮居酒屋・墨之榮",
+    "formattedAddress": "〒103-0022 Tokyo, Chuo City, Nihonbashimuromachi, 2-chōme−2−１ COREDO室町 2F",
+    "queriedAs": "海鮮居酒屋・墨之榮"
+  },
+  "東京車站": {
+    "status": "resolved",
+    "placeId": "ChIJC3Cf2PuLGGAROO00ukl8JwA",
+    "lat": 35.681299599999996,
+    "lng": 139.76706579999998,
+    "displayName": "東京車站",
+    "formattedAddress": "1 Chome-9 Marunouchi, Chiyoda City, Tokyo 100-0005",
+    "queriedAs": "東京車站"
+  },
+  "Fuji TV Shop Fuji-san Tokyo Station": {
+    "status": "resolved",
+    "placeId": "ChIJtxODuv6LGGARI9lDb1Ij4E8",
+    "lat": 35.6819185,
+    "lng": 139.7686925,
+    "displayName": "Fuji TV Shop Fuji-san Tokyo Station",
+    "formattedAddress": "1-chōme-9-1 Marunouchi, Chiyoda City, Tokyo 100-0005",
+    "queriedAs": "Fuji TV Shop Fuji-san Tokyo Station"
+  },
+  "BicCamera 有樂町店": {
+    "status": "resolved",
+    "placeId": "ChIJ0dtyq_qLGGARUzYbCCXz1Ic",
+    "lat": 35.6753814,
+    "lng": 139.7629088,
+    "displayName": "BicCamera 有樂町店",
+    "formattedAddress": "1-chōme-11-1 Yūrakuchō, Chiyoda City, Tokyo 100-0006",
+    "queriedAs": "BicCamera 有樂町店"
+  },
+  "迴轉壽司 根室花丸 銀座店": {
+    "status": "resolved",
+    "placeId": "ChIJcfcwKaKLGGARZ2Ptk7fUo_c",
+    "lat": 35.6722448,
+    "lng": 139.7624127,
+    "displayName": "迴轉壽司 根室花丸 銀座店",
+    "formattedAddress": "〒104-0061 Tokyo, Chuo City, Ginza, 5-chōme−2−１ 銀座ノボ 10F",
+    "queriedAs": "迴轉壽司 根室花丸 銀座店"
+  },
+  "無印良品 銀座旗艦店": {
+    "status": "resolved",
+    "placeId": "ChIJfc-uOKqLGGAR-bVyIUWjtQo",
+    "lat": 35.673214,
+    "lng": 139.76536769999998,
+    "displayName": "無印良品 銀座旗艦店",
+    "formattedAddress": "3-chōme-3-5 Ginza, Chuo City, Tokyo 104-0061",
+    "queriedAs": "無印良品 銀座旗艦店"
+  },
+  "樂天免稅店 東京銀座店": {
+    "status": "resolved",
+    "placeId": "ChIJUZ46ieWLGGARExOqgqtRgN4",
+    "lat": 35.6722448,
+    "lng": 139.7624127,
+    "displayName": "樂天免稅店 東京銀座店",
+    "formattedAddress": "〒104-0061 Tokyo, Chuo City, Ginza, 5-chōme−2−１ 8 GinzaNovo（旧東急プラザ銀座 9階",
+    "queriedAs": "樂天免稅店 東京銀座店"
+  },
+  "GINZA SIX": {
+    "status": "resolved",
+    "placeId": "ChIJAQAsR--LGGAR_AmB8WMDy88",
+    "lat": 35.6697688,
+    "lng": 139.76417619999998,
+    "displayName": "GINZA SIX",
+    "formattedAddress": "6-chōme-10-1 Ginza, Chuo City, Tokyo 104-0061",
+    "queriedAs": "GINZA SIX"
+  },
+  "Uniqlo Ginza Flagship Store": {
+    "status": "resolved",
+    "placeId": "ChIJb9MHbuaLGGAR0xi-noU25UU",
+    "lat": 35.6702448,
+    "lng": 139.76346859999998,
+    "displayName": "Uniqlo Ginza Flagship Store",
+    "formattedAddress": "〒104-0061 Tokyo, Chuo City, Ginza, 6-chōme−9−５ ギンザコマツ東館 １階～１２階",
+    "queriedAs": "Uniqlo Ginza Flagship Store"
+  },
+  "和光 銀座別館茶沙龍": {
+    "status": "resolved",
+    "placeId": "ChIJjdNZ1uWLGGARrRWTL70PKTw",
+    "lat": 35.671816799999995,
+    "lng": 139.7647701,
+    "displayName": "和光 銀座別館茶沙龍",
+    "formattedAddress": "〒104-0061 Tokyo, Chuo City, Ginza, 4-chōme−4−８ 和光アネックス",
+    "queriedAs": "和光 銀座別館茶沙龍"
+  },
+  "銀座三越": {
+    "status": "resolved",
+    "placeId": "ChIJX9MhjuaLGGARvoMvduRK-5E",
+    "lat": 35.6712864,
+    "lng": 139.7657382,
+    "displayName": "銀座三越",
+    "formattedAddress": "4-chōme-6-16 Ginza, Chuo City, Tokyo 104-8212",
+    "queriedAs": "銀座三越"
+  },
+  "松屋銀座": {
+    "status": "resolved",
+    "placeId": "ChIJ5UsboeaLGGARV2ODxt0ic1I",
+    "lat": 35.6722621,
+    "lng": 139.7666526,
+    "displayName": "松屋銀座",
+    "formattedAddress": "3-chōme-6-1 Ginza, Chuo City, Tokyo 104-8130",
+    "queriedAs": "松屋銀座"
+  },
+  "唐吉訶德 銀座本店": {
+    "status": "resolved",
+    "placeId": "ChIJE1wGD-iLGGARyisyYKXJcV8",
+    "lat": 35.667122,
+    "lng": 139.7618936,
+    "displayName": "唐吉訶德 銀座本店",
+    "formattedAddress": "GINZA NINE 3, 8-chōme-6-10 Ginza, Chuo City, Tokyo 104-0061",
+    "queriedAs": "唐吉訶德 銀座本店"
+  },
+  "極味屋 東京站店": {
+    "status": "resolved",
+    "placeId": "ChIJCzeBdjeLGGAR9lv5bx5a91s",
+    "lat": 35.6823297,
+    "lng": 139.7680117,
+    "displayName": "極味屋 東京站店",
+    "formattedAddress": "〒100-0005 Tokyo, Chiyoda City, Marunouchi, 1-chōme−9−１ グランスタ八重北 １F",
+    "queriedAs": "極味屋 東京站店"
+  },
+  "東京 禮物調色盤": {
+    "status": "resolved",
+    "placeId": "ChIJK5FkuXuLGGARoDOPHSdh1j4",
+    "lat": 35.6819705,
+    "lng": 139.7685367,
+    "displayName": "東京 禮物調色盤",
+    "formattedAddress": "〒100-0005 Tokyo, Chiyoda City, Marunouchi, 1-chōme−9−１ 東京駅八重洲北口 1階",
+    "queriedAs": "東京 禮物調色盤"
+  },
+  "東京站一番街": {
+    "status": "resolved",
+    "placeId": "ChIJaQ_xQPyLGGARBPvtwIjivTA",
+    "lat": 35.682288899999996,
+    "lng": 139.7684903,
+    "displayName": "東京站一番街",
+    "formattedAddress": "1-chōme-9-1 Marunouchi, Chiyoda City, Tokyo 100-0005",
+    "queriedAs": "東京站一番街"
+  },
+  "PRESS BUTTER SAND Daimaru Tokyo": {
+    "status": "resolved",
+    "placeId": "ChIJzQqwQ_mLGGARG5czYw9uKYg",
+    "lat": 35.6815688,
+    "lng": 139.76895869999998,
+    "displayName": "PRESS BUTTER SAND Daimaru Tokyo",
+    "formattedAddress": "〒100-6701 Tokyo, Chiyoda City, Marunouchi, 1-chōme−9−１ 大丸東京店 地下1階",
+    "queriedAs": "PRESS BUTTER SAND Daimaru Tokyo"
+  },
+  "東京鬱金香玫瑰 東京站店": {
+    "status": "resolved",
+    "placeId": "ChIJ_U_YsL-LGGARdqSG6wLutqI",
+    "lat": 35.681092,
+    "lng": 139.7675655,
+    "displayName": "東京鬱金香玫瑰 東京站店",
+    "formattedAddress": "〒100-0005 Tokyo, Chiyoda City, Marunouchi, 1-chōme−9−１ JR Tokyo Station, 改札内 １Ｆ 八重洲中央改札内 中央通路沿い",
+    "queriedAs": "東京鬱金香玫瑰 東京站店"
+  },
+  "楓糖男孩 The Maple mania GRANATA東京店": {
+    "status": "resolved",
+    "placeId": "ChIJGeYlX_mLGGAR-TsSfMKg9I8",
+    "lat": 35.6817724,
+    "lng": 139.7669928,
+    "displayName": "楓糖男孩 The Maple mania GRANATA東京店",
+    "formattedAddress": "〒100-0005 Tokyo, Chiyoda City, Marunouchi, 1-chōme−9−１ JR Tokyo Station, １階改札内",
+    "queriedAs": "楓糖男孩 The Maple mania GRANATA東京店"
+  },
+  "Koroan KOURO - AN Guransutatokyoten": {
+    "status": "resolved",
+    "placeId": "ChIJGeYlX_mLGGARFXH1DhHxkAE",
+    "lat": 35.6813334,
+    "lng": 139.7673879,
+    "displayName": "Koroan KOURO - AN Guransutatokyoten",
+    "formattedAddress": "1-chōme-9-1 Marunouchi, Chiyoda City, Tokyo 100-0005",
+    "queriedAs": "Koroan KOURO - AN Guransutatokyoten"
+  },
+  "GRANSTA東京·GRANSTA丸之內": {
+    "status": "resolved",
+    "placeId": "ChIJoYwA2fuLGGARrTNyOELGyV8",
+    "lat": 35.679870199999996,
+    "lng": 139.7675145,
+    "displayName": "GRANSTA東京·GRANSTA丸之內",
+    "formattedAddress": "〒100-0005 Tokyo, Chiyoda City, Marunouchi, 1-chōme−9−１ JR東日本 東京駅構内 B1～1F",
+    "queriedAs": "GRANSTA東京·GRANSTA丸之內"
+  },
+  "Balcony by 6th": {
+    "status": "resolved",
+    "placeId": "ChIJKzqOV0iLGGARjM1z-f6-TCA",
+    "lat": 35.66124430000001,
+    "lng": 139.7406186,
+    "displayName": "Balcony by 6th",
+    "formattedAddress": "〒106-0041 Tokyo, Minato City, Azabudai, 1-chōme−3−１ ヒルズタワープラザ 3F",
+    "queriedAs": "Balcony by 6th"
+  },
+  "Pelican Cafe": {
+    "status": "unresolved",
+    "reason": "title names no branch; two plausible venues (Asakusa original, Azabudai Hills branch) and both adjacent legs are unknown, so day-context inference is not trustworthy",
+    "queriedAs": "Pelican Cafe"
+  },
+  "東京麻布台之丘": {
+    "status": "resolved",
+    "placeId": "ChIJJSI0QC6LGGARwWmKE3MWmj8",
+    "lat": 35.6615447,
+    "lng": 139.7408302,
+    "displayName": "麻布台之丘",
+    "formattedAddress": "1-chōme-3-1 Azabudai, Minato City, Tokyo 106-0041",
+    "queriedAs": "東京麻布台之丘"
+  },
+  "麻布台之丘 花園廣場C": {
+    "status": "resolved",
+    "placeId": "ChIJ6yNwKwCLGGARtWKVSKIBzQ0",
+    "lat": 35.6619929,
+    "lng": 139.74159799999998,
+    "displayName": "麻布台之丘 花園廣場C",
+    "formattedAddress": "1-chōme-2-4 Azabudai, Minato City, Tokyo 106-0041",
+    "queriedAs": "麻布台之丘 花園廣場C"
+  },
+  "Échiré L'Atelier du Beurre": {
+    "status": "resolved",
+    "placeId": "ChIJW83YPkeLGGARssK-NPPCR0s",
+    "lat": 35.6618376,
+    "lng": 139.7437374,
+    "displayName": "Échiré L'Atelier du Beurre",
+    "formattedAddress": "Azabudai Hills Garden Plaza B, 1F, 5-chōme-9-1 Toranomon, Minato City, Tokyo 105-0001",
+    "queriedAs": "Échiré L'Atelier du Beurre"
+  },
+  "麻布台山市場": {
+    "status": "resolved",
+    "placeId": "ChIJwcPORACLGGARzmIP3WuTyDw",
+    "lat": 35.6621427,
+    "lng": 139.7412679,
+    "displayName": "麻布台山市場",
+    "formattedAddress": "〒106-0041 Tokyo, Minato City, Azabudai, 1-chōme−2−４ ヒルズガーデンプラザC B1-1F",
+    "queriedAs": "麻布台山市場"
+  },
+  "鈴懸 麻布台之丘店": {
+    "status": "resolved",
+    "placeId": "ChIJJbR-1uSLGGARK0h5ZTAYFL0",
+    "lat": 35.6622018,
+    "lng": 139.7425164,
+    "displayName": "鈴懸 麻布台之丘店",
+    "formattedAddress": "〒105-0001 Tokyo, Minato City, Toranomon, 5-chōme−9−１ 麻布台ヒルズ ガーデンプラザ C 地下1階",
+    "queriedAs": "鈴懸 麻布台之丘店"
+  },
+  "teamLab Borderless 數位藝術美術館": {
+    "status": "resolved",
+    "placeId": "ChIJQ5Sa1PqJGGARUSaNKKOrMVg",
+    "lat": 35.6620689,
+    "lng": 139.7432671,
+    "displayName": "teamLab Borderless: MORI Building DIGITAL ART MUSEUM",
+    "formattedAddress": "〒106-0041 Tokyo, Minato City, Toranomon, 5-chōme−9−９ Azabudai Hills Garden Plaza B, B1",
+    "queriedAs": "teamLab Borderless 數位藝術美術館"
+  },
+  "芝給水所公園": {
+    "status": "resolved",
+    "placeId": "ChIJae2eSJaLGGARhPFckvX6Y0M",
+    "lat": 35.6607276,
+    "lng": 139.7446832,
+    "displayName": "芝給水所公園",
+    "formattedAddress": "3-chōme-6-7 Shibakōen, Minato City, Tokyo 105-0011",
+    "queriedAs": "芝給水所公園"
+  },
+  "麻布十番商店街": {
+    "status": "resolved",
+    "placeId": "ChIJcwi8eUWLGGARtYr2tdGzY5E",
+    "lat": 35.655848299999995,
+    "lng": 139.7353186,
+    "displayName": "麻布十番商店街",
+    "formattedAddress": "2-chōme-2-3 Azabujūban, Minato City, Tokyo 106-0045",
+    "queriedAs": "麻布十番商店街"
+  },
+  "Hills House Sky Room Café&Bar": {
+    "status": "resolved",
+    "placeId": "ChIJF1iB3MKLGGARZmEBNQ1C8zw",
+    "lat": 35.66124430000001,
+    "lng": 139.7406186,
+    "displayName": "Hills House Sky Room Café&Bar",
+    "formattedAddress": "〒106-0041 Tokyo, Minato City, Azabudai, 1-chōme−3−１ ヒルズ森JPタワ 34F HillsHouse",
+    "queriedAs": "Hills House Sky Room Café&Bar"
+  },
+  "麻布台之丘 Azabudai Hills": {
+    "status": "resolved",
+    "placeId": "ChIJJSI0QC6LGGARwWmKE3MWmj8",
+    "lat": 35.6615447,
+    "lng": 139.7408302,
+    "displayName": "麻布台之丘",
+    "formattedAddress": "1-chōme-3-1 Azabudai, Minato City, Tokyo 106-0041",
+    "queriedAs": "麻布台之丘 Azabudai Hills"
+  },
+  "淺草寺 雷門": {
+    "status": "resolved",
+    "placeId": "ChIJ0YwG28aOGGARvRKAXIBWqNk",
+    "lat": 35.7111163,
+    "lng": 139.7963656,
+    "displayName": "淺草寺 雷門",
+    "formattedAddress": "2-chōme-3-1 Asakusa, Taito City, Tokyo 111-0032",
+    "queriedAs": "淺草寺 雷門"
+  },
+  "淺草吉備糰子 AZUMA": {
+    "status": "resolved",
+    "placeId": "ChIJeS-t0caOGGARACIfv1Le8F0",
+    "lat": 35.7114834,
+    "lng": 139.79634629999998,
+    "displayName": "淺草吉備糰子 AZUMA",
+    "formattedAddress": "1-chōme-18-1 Asakusa, 台東区 Taito City, Tokyo 111-0032",
+    "queriedAs": "淺草吉備糰子 AZUMA"
+  },
+  "仲見世商店街": {
+    "status": "resolved",
+    "placeId": "ChIJPd37MMGOGGARvJ2hfxoiNVE",
+    "lat": 35.711841299999996,
+    "lng": 139.7964542,
+    "displayName": "仲見世商店街",
+    "formattedAddress": "1-chōme-36-3 Asakusa, Taito City, Tokyo 111-0032",
+    "queriedAs": "仲見世商店街"
+  },
+  "木村家人形燒本舖": {
+    "status": "resolved",
+    "placeId": "ChIJ4dLYF8GOGGARpt8z1hTLcPA",
+    "lat": 35.7131615,
+    "lng": 139.79665989999998,
+    "displayName": "木村家人形燒本舖",
+    "formattedAddress": "2-chōme-3-1 Asakusa, Taito City, Tokyo 111-0032",
+    "queriedAs": "木村家人形燒本舖"
+  },
+  "淺草寺": {
+    "status": "resolved",
+    "placeId": "ChIJ8T1GpMGOGGARDYGSgpooDWw",
+    "lat": 35.7147651,
+    "lng": 139.7966553,
+    "displayName": "淺草寺",
+    "formattedAddress": "2-chōme-3-1 Asakusa, Taito City, Tokyo 111-0032",
+    "queriedAs": "淺草寺"
+  },
+  "天婦羅 大黑家 本店": {
+    "status": "resolved",
+    "placeId": "ChIJ79EaJsGOGGARHgsoZXYMZO0",
+    "lat": 35.7127383,
+    "lng": 139.79557,
+    "displayName": "天婦羅 大黑家 本店",
+    "formattedAddress": "1-chōme-38-10 Asakusa, Taito City, Tokyo 111-0032",
+    "queriedAs": "天婦羅 大黑家 本店"
+  },
+  "淺草炸肉餅": {
+    "status": "resolved",
+    "placeId": "ChIJ1cXzIcGOGGARxrYldgjJ4Z8",
+    "lat": 35.7129114,
+    "lng": 139.7960553,
+    "displayName": "淺草炸肉餅",
+    "formattedAddress": "2-chōme-3-3 Asakusa, Taito City, Tokyo 111-0032",
+    "queriedAs": "淺草炸肉餅"
+  },
+  "淺草今半 松屋淺草店": {
+    "status": "resolved",
+    "placeId": "ChIJo1pMocaOGGARIdQDDnLWEN0",
+    "lat": 35.7117636,
+    "lng": 139.7981599,
+    "displayName": "淺草今半 松屋淺草店",
+    "formattedAddress": "1-chōme-4-1 Hanakawado, Taito City, Tokyo 111-0033",
+    "queriedAs": "淺草今半 松屋淺草店"
+  },
+  "銅鑼燒 龜十": {
+    "status": "resolved",
+    "placeId": "ChIJa-TK7saOGGARiteqlOmJrjI",
+    "lat": 35.7107247,
+    "lng": 139.796774,
+    "displayName": "銅鑼燒 龜十",
+    "formattedAddress": "2-chōme-18-11 Kaminarimon, Taito City, Tokyo 111-0034",
+    "queriedAs": "銅鑼燒 龜十"
+  },
+  "隅田公園 (淺草側)": {
+    "status": "resolved",
+    "placeId": "ChIJZ4oTScOOGGAR16BfN7ADXMk",
+    "lat": 35.7137617,
+    "lng": 139.80145059999998,
+    "displayName": "隅田公園 (淺草側)",
+    "formattedAddress": "1 Chome-1 Hanakawado, Taito City, Tokyo 111-0033",
+    "queriedAs": "隅田公園 (淺草側)"
+  },
+  "隅田川步道": {
+    "status": "resolved",
+    "placeId": "ChIJhdlgYmmPGGARQLJt3cGn6pk",
+    "lat": 35.712052299999996,
+    "lng": 139.8009657,
+    "displayName": "隅田川步道",
+    "formattedAddress": "1 Chome-1 Mukojima, Sumida City, Tokyo 111-0033",
+    "queriedAs": "隅田川步道"
+  },
+  "東京水岸街道 (Tokyo Mizumachi)": {
+    "status": "resolved",
+    "placeId": "ChIJM9jNOcWOGGARMEVH4Mso2go",
+    "lat": 35.7110932,
+    "lng": 139.8036013,
+    "displayName": "東京水岸街道 (Tokyo Mizumachi)",
+    "formattedAddress": "1 Chome-2 Mukojima, Sumida City, Tokyo 131-0033",
+    "queriedAs": "東京水岸街道 (Tokyo Mizumachi)"
+  },
+  "東京晴空街道 TOKYO Solamachi": {
+    "status": "resolved",
+    "placeId": "ChIJD9Pd-daOGGARCYgMMXqki5E",
+    "lat": 35.7102333,
+    "lng": 139.8115747,
+    "displayName": "東京晴空街道 TOKYO Solamachi",
+    "formattedAddress": "1-chōme-1-2 Oshiage, Sumida City, Tokyo 131-0045",
+    "queriedAs": "東京晴空街道 TOKYO Solamachi"
+  },
+  "東京晴空塔LOFT": {
+    "status": "resolved",
+    "placeId": "ChIJWYeDW9aOGGARadWLUMju2wI",
+    "lat": 35.7101427,
+    "lng": 139.8126513,
+    "displayName": "東京晴空塔LOFT",
+    "formattedAddress": "〒131-8634 Tokyo, Sumida City, Oshiage, 1-chōme−1−２ 東京スカイツリータウン・ソラマチ イーストヤード 3階",
+    "queriedAs": "東京晴空塔LOFT"
+  },
+  "ちいかわらんど 東京スカイツリータウン・ソラマチ店": {
+    "status": "resolved",
+    "placeId": "ChIJd-3nT8iPGGARpKS8ye7VhEE",
+    "lat": 35.7104097,
+    "lng": 139.8129999,
+    "displayName": "ちいかわらんど 東京スカイツリータウン・ソラマチ店",
+    "formattedAddress": "〒131-0045 Tokyo, Sumida City, Oshiage, 1-chōme−1−２ 東京スカイツリータウン 東京ソラマチ 3F",
+    "queriedAs": "ちいかわらんど 東京スカイツリータウン・ソラマチ店"
+  },
+  "JUMP SHOP Tokyo Skytree Town Soramachi": {
+    "status": "resolved",
+    "placeId": "ChIJe5ga6NaOGGARCGv7QhoCzmI",
+    "lat": 35.7105306,
+    "lng": 139.812448,
+    "displayName": "JUMP SHOP Tokyo Skytree Town Soramachi",
+    "formattedAddress": "〒131-0045 Tokyo, Sumida City, Oshiage, 1-chōme−1−２ 東京スカイツリータウン・ソラマチ 4階",
+    "queriedAs": "JUMP SHOP Tokyo Skytree Town Soramachi"
+  },
+  "Skytree Cafe 350": {
+    "status": "resolved",
+    "placeId": "ChIJ9Tat8daOGGARhnTioau3oC0",
+    "lat": 35.71011310000001,
+    "lng": 139.8109247,
+    "displayName": "Skytree Cafe 350",
+    "formattedAddress": "〒131-8634 Tokyo, Sumida City, Oshiage, 1-chōme−1−２ 350 天望デッキ フロア",
+    "queriedAs": "Skytree Cafe 350"
+  },
+  "Tokyo Sky Tree Tembo Galleria": {
+    "status": "resolved",
+    "placeId": "ChIJ-RuzASGPGGARlTmOgTcTmSw",
+    "lat": 35.7101105,
+    "lng": 139.8106991,
+    "displayName": "Tokyo Sky Tree Tembo Galleria",
+    "formattedAddress": "1-chōme-1-2 Oshiage, Sumida City, Tokyo 131-0045",
+    "queriedAs": "Tokyo Sky Tree Tembo Galleria"
+  },
+  "上野阿美橫町": {
+    "status": "resolved",
+    "placeId": "ChIJh7eDrwCPGGARCs9fpCkKS2U",
+    "lat": 35.7090028,
+    "lng": 139.7746259,
+    "displayName": "上野阿美橫商店街",
+    "formattedAddress": "6-chōme-10-7 Ueno, Taito City, Tokyo 110-0005",
+    "queriedAs": "上野阿美橫町"
+  },
+  "上野LOFT": {
+    "status": "resolved",
+    "placeId": "ChIJccx7Ap-OGGAR-nejHIpslEQ",
+    "lat": 35.71102270000001,
+    "lng": 139.7757776,
+    "displayName": "上野LOFT",
+    "formattedAddress": "〒110-8502 Tokyo, Taito City, Ueno, 6-chōme−15−１ 5F",
+    "queriedAs": "上野LOFT"
+  },
+  "名代 宇奈とと": {
+    "status": "resolved",
+    "placeId": "ChIJ6RMcXZ6OGGARLLk8PdeakXs",
+    "lat": 35.7111357,
+    "lng": 139.77486629999999,
+    "displayName": "Nadai Unatoto",
+    "formattedAddress": "6-chōme-11-15 Ueno, Taito City, Tokyo 110-0005",
+    "queriedAs": "名代 宇奈とと"
+  },
+  "OS Drug 上野店藥妝店": {
+    "status": "resolved",
+    "placeId": "ChIJAQB_jZ-OGGARLPaThjF_JIQ",
+    "lat": 35.7108985,
+    "lng": 139.774618,
+    "displayName": "OS Drug 上野店藥妝店",
+    "formattedAddress": "6-chōme-11-5 Ueno, Taito City, Tokyo 110-0005",
+    "queriedAs": "OS Drug 上野店藥妝店"
+  },
+  "阿美橫百果園": {
+    "status": "resolved",
+    "placeId": "ChIJkz4NWZGPGGARDvS-zb3AEz8",
+    "lat": 35.7102386,
+    "lng": 139.7746204,
+    "displayName": "阿美橫百果園",
+    "formattedAddress": "6-chōme-10-12 Ueno, Taito City, Tokyo 110-0005",
+    "queriedAs": "阿美橫百果園"
+  },
+  "Minatoya": {
+    "status": "resolved",
+    "placeId": "ChIJbfIujp-OGGARQpzhp7F2ocY",
+    "lat": 35.7083669,
+    "lng": 139.77462939999998,
+    "displayName": "Minatoya",
+    "formattedAddress": "4-chōme-1-9 Ueno, Taito City, Tokyo 110-0015",
+    "queriedAs": "Minatoya"
+  },
+  "二木菓子 第一營業所": {
+    "status": "resolved",
+    "placeId": "ChIJ8ez-kZ-OGGARyxJTsXAcAjk",
+    "lat": 35.7083528,
+    "lng": 139.7744756,
+    "displayName": "二木菓子 第一營業所",
+    "formattedAddress": "4-chōme-1-8 Ueno, Taito City, Tokyo 110-0005",
+    "queriedAs": "二木菓子 第一營業所"
+  },
+  "唐吉訶德 御徒町店": {
+    "status": "resolved",
+    "placeId": "ChIJ09CuC2qPGGAR79hyJNTkgzU",
+    "lat": 35.7081306,
+    "lng": 139.7744933,
+    "displayName": "唐吉訶德 御徒町店",
+    "formattedAddress": "4-chōme-1-10 Ueno, Taito City, Tokyo 110-0005",
+    "queriedAs": "唐吉訶德 御徒町店"
+  },
+  "Maruetsu petit Nihonbashihoncho": {
+    "status": "resolved",
+    "placeId": "ChIJmellWlSJGGARf9GJabLWCTc",
+    "lat": 35.687262499999996,
+    "lng": 139.77611,
+    "displayName": "Maruetsu petit Nihonbashihoncho",
+    "formattedAddress": "2-chōme-5-1 Nihonbashihonchō, Chuo City, Tokyo 103-0023",
+    "queriedAs": "Maruetsu petit Nihonbashihoncho"
+  },
+  "明治神宮": {
+    "status": "resolved",
+    "placeId": "ChIJ5SZMmreMGGARcz8QSTiJyo8",
+    "lat": 35.6763976,
+    "lng": 139.6993259,
+    "displayName": "明治神宮",
+    "formattedAddress": "1-1 Yoyogikamizonochō, Shibuya, Tokyo 151-8557",
+    "queriedAs": "明治神宮"
+  },
+  "＠cosme TOKYO": {
+    "status": "resolved",
+    "placeId": "ChIJXw6ieKKNGGARej0HfrnPlPE",
+    "lat": 35.67014580000001,
+    "lng": 139.7031743,
+    "displayName": "＠cosme TOKYO",
+    "formattedAddress": "1-chōme-14-27 Jingūmae, Shibuya, Tokyo 150-0001",
+    "queriedAs": "＠cosme TOKYO"
+  },
+  "AFURI Harajuku": {
+    "status": "resolved",
+    "placeId": "ChIJba17TbqMGGARFtDV6hkZbcs",
+    "lat": 35.6730053,
+    "lng": 139.7038019,
+    "displayName": "阿夫利 原宿",
+    "formattedAddress": "〒151-0051 Tokyo, Shibuya, Sendagaya, 3-chōme−63−１ グランデフォレスタ原宿 1F",
+    "queriedAs": "AFURI Harajuku"
+  },
+  "WITH原宿": {
+    "status": "resolved",
+    "placeId": "ChIJaer4Wa2NGGARhA8rpi8h5Do",
+    "lat": 35.6705714,
+    "lng": 139.7032257,
+    "displayName": "WITH原宿",
+    "formattedAddress": "1-chōme-14-30 Jingūmae, Shibuya, Tokyo 150-0001",
+    "queriedAs": "WITH原宿"
+  },
+  "竹下通": {
+    "status": "resolved",
+    "placeId": "ChIJlVne8bqMGGARtX5O6ojMvsI",
+    "lat": 35.6710335,
+    "lng": 139.7051821,
+    "displayName": "竹下通",
+    "formattedAddress": "Takeshita St, 1-chōme Jingūmae, Shibuya, Tokyo 150-0001",
+    "queriedAs": "竹下通"
+  },
+  "BEAMS 原宿": {
+    "status": "resolved",
+    "placeId": "ChIJ12loNJqNGGARAaV1M_saNLU",
+    "lat": 35.6711722,
+    "lng": 139.7076413,
+    "displayName": "BEAMS 原宿",
+    "formattedAddress": "〒150-0001 Tokyo, Shibuya, Jingūmae, 3-chōme−24−７ 1F-2F",
+    "queriedAs": "BEAMS 原宿"
+  },
+  "HOKA 原宿店": {
+    "status": "resolved",
+    "placeId": "ChIJkdk2OgCNGGARrxkaAiW1beM",
+    "lat": 35.668805899999995,
+    "lng": 139.7052742,
+    "displayName": "HOKA 原宿店",
+    "formattedAddress": "1階 2階, 1-chōme-11-11 Jingūmae, Shibuya, Tokyo 150-0001",
+    "queriedAs": "HOKA 原宿店"
+  },
+  "東急廣場原宿「HARAKADO原角」": {
+    "status": "resolved",
+    "placeId": "ChIJ_9GsagCNGGAR6auqGPod5nY",
+    "lat": 35.668425899999995,
+    "lng": 139.7049858,
+    "displayName": "東急廣場原宿「HARAKADO原角」",
+    "formattedAddress": "〒150-0001 Tokyo, Shibuya, Jingūmae, 6-chōme−31−２１ 原宿スクエア内 東急プラザ 原宿「ハラカド」",
+    "queriedAs": "東急廣場原宿「HARAKADO原角」"
+  },
+  "ONE PIECE MUGIWARA STORE HARAJUKU": {
+    "status": "resolved",
+    "placeId": "ChIJ-w0OPQCNGGAR4dU3sC7KHtc",
+    "lat": 35.668369299999995,
+    "lng": 139.7049141,
+    "displayName": "ONE PIECE MUGIWARA STORE HARAJUKU",
+    "formattedAddress": "〒150-0001 Tokyo, Shibuya, Jingūmae, 6-chōme−31−２１ 東急プラザ原宿「ハラカド」 G階",
+    "queriedAs": "ONE PIECE MUGIWARA STORE HARAJUKU"
+  },
+  "東急Plaza表參道原宿": {
+    "status": "resolved",
+    "placeId": "ChIJj0CdfaSMGGAROHhLfxE208o",
+    "lat": 35.6687294,
+    "lng": 139.7059549,
+    "displayName": "Tokyu Plaza Omotesando\"OMOKADO\"",
+    "formattedAddress": "4-chōme-30-3 Jingūmae, Shibuya, Tokyo 150-0001",
+    "queriedAs": "東急Plaza表參道原宿"
+  },
+  "Chiikawa Bakery": {
+    "status": "resolved",
+    "placeId": "ChIJjVBFKQCNGGAR-h5Nbcf108s",
+    "lat": 35.6687294,
+    "lng": 139.7059549,
+    "displayName": "Chiikawa Bakery",
+    "formattedAddress": "〒150-0001 Tokyo, Shibuya, Jingūmae, 4-chōme−30−３ 東急プラザ表参道「オモカド 」3階",
+    "queriedAs": "Chiikawa Bakery"
+  },
+  "Onitsuka Tiger NIPPON MADE 表參道店": {
+    "status": "resolved",
+    "placeId": "ChIJ_Xti_xWNGGAROQtYuMSH24o",
+    "lat": 35.6684434,
+    "lng": 139.7076909,
+    "displayName": "Onitsuka Tiger NIPPON MADE 表參道店",
+    "formattedAddress": "4-chōme-25-13 Jingūmae, Shibuya, Tokyo 150-0001",
+    "queriedAs": "Onitsuka Tiger NIPPON MADE 表參道店"
+  },
+  "Cat St": {
+    "status": "resolved",
+    "placeId": "ChIJ17kZCKOMGGAR0ANFBM3oK0Y",
+    "lat": 35.6670292,
+    "lng": 139.7063518,
+    "displayName": "Cat Street",
+    "formattedAddress": "Cat St, Shibuya, Tokyo",
+    "queriedAs": "Cat St"
+  },
+  "表參道Hills": {
+    "status": "resolved",
+    "placeId": "ChIJCx6jgqGMGGARpfB5UIap15k",
+    "lat": 35.6672869,
+    "lng": 139.7086162,
+    "displayName": "表參道Hills",
+    "formattedAddress": "4-chōme-12-10 Jingūmae, Shibuya, Tokyo 150-0001",
+    "queriedAs": "表參道Hills"
+  },
+  "House of Herme": {
+    "status": "resolved",
+    "placeId": "ChIJuWDHzmONGGARIWWUd4n11xg",
+    "lat": 35.666005999999996,
+    "lng": 139.7095665,
+    "displayName": "House of Herme",
+    "formattedAddress": "〒150-0001 Tokyo, Shibuya, Jingūmae, 5-chōme−2−６ ２階",
+    "queriedAs": "House of Herme"
+  },
+  "LE LABO 青山店": {
+    "status": "resolved",
+    "placeId": "ChIJ_amZSPSLGGAR1_Z6KBmnZAU",
+    "lat": 35.6635031,
+    "lng": 139.7129594,
+    "displayName": "LE LABO 青山店",
+    "formattedAddress": "5-chōme-5-24 Minamiaoyama, Minato City, Tokyo 107-0062",
+    "queriedAs": "LE LABO 青山店"
+  },
+  "宮下公園": {
+    "status": "resolved",
+    "placeId": "ChIJURWUIuaNGGARvtlnJNz-AFQ",
+    "lat": 35.661791,
+    "lng": 139.7018507,
+    "displayName": "宮下公園",
+    "formattedAddress": "6-chōme-20-10 Jingūmae, Shibuya, Tokyo 150-0001",
+    "queriedAs": "宮下公園"
+  },
+  "迪士尼商店 澀谷公園大道店": {
+    "status": "resolved",
+    "placeId": "ChIJM-RPaKiMGGAR6kZt4-ovSew",
+    "lat": 35.661252499999996,
+    "lng": 139.70019259999998,
+    "displayName": "迪士尼商店 澀谷公園大道店",
+    "formattedAddress": "20-15 Udagawachō, Shibuya, Tokyo 150-0042",
+    "queriedAs": "迪士尼商店 澀谷公園大道店"
+  },
+  "澀谷PARCO": {
+    "status": "resolved",
+    "placeId": "ChIJcyH-4qiMGGARGzk4lZCx2xo",
+    "lat": 35.6620484,
+    "lng": 139.6987767,
+    "displayName": "澀谷PARCO",
+    "formattedAddress": "〒150-8377 Tokyo, Shibuya, Udagawachō, 15−１ 渋谷パルコ・ヒューリックビル B1-10階",
+    "queriedAs": "澀谷PARCO"
+  },
+  "西班牙坂": {
+    "status": "resolved",
+    "placeId": "ChIJq-09_qiMGGAROyl4SkF4H0Y",
+    "lat": 35.661511399999995,
+    "lng": 139.6988512,
+    "displayName": "西班牙坂",
+    "formattedAddress": "16-15 Udagawachō, Shibuya, Tokyo 150-0042",
+    "queriedAs": "西班牙坂"
+  },
+  "MEGA唐吉訶德 澀谷本店": {
+    "status": "resolved",
+    "placeId": "ChIJr4J6pKmMGGARdQLOgrzToH4",
+    "lat": 35.6603873,
+    "lng": 139.6978172,
+    "displayName": "MEGA唐吉訶德 澀谷本店",
+    "formattedAddress": "28-6 Udagawachō, Shibuya, Tokyo 150-0042",
+    "queriedAs": "MEGA唐吉訶德 澀谷本店"
+  },
+  "西武澀谷店": {
+    "status": "resolved",
+    "placeId": "ChIJuUA3a6iMGGARoDBjI_9oCV0",
+    "lat": 35.660227,
+    "lng": 139.70033039999998,
+    "displayName": "西武澀谷店",
+    "formattedAddress": "21-1 Udagawachō, Shibuya, Tokyo 150-8330",
+    "queriedAs": "西武澀谷店"
+  },
+  "渋谷スクランブル交差点": {
+    "status": "resolved",
+    "placeId": "ChIJK9EM68qLGGARacmu4KJj5SA",
+    "lat": 35.659482,
+    "lng": 139.7005596,
+    "displayName": "渋谷スクランブル交差点",
+    "formattedAddress": "〒150-0042 東京都澀谷區宇田川町 21",
+    "queriedAs": "渋谷スクランブル交差点"
+  },
+  "忠犬八公像": {
+    "status": "resolved",
+    "placeId": "ChIJx1e971eLGGARum8w_tnpFwI",
+    "lat": 35.6590552,
+    "lng": 139.7006288,
+    "displayName": "忠犬八公像",
+    "formattedAddress": "2-chōme-1-1 Dōgenzaka, Shibuya, Tokyo 150-0043",
+    "queriedAs": "忠犬八公像"
+  },
+  "澀谷 SKY": {
+    "status": "resolved",
+    "placeId": "ChIJ4Rr2JWiLGGARcyRSHuZ-9G8",
+    "lat": 35.6586719,
+    "lng": 139.7019848,
+    "displayName": "澀谷 SKY",
+    "formattedAddress": "〒150-6145 Tokyo, Shibuya, 2-chōme−24−１２ スクランブルスクエア 14階・45階 46階・屋上",
+    "queriedAs": "澀谷 SKY"
+  },
+  "澀谷線流": {
+    "status": "resolved",
+    "placeId": "ChIJ7WUBoDGLGGARaK3ikXtAfDg",
+    "lat": 35.6572854,
+    "lng": 139.7031601,
+    "displayName": "澀谷線流",
+    "formattedAddress": "3-chōme-21-3 Shibuya, Tokyo 150-0002",
+    "queriedAs": "澀谷線流"
+  },
+  "Gyutan Sumiyaki Rikyu Shibuya Hikarie Branch": {
+    "status": "resolved",
+    "placeId": "ChIJc_r4wV6LGGAR6WuKXZsOKpI",
+    "lat": 35.659168199999996,
+    "lng": 139.7036598,
+    "displayName": "Gyutan Sumiyaki Rikyu Shibuya Hikarie Branch",
+    "formattedAddress": "〒150-0002 Tokyo, Shibuya, 2-chōme−21−１ 渋谷ヒカリエ 6F",
+    "queriedAs": "Gyutan Sumiyaki Rikyu Shibuya Hikarie Branch"
+  },
+  "成田機場第二航廈": {
+    "status": "resolved",
+    "placeId": "ChIJUdVRQ3bzImARE-TawhoOMvI",
+    "lat": 35.772584099999996,
+    "lng": 140.3880692,
+    "displayName": "成田機場第二航廈",
+    "formattedAddress": "日本〒286-0104 千葉縣成田市 Furugome",
+    "queriedAs": "成田機場第二航廈"
+  }
+}

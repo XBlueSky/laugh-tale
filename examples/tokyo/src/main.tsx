@@ -1,0 +1,140 @@
+import { StrictMode, type ReactElement } from "react";
+import { createRoot } from "react-dom/client";
+
+import { App } from "./app/App";
+import type { RouteAdapter } from "@laugh-tale-island/core/browser";
+import { assertMapVisualProfile } from "./controllers/map-visual-profile";
+import { presentation } from "./presentation";
+import { GoogleNavigationAdapter } from "./providers/google/google-maps-url";
+import { trip } from "./trip-content/trip";
+
+const rootElement = document.getElementById("root");
+
+if (rootElement === null) {
+  throw new Error("Root element not found.");
+}
+
+const root = createRoot(rootElement);
+const navigationAdapter = new GoogleNavigationAdapter();
+
+function render(element: ReactElement): void {
+  root.render(<StrictMode>{element}</StrictMode>);
+}
+
+function safeReason(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+  return "Google Maps failed to load";
+}
+
+function environmentString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+async function start(): Promise<void> {
+  assertMapVisualProfile(presentation.mapProfile);
+
+  if (
+    import.meta.env.DEV &&
+    import.meta.env.VITE_E2E_FAKE_PROVIDER === "true"
+  ) {
+    const fixtureName = new URLSearchParams(window.location.search).get("fixture");
+    if (fixtureName === "tokyo") {
+      const fixture = await import("../tests/e2e/fixtures/tokyo-trip");
+      render(
+        <App
+          tripOverride={fixture.tokyoE2ETrip}
+          adapterFactory={fixture.createE2EMapAdapter}
+          routeAdapterFactory={fixture.createE2ERouteAdapter}
+          navigationAdapter={navigationAdapter}
+          clock={fixture.e2eClock}
+        />,
+      );
+      return;
+    }
+    const fixture = await import("../tests/e2e/fixtures/e2e-trip");
+    render(
+      <App
+        tripOverride={fixture.e2eTrip}
+        adapterFactory={fixture.createE2EMapAdapter}
+        routeAdapterFactory={fixture.createE2ERouteAdapter}
+        navigationAdapter={navigationAdapter}
+        clock={fixture.e2eClock}
+      />,
+    );
+    return;
+  }
+
+  if (trip === null) {
+    render(<App tripOverride={null} />);
+    return;
+  }
+
+  const apiKey = environmentString(
+    import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
+  ).trim();
+  const mapId = environmentString(import.meta.env.VITE_GOOGLE_MAP_ID).trim();
+  if (apiKey.length === 0) {
+    render(<App tripOverride={trip} />);
+    return;
+  }
+
+  const { configureGoogleMaps } = await import(
+    "./providers/google/google-config"
+  );
+  const configured = await configureGoogleMaps({
+    apiKey,
+    ...(mapId.length === 0 ? {} : { mapId }),
+    development: import.meta.env.DEV,
+    profile: presentation.mapProfile,
+  });
+  if (configured.status === "missing-key") {
+    render(<App tripOverride={trip} />);
+    return;
+  }
+  if (configured.status === "load-error") {
+    render(
+      <App
+        tripOverride={trip}
+        setupIssue={{ kind: "provider-load", reason: configured.reason }}
+      />,
+    );
+    return;
+  }
+
+  let routeAdapterFactory: (() => RouteAdapter) | undefined;
+  if (
+    environmentString(import.meta.env.VITE_GOOGLE_ROUTES_ENABLED) === "true"
+  ) {
+    const { GoogleRouteAdapter } = await import(
+      "./providers/google/GoogleRouteAdapter"
+    );
+    const transitEnabled =
+      environmentString(import.meta.env.VITE_GOOGLE_TRANSIT_ENABLED) === "true";
+    routeAdapterFactory = () =>
+      new GoogleRouteAdapter({ apiKey, transitEnabled });
+  }
+
+  render(
+    <App
+      tripOverride={trip}
+      adapterFactory={() => configured.adapter}
+      navigationAdapter={navigationAdapter}
+      {...(routeAdapterFactory === undefined ? {} : { routeAdapterFactory })}
+    />,
+  );
+}
+
+void start().catch((error: unknown) => {
+  if (trip === null) {
+    render(<App tripOverride={null} />);
+    return;
+  }
+  render(
+    <App
+      tripOverride={trip}
+      setupIssue={{ kind: "provider-load", reason: safeReason(error) }}
+    />,
+  );
+});
