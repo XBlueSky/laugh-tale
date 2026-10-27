@@ -12,7 +12,7 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -31,8 +31,9 @@ jobs:
           echo "$GITHUB_WORKSPACE/tmp/oak-font-validation/bin" >> "$GITHUB_PATH"
       # Build, pack, and install the four unpublished packages in DAG order.
       - run: npm run stage:starter -- --setup-locale en
+      # The V2 root suite runs serially (vitest.config.ts) and takes ~20-30 min.
       - run: npm run check
-        timeout-minutes: 15
+        timeout-minutes: 45
         env:
           LAUGH_TALE_STARTER_ROOT: ${{ github.workspace }}/tmp/staged-starter
       - run: npm run test:starter:staged
