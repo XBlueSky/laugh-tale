@@ -614,11 +614,11 @@ test("renders all semantics, lodging roles, tasks, reservations, and trip-scoped
 test("Home reservations jump to the owned itinerary entry", async ({ page }) => {
   await page.goto("/");
   const reservation = page.locator('[data-home-reservation-id="reservation-sky"]');
-  await reservation.getByRole("button", { name: /開啟當日行程/ }).click();
+  await reservation.getByRole("button", { name: catalog.home.openDay }).click();
   await expect(page.locator('[data-owner-id="experience-observatory"]')).toHaveAttribute("data-selected", "true");
   await page.getByRole("button", { name: catalog.experience.home }).click();
   const candidate = page.locator('[data-home-reservation-id="reservation-lunch"]');
-  await candidate.getByRole("button", { name: /開啟當日行程/ }).click();
+  await candidate.getByRole("button", { name: catalog.home.openDay }).click();
   await expect(page.locator('[data-owner-id="dining-lunch"]')).toHaveAttribute("data-selected", "true");
 });
 
