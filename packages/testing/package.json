@@ -57,7 +57,7 @@
     "@laugh-tale-island/react": "2.0.0"
   },
   "devDependencies": {
-    "@testing-library/user-event": "14.6.8",
+    "@testing-library/user-event": "14.6.12",
     "jsdom": "30.0.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
